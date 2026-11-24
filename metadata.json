@@ -1,0 +1,8 @@
+{
+  "name": "Aashish Kumar Mahato — 3D Developer World",
+  "description": "Lightweight interactive 3D portfolio world exploring Aashish Kumar Mahato's journey from Nepal to VIT Vellore, open-source AI systems, and research.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

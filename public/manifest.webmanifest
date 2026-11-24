@@ -1,0 +1,17 @@
+{
+  "name": "Aashish Kumar Mahato — 3D Developer World",
+  "short_name": "Aashish 3D",
+  "description": "Interactive 3D portfolio world from Kathmandu to VIT Vellore and local-first AI engineering.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1724",
+  "theme_color": "#d97706",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
