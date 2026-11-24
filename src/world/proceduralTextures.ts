@@ -9,12 +9,15 @@ export interface ProceduralTextureSet {
   cobbleMap: THREE.CanvasTexture;
   cobbleNormal: THREE.CanvasTexture;
   cobbleRough: THREE.CanvasTexture;
+  cobbleAo: THREE.CanvasTexture;
   brickMap: THREE.CanvasTexture;
   brickNormal: THREE.CanvasTexture;
   brickRough: THREE.CanvasTexture;
+  brickAo: THREE.CanvasTexture;
   sandstoneMap: THREE.CanvasTexture;
   sandstoneNormal: THREE.CanvasTexture;
   sandstoneRough: THREE.CanvasTexture;
+  sandstoneAo: THREE.CanvasTexture;
   roofTileMap: THREE.CanvasTexture;
   roofTileNormal: THREE.CanvasTexture;
   woodMap: THREE.CanvasTexture;
@@ -25,6 +28,7 @@ export interface ProceduralTextureSet {
   pineNeedlesMap: THREE.CanvasTexture;
   palmFrondMap: THREE.CanvasTexture;
   rockNormal: THREE.CanvasTexture;
+  rockAo: THREE.CanvasTexture;
   waterNormal: THREE.CanvasTexture;
   crateFaceMap: THREE.CanvasTexture;
   crateNormal: THREE.CanvasTexture;
@@ -36,12 +40,30 @@ export interface ProceduralTextureSet {
   pashupatiGateMap: THREE.CanvasTexture;
   tigerPeltMap: THREE.CanvasTexture;
   marbleWalkMap: THREE.CanvasTexture;
+  marbleWalkNormal: THREE.CanvasTexture;
+  marbleWalkRough: THREE.CanvasTexture;
+  marbleWalkAo: THREE.CanvasTexture;
   monumentPlaqueTex: THREE.CanvasTexture;
   valleyMapBoardTex: THREE.CanvasTexture;
   contactShadowMap: THREE.CanvasTexture;
   aniflowScreenMap: THREE.CanvasTexture;
   agentScreenMap: THREE.CanvasTexture;
   clockFaceMap: THREE.CanvasTexture;
+  basaltCarvedMap: THREE.CanvasTexture;
+  basaltCarvedNormal: THREE.CanvasTexture;
+  basaltCarvedRough: THREE.CanvasTexture;
+  basaltCarvedAo: THREE.CanvasTexture;
+  agedBronzeMap: THREE.CanvasTexture;
+  agedBronzeNormal: THREE.CanvasTexture;
+  agedBronzeRough: THREE.CanvasTexture;
+  sakuraBlossomMap: THREE.CanvasTexture;
+  mapleFoliageMap: THREE.CanvasTexture;
+  broadleafFoliageMap: THREE.CanvasTexture;
+  jacarandaBloomMap: THREE.CanvasTexture;
+  willowFrondMap: THREE.CanvasTexture;
+  gulmoharBloomMap: THREE.CanvasTexture;
+  birchLeafMap: THREE.CanvasTexture;
+  barkSilverBirchMap: THREE.CanvasTexture;
   createSignTexture: (title: string, subtitle: string, accent: string) => THREE.CanvasTexture;
   dispose: () => void;
 }
@@ -100,6 +122,69 @@ function heightToNormalCanvas(heightCanvas: HTMLCanvasElement, strength = 2.4): 
       dst[idx] = Math.round((nx * 0.5 + 0.5) * 255);
       dst[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
       dst[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+      dst[idx + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(outImg, 0, 0);
+  return outCanvas;
+}
+
+/**
+ * Computes crevice ambient occlusion from a grayscale heightmap canvas so mortar joints,
+ * stone cobble seams, and rock fissures shade realistically under indirect illumination.
+ */
+function heightToAoCanvas(
+  heightCanvas: HTMLCanvasElement,
+  radius = 3,
+  strength = 1.65,
+  floorMin = 84,
+): HTMLCanvasElement {
+  const w = heightCanvas.width;
+  const h = heightCanvas.height;
+  const hCtx = heightCanvas.getContext('2d')!;
+  const src = hCtx.getImageData(0, 0, w, h).data;
+
+  const [outCanvas, outCtx] = makeCanvas(w, h);
+  const outImg = outCtx.createImageData(w, h);
+  const dst = outImg.data;
+
+  const r1 = Math.max(1, Math.round(radius));
+  const r2 = Math.max(2, Math.round(radius * 2));
+  const dirs = [
+    [r1, 0],
+    [-r1, 0],
+    [0, r1],
+    [0, -r1],
+    [r1, r1],
+    [-r1, r1],
+    [r1, -r1],
+    [-r1, -r1],
+    [r2, 0],
+    [-r2, 0],
+    [0, r2],
+    [0, -r2],
+  ];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const center = src[(y * w + x) * 4] / 255;
+      let occ = 0;
+      for (let d = 0; d < dirs.length; d++) {
+        const sx = (((x + dirs[d][0]) % w) + w) % w;
+        const sy = (((y + dirs[d][1]) % h) + h) % h;
+        const neighbor = src[(sy * w + sx) * 4] / 255;
+        if (neighbor > center) {
+          occ += (neighbor - center) * (d < 8 ? 1.0 : 0.55);
+        }
+      }
+      const cavityBoost = center < 0.42 ? (0.42 - center) * 0.48 : 0;
+      const ao = Math.max(floorMin / 255, Math.min(1, 1 - (occ / 6.2) * strength - cavityBoost));
+      const v = Math.round(ao * 255);
+      const idx = (y * w + x) * 4;
+      dst[idx] = v;
+      dst[idx + 1] = v;
+      dst[idx + 2] = v;
       dst[idx + 3] = 255;
     }
   }
@@ -250,6 +335,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const cobbleMap = register(cobbleC, true, 4, 4);
   const cobbleNormal = register(heightToNormalCanvas(cobbleHC, 2.8), false, 4, 4);
   const cobbleRough = register(cobbleRC, false, 4, 4);
+  const cobbleAo = register(heightToAoCanvas(cobbleHC, 3, 1.8), false, 4, 4);
 
   // 3. Real Weathered Newari *Dachi Appa* Kiln Terracotta Brick + Surkhi Mortar
   const [brickC, brickCtx] = makeCanvas(512, 512);
@@ -295,6 +381,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const brickMap = register(brickC, true, 2, 2);
   const brickNormal = register(heightToNormalCanvas(brickHC, 2.7), false, 2, 2);
   const brickRough = register(brickRC, false, 2, 2);
+  const brickAo = register(heightToAoCanvas(brickHC, 3, 1.75), false, 2, 2);
 
   // 4. Sedimentary Chunar Sandstone Ashlar (VIT Vellore Campus Stonework)
   const [sandC, sandCtx] = makeCanvas(512, 512);
@@ -335,6 +422,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const sandstoneMap = register(sandC, true, 2, 2);
   const sandstoneNormal = register(heightToNormalCanvas(sandHC, 2.3), false, 2, 2);
   const sandstoneRough = register(sandRC, false, 2, 2);
+  const sandstoneAo = register(heightToAoCanvas(sandHC, 3, 1.65), false, 2, 2);
 
   // 5. Weathered Terracotta & Lichen *Jhingati* Scalloped Pagoda Roof Tiles
   const [roofC, roofCtx] = makeCanvas(256, 256);
@@ -432,6 +520,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     rockHCtx.restore();
   }
   const rockNormal = register(heightToNormalCanvas(rockHC, 2.2), false, 10, 4);
+  const rockAo = register(heightToAoCanvas(rockHC, 3, 1.55), false, 10, 4);
 
   // 7c. Flowing Glacial Stream Ripple Normal Map
   const [watHC, watHCtx] = makeCanvas(256, 256);
@@ -925,10 +1014,16 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   tpCtx.fillRect(92, 0, 72, 256);
   const tigerPeltMap = register(tpC, true, 2, 1);
 
-  // 15f. Lumbini Veined Marble Walkway Tiles (Matte neutral warm stone)
+  // 15f. Lumbini Veined Marble Walkway & Ceremonial Threshold Tiles (full PBR: map + normal + rough + ao)
   const [mwC, mwCtx] = makeCanvas(256, 256);
+  const [mwHC, mwHCtx] = makeCanvas(256, 256);
+  const [mwRC, mwRCtx] = makeCanvas(256, 256);
   mwCtx.fillStyle = '#8b887e';
   mwCtx.fillRect(0, 0, 256, 256);
+  mwHCtx.fillStyle = '#3c3c3c';
+  mwHCtx.fillRect(0, 0, 256, 256);
+  mwRCtx.fillStyle = '#d4d4d4';
+  mwRCtx.fillRect(0, 0, 256, 256);
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
       const v = ((r * 17 + c * 29) % 14) - 7;
@@ -936,15 +1031,26 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
       const tx = c * 64 + 2;
       const ty = r * 64 + 2;
       mwCtx.fillRect(tx, ty, 60, 60);
-      mwCtx.strokeStyle = 'rgba(130, 128, 122, 0.25)';
+      mwCtx.strokeStyle = 'rgba(130, 128, 122, 0.28)';
       mwCtx.lineWidth = 1.5;
       mwCtx.beginPath();
       mwCtx.moveTo(tx + 6, ty + 14 + (c % 3) * 10);
       mwCtx.bezierCurveTo(tx + 24, ty + 30, tx + 40, ty + 18, tx + 54, ty + 46);
       mwCtx.stroke();
+
+      const hVal = 196 + ((r * 19 + c * 31) % 24);
+      mwHCtx.fillStyle = `rgb(${hVal},${hVal},${hVal})`;
+      mwHCtx.fillRect(tx + 1, ty + 1, 58, 58);
+
+      const rVal = 104 + ((r * 23 + c * 17) % 34);
+      mwRCtx.fillStyle = `rgb(${rVal},${rVal},${rVal})`;
+      mwRCtx.fillRect(tx, ty, 60, 60);
     }
   }
   const marbleWalkMap = register(mwC, true, 2, 5);
+  const marbleWalkNormal = register(heightToNormalCanvas(mwHC, 2.1), false, 2, 5);
+  const marbleWalkRough = register(mwRC, false, 2, 5);
+  const marbleWalkAo = register(heightToAoCanvas(mwHC, 2, 1.75), false, 2, 5);
 
   // 16. Natural Neutral Soft Contact Shadow Disc
   const [shadowC, shadowCtx] = makeCanvas(128, 128);
@@ -1096,6 +1202,327 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     return register(sc, true, 1, 1, true);
   };
 
+  // 18. Photogrammetry-Grade Carved Basalt Stone & Aged Patina Bronze PBR Maps
+  const [basC, basCtx] = makeCanvas(512, 512);
+  const [basHC, basHCtx] = makeCanvas(512, 512);
+  const [basRC, basRCtx] = makeCanvas(512, 512);
+  basCtx.fillStyle = '#5a6068';
+  basCtx.fillRect(0, 0, 512, 512);
+  basHCtx.fillStyle = '#808080';
+  basHCtx.fillRect(0, 0, 512, 512);
+  basRCtx.fillStyle = '#b8b8b8';
+  basRCtx.fillRect(0, 0, 512, 512);
+
+  for (let i = 0; i < 2400; i++) {
+    const x = (i * 193 + (i % 19) * 37) % 512;
+    const y = (i * 317 + (i % 23) * 43) % 512;
+    const w = 3 + (i % 14);
+    const h = 2 + (i % 6);
+    const tone = i % 5 === 0 ? 'rgba(32,36,42,0.22)' : i % 3 === 0 ? 'rgba(130,136,142,0.16)' : 'rgba(68,74,80,0.18)';
+    basCtx.fillStyle = tone;
+    basCtx.fillRect(x, y, w, h);
+    basHCtx.fillStyle = i % 2 === 0 ? 'rgba(215,215,215,0.22)' : 'rgba(42,42,42,0.24)';
+    basHCtx.fillRect(x, y, w, h);
+    basRCtx.fillStyle = i % 4 === 0 ? 'rgba(225,225,225,0.24)' : 'rgba(145,145,145,0.2)';
+    basRCtx.fillRect(x, y, w, h);
+  }
+  // Fine chisel-tool ridges & mineral quartz veins
+  for (let v = 0; v < 42; v++) {
+    const sx = (v * 97) % 512;
+    const sy = (v * 149) % 512;
+    basCtx.strokeStyle = v % 3 === 0 ? 'rgba(182,188,192,0.22)' : 'rgba(38,42,46,0.28)';
+    basCtx.lineWidth = 1.4;
+    basCtx.beginPath();
+    basCtx.moveTo(sx, sy);
+    basCtx.bezierCurveTo(sx + 28, sy + 18, sx + 54, sy - 14, sx + 86, sy + 12);
+    basCtx.stroke();
+    basHCtx.strokeStyle = 'rgba(210,210,210,0.22)';
+    basHCtx.lineWidth = 1.4;
+    basHCtx.beginPath();
+    basHCtx.moveTo(sx, sy);
+    basHCtx.bezierCurveTo(sx + 28, sy + 18, sx + 54, sy - 14, sx + 86, sy + 12);
+    basHCtx.stroke();
+  }
+  const basaltCarvedMap = register(basC, true, 2, 2);
+  const basaltCarvedNormal = register(heightToNormalCanvas(basHC, 2.6), false, 2, 2);
+  const basaltCarvedRough = register(basRC, false, 2, 2);
+  const basaltCarvedAo = register(heightToAoCanvas(basHC, 3, 1.6), false, 2, 2);
+
+  const [brzC, brzCtx] = makeCanvas(512, 512);
+  const [brzHC, brzHCtx] = makeCanvas(512, 512);
+  const [brzRC, brzRCtx] = makeCanvas(512, 512);
+  brzCtx.fillStyle = '#9e7634';
+  brzCtx.fillRect(0, 0, 512, 512);
+  brzHCtx.fillStyle = '#808080';
+  brzHCtx.fillRect(0, 0, 512, 512);
+  brzRCtx.fillStyle = '#5c5c5c';
+  brzRCtx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 1600; i++) {
+    const x = (i * 227 + (i % 13) * 29) % 512;
+    const y = (i * 353 + (i % 17) * 31) % 512;
+    const rad = 2 + (i % 9);
+    brzCtx.fillStyle =
+      i % 9 === 0
+        ? 'rgba(72,118,98,0.16)'
+        : i % 3 === 0
+          ? 'rgba(222,184,96,0.18)'
+          : 'rgba(66,44,16,0.18)';
+    brzCtx.beginPath();
+    brzCtx.arc(x, y, rad, 0, Math.PI * 2);
+    brzCtx.fill();
+    brzHCtx.fillStyle = i % 2 === 0 ? 'rgba(180,180,180,0.2)' : 'rgba(85,85,85,0.2)';
+    brzHCtx.beginPath();
+    brzHCtx.arc(x, y, rad, 0, Math.PI * 2);
+    brzHCtx.fill();
+    brzRCtx.fillStyle = i % 9 === 0 ? 'rgba(195,195,195,0.35)' : 'rgba(65,65,65,0.25)';
+    brzRCtx.beginPath();
+    brzRCtx.arc(x, y, rad, 0, Math.PI * 2);
+    brzRCtx.fill();
+  }
+  const agedBronzeMap = register(brzC, true, 2, 2);
+  const agedBronzeNormal = register(heightToNormalCanvas(brzHC, 2.0), false, 2, 2);
+  const agedBronzeRough = register(brzRC, false, 2, 2);
+
+  // 19. High-Detail Alpha-Cutout Botanical Tree Canopy & Blossom Sprays (512x512)
+  const makeSeedRand = (s: number) => {
+    let state = s >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+  };
+
+  const drawFoliageTwigs = (ctx: CanvasRenderingContext2D, twigCol: string, rand: () => number) => {
+    ctx.strokeStyle = twigCol;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(256, 504);
+    ctx.quadraticCurveTo(246, 360, 256, 175);
+    ctx.stroke();
+    for (let b = 0; b < 7; b++) {
+      const yStart = 430 - b * 44;
+      const dir = b % 2 === 0 ? -1 : 1;
+      const len = 86 + rand() * 70;
+      ctx.lineWidth = 4.5 - b * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(254, yStart);
+      ctx.quadraticCurveTo(256 + dir * len * 0.55, yStart - 28, 256 + dir * len, yStart - 64 - rand() * 24);
+      ctx.stroke();
+    }
+  };
+
+  const drawLeafSprayCard = (
+    seed: number,
+    twigCol: string,
+    palette: string[],
+    leafCount: number,
+    leafLen: number,
+    leafWid: number,
+    serrated = false,
+  ): THREE.CanvasTexture => {
+    const [c, ctx] = makeCanvas(512, 512);
+    ctx.clearRect(0, 0, 512, 512);
+    const rand = makeSeedRand(seed);
+    drawFoliageTwigs(ctx, twigCol, rand);
+
+    for (let i = 0; i < leafCount; i++) {
+      const t = i / leafCount;
+      const radius = Math.pow(rand(), 0.56) * 206;
+      const ang = rand() * Math.PI * 2;
+      const cx = 256 + Math.cos(ang) * radius;
+      const cy = 248 + Math.sin(ang) * radius * 0.96;
+      const lAngle = ang + (rand() - 0.5) * 1.1;
+      const sc = (0.72 + rand() * 0.58) * (1.0 - radius / 580);
+      const col = palette[Math.floor(rand() * palette.length)];
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(lAngle);
+      ctx.scale(sc, sc);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      if (serrated) {
+        // 5-lobed maple-like silhouette
+        ctx.moveTo(0, -leafLen);
+        ctx.lineTo(leafWid * 0.55, -leafLen * 0.38);
+        ctx.lineTo(leafWid * 1.15, -leafLen * 0.45);
+        ctx.lineTo(leafWid * 0.62, 0);
+        ctx.lineTo(leafWid * 0.9, leafLen * 0.46);
+        ctx.lineTo(0, leafLen * 0.28);
+        ctx.lineTo(-leafWid * 0.9, leafLen * 0.46);
+        ctx.lineTo(-leafWid * 0.62, 0);
+        ctx.lineTo(-leafWid * 1.15, -leafLen * 0.45);
+        ctx.lineTo(-leafWid * 0.55, -leafLen * 0.38);
+      } else {
+        ctx.moveTo(0, -leafLen);
+        ctx.quadraticCurveTo(leafWid, -leafLen * 0.15, 0, leafLen * 0.55);
+        ctx.quadraticCurveTo(-leafWid, -leafLen * 0.15, 0, -leafLen);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Subtle midrib vein highlight
+      ctx.strokeStyle = t > 0.5 ? 'rgba(255,255,230,0.18)' : 'rgba(15,28,12,0.22)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, leafLen * 0.42);
+      ctx.lineTo(0, -leafLen * 0.85);
+      ctx.stroke();
+      ctx.restore();
+    }
+    return register(c, true, 1, 1, true);
+  };
+
+  // 19a. Japanese Sakura (5-petal notched cherry blossom cluster + dark cherry twigs)
+  const [sakC, sakCtx] = makeCanvas(512, 512);
+  sakCtx.clearRect(0, 0, 512, 512);
+  const sakRand = makeSeedRand(9101);
+  drawFoliageTwigs(sakCtx, '#3e2926', sakRand);
+  const sakuraCols = ['#f7c8d6', '#f4b4c8', '#fadde6', '#ee9eb8', '#fceaf0'];
+  // A few young bronze-green cherry leaves peeking between blossoms
+  for (let i = 0; i < 36; i++) {
+    const r = Math.pow(sakRand(), 0.58) * 185;
+    const a = sakRand() * Math.PI * 2;
+    sakCtx.save();
+    sakCtx.translate(256 + Math.cos(a) * r, 246 + Math.sin(a) * r * 0.92);
+    sakCtx.rotate(a);
+    sakCtx.fillStyle = '#5c7c44';
+    sakCtx.beginPath();
+    sakCtx.ellipse(0, 0, 9, 22, 0, 0, Math.PI * 2);
+    sakCtx.fill();
+    sakCtx.restore();
+  }
+  for (let i = 0; i < 120; i++) {
+    const r = Math.pow(sakRand(), 0.54) * 204;
+    const a = sakRand() * Math.PI * 2;
+    const bx = 256 + Math.cos(a) * r;
+    const by = 248 + Math.sin(a) * r * 0.94;
+    const sc = 0.65 + sakRand() * 0.65;
+    const pCol = sakuraCols[Math.floor(sakRand() * sakuraCols.length)];
+    sakCtx.save();
+    sakCtx.translate(bx, by);
+    sakCtx.rotate(sakRand() * Math.PI * 2);
+    sakCtx.scale(sc, sc);
+    for (let p = 0; p < 5; p++) {
+      sakCtx.save();
+      sakCtx.rotate((p / 5) * Math.PI * 2);
+      sakCtx.fillStyle = pCol;
+      sakCtx.beginPath();
+      sakCtx.moveTo(0, 0);
+      sakCtx.quadraticCurveTo(11, -14, 5, -24);
+      sakCtx.lineTo(0, -19);
+      sakCtx.lineTo(-5, -24);
+      sakCtx.quadraticCurveTo(-11, -14, 0, 0);
+      sakCtx.closePath();
+      sakCtx.fill();
+      sakCtx.restore();
+    }
+    sakCtx.fillStyle = '#b9365f';
+    sakCtx.beginPath();
+    sakCtx.arc(0, 0, 4.2, 0, Math.PI * 2);
+    sakCtx.fill();
+    sakCtx.fillStyle = '#ffe599';
+    sakCtx.beginPath();
+    sakCtx.arc(0, 0, 2.0, 0, Math.PI * 2);
+    sakCtx.fill();
+    sakCtx.restore();
+  }
+  const sakuraBlossomMap = register(sakC, true, 1, 1, true);
+
+  // 19b. Maple, Broadleaf, Birch
+  const mapleFoliageMap = drawLeafSprayCard(
+    9102,
+    '#443025',
+    ['#b83a24', '#cf4e27', '#df7626', '#9b2a1e', '#e5922e'],
+    130,
+    24,
+    20,
+    true,
+  );
+  const broadleafFoliageMap = drawLeafSprayCard(
+    9103,
+    '#493a2b',
+    ['#36592e', '#466c36', '#567e3e', '#2d4b25', '#688d46'],
+    155,
+    25,
+    15,
+    false,
+  );
+  const birchLeafMap = drawLeafSprayCard(
+    9104,
+    '#7c766d',
+    ['#c5a838', '#d9bc46', '#92a43c', '#e6cb5c', '#748e36'],
+    150,
+    20,
+    13,
+    false,
+  );
+
+  // 19c. Jacaranda & Gulmohar
+  const jacarandaBloomMap = drawLeafSprayCard(
+    9105,
+    '#4e4034',
+    ['#755bc7', '#8970d9', '#6148b2', '#9d87e6', '#4c6d36'],
+    165,
+    18,
+    12,
+    false,
+  );
+  const gulmoharBloomMap = drawLeafSprayCard(
+    9106,
+    '#4a3a2a',
+    ['#dc411e', '#ee5a24', '#f27c22', '#bf2c16', '#466f30'],
+    165,
+    19,
+    13,
+    false,
+  );
+
+  // 19d. Weeping Willow Hanging Frond Curtain Card
+  const [wilC, wilCtx] = makeCanvas(512, 512);
+  wilCtx.clearRect(0, 0, 512, 512);
+  const wilRand = makeSeedRand(9107);
+  const willowCols = ['#527839', '#638945', '#446830', '#73984f', '#81a456'];
+  for (let s = 0; s < 13; s++) {
+    const sx = 54 + s * 33 + (wilRand() - 0.5) * 14;
+    const strandLen = 360 + wilRand() * 130;
+    wilCtx.strokeStyle = '#5f6835';
+    wilCtx.lineWidth = 2.4;
+    wilCtx.beginPath();
+    wilCtx.moveTo(sx, 14);
+    wilCtx.quadraticCurveTo(sx + (wilRand() - 0.5) * 28, strandLen * 0.5, sx + (wilRand() - 0.5) * 22, 14 + strandLen);
+    wilCtx.stroke();
+    for (let y = 24; y < 14 + strandLen; y += 16) {
+      for (const side of [-1, 1]) {
+        wilCtx.save();
+        wilCtx.translate(sx + side * 6, y);
+        wilCtx.rotate(side * 0.42 + (wilRand() - 0.5) * 0.25);
+        wilCtx.fillStyle = willowCols[Math.floor(wilRand() * willowCols.length)];
+        wilCtx.beginPath();
+        wilCtx.ellipse(0, 12, 3.6, 15, 0, 0, Math.PI * 2);
+        wilCtx.fill();
+        wilCtx.restore();
+      }
+    }
+  }
+  const willowFrondMap = register(wilC, true, 1, 1, true);
+
+  // 19e. Silver Birch White Bark with Dark Horizontal Lenticels
+  const [sbC, sbCtx] = makeCanvas(256, 512);
+  sbCtx.fillStyle = '#dddad2';
+  sbCtx.fillRect(0, 0, 256, 512);
+  const sbRand = makeSeedRand(9108);
+  for (let i = 0; i < 160; i++) {
+    const lx = sbRand() * 230;
+    const ly = sbRand() * 508;
+    const lw = 16 + sbRand() * 54;
+    const lh = 2 + sbRand() * 5;
+    sbCtx.fillStyle = sbRand() > 0.25 ? 'rgba(42,38,35,0.72)' : 'rgba(92,84,74,0.45)';
+    sbCtx.fillRect(lx, ly, lw, lh);
+  }
+  const barkSilverBirchMap = register(sbC, true, 1, 3);
+
   return {
     janaki,
     meadowMap,
@@ -1104,12 +1531,15 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     cobbleMap,
     cobbleNormal,
     cobbleRough,
+    cobbleAo,
     brickMap,
     brickNormal,
     brickRough,
+    brickAo,
     sandstoneMap,
     sandstoneNormal,
     sandstoneRough,
+    sandstoneAo,
     roofTileMap,
     roofTileNormal,
     woodMap,
@@ -1120,6 +1550,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     pineNeedlesMap,
     palmFrondMap,
     rockNormal,
+    rockAo,
     waterNormal,
     crateFaceMap,
     crateNormal,
@@ -1131,12 +1562,30 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     pashupatiGateMap,
     tigerPeltMap,
     marbleWalkMap,
+    marbleWalkNormal,
+    marbleWalkRough,
+    marbleWalkAo,
     monumentPlaqueTex,
     valleyMapBoardTex,
     contactShadowMap,
     aniflowScreenMap,
     agentScreenMap,
     clockFaceMap,
+    basaltCarvedMap,
+    basaltCarvedNormal,
+    basaltCarvedRough,
+    basaltCarvedAo,
+    agedBronzeMap,
+    agedBronzeNormal,
+    agedBronzeRough,
+    sakuraBlossomMap,
+    mapleFoliageMap,
+    broadleafFoliageMap,
+    jacarandaBloomMap,
+    willowFrondMap,
+    gulmoharBloomMap,
+    birchLeafMap,
+    barkSilverBirchMap,
     createSignTexture,
     dispose: () => {
       janaki.dispose();

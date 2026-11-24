@@ -13,6 +13,13 @@ import {
   getLandmarkApproachPoint,
   getPresetHour,
 } from './world/worldLogic';
+import {
+  ACHIEVEMENTS,
+  VisitHistoryEntry,
+  evaluateAchievements,
+  recordVisitHistory,
+} from './data/achievementsData';
+import { Achievements } from './components/Achievements';
 import { TitleOverlay } from './components/TitleOverlay';
 import { WorldHud } from './components/WorldHud';
 import { ControlDock } from './components/ControlDock';
@@ -27,11 +34,17 @@ const STORAGE_PROGRESS_KEY = 'aashish_3d_progress_v1';
 interface PersistedState {
   discoveredIds: string[];
   customWaypoints: CustomWaypoint[];
+  visitHistory: VisitHistoryEntry[];
+  totalDistanceWalked: number;
+  bellRingsCount: number;
 }
 
 function loadPersistedState(): PersistedState {
   let discoveredIds: string[] = [];
   let customWaypoints: CustomWaypoint[] = [];
+  let visitHistory: VisitHistoryEntry[] = [];
+  let totalDistanceWalked = 0;
+  let bellRingsCount = 0;
   try {
     const raw = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (raw) {
@@ -41,6 +54,29 @@ function loadPersistedState(): PersistedState {
       }
       if (Array.isArray(parsed.customWaypoints)) {
         customWaypoints = parsed.customWaypoints;
+      }
+      if (Array.isArray(parsed.visitHistory)) {
+        visitHistory = parsed.visitHistory.filter(
+          (entry): entry is VisitHistoryEntry =>
+            Boolean(entry) &&
+            typeof entry.id === 'string' &&
+            typeof entry.visitedAt === 'number' &&
+            Number.isFinite(entry.visitedAt),
+        );
+      }
+      if (
+        typeof parsed.totalDistanceWalked === 'number' &&
+        Number.isFinite(parsed.totalDistanceWalked) &&
+        parsed.totalDistanceWalked >= 0
+      ) {
+        totalDistanceWalked = parsed.totalDistanceWalked;
+      }
+      if (
+        typeof parsed.bellRingsCount === 'number' &&
+        Number.isFinite(parsed.bellRingsCount) &&
+        parsed.bellRingsCount >= 0
+      ) {
+        bellRingsCount = parsed.bellRingsCount;
       }
     }
   } catch {
@@ -58,7 +94,13 @@ function loadPersistedState(): PersistedState {
       }
     }
   }
-  return { discoveredIds, customWaypoints };
+  return {
+    discoveredIds,
+    customWaypoints,
+    visitHistory,
+    totalDistanceWalked,
+    bellRingsCount,
+  };
 }
 
 export default function App() {
@@ -75,7 +117,9 @@ export default function App() {
   const [persisted, setPersisted] = useState<PersistedState>(() => loadPersistedState());
   const [selectedLandmark, setSelectedLandmark] = useState<LandmarkData | null>(null);
   const [atlasOpen, setAtlasOpen] = useState(false);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const lastSavedDistanceRef = useRef<number>(persisted.totalDistanceWalked);
   const [dockCollapsed, setDockCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 640,
   );
@@ -105,10 +149,20 @@ export default function App() {
   const [hud, setHud] = useState<WorldHudSnapshot>(() => ({
     zoneName: 'Kathmandu Valley',
     nearestLandmark: null,
-    distanceWalked: 0,
+    distanceWalked: persisted.totalDistanceWalked,
     timeState: computeTimeLightingState(getPresetHour('live'), 'clear'),
     coords: { x: 0, z: 6 },
   }));
+
+  const achievementProgress = {
+    discoveredIds: persisted.discoveredIds,
+    totalDistanceWalked: Math.max(persisted.totalDistanceWalked, hud.distanceWalked),
+    customWaypointCount: persisted.customWaypoints.length,
+    bellRingsCount: persisted.bellRingsCount,
+  };
+  const unlockedAchievementsCount = evaluateAchievements(achievementProgress).filter(
+    (item) => item.status.unlocked,
+  ).length;
 
   const activeWeather: WeatherKind =
     weatherMode === 'live' ? weatherInfo.weather : weatherMode;
@@ -165,17 +219,34 @@ export default function App() {
   const openLandmark = useCallback((landmark: LandmarkData) => {
     setSelectedLandmark(landmark);
     setAtlasOpen(false);
+    setAchievementsOpen(false);
     engineRef.current?.setFocusedLandmark(landmark);
     soundEngine.playBellChime();
     setPersisted((prev) => {
-      if (prev.discoveredIds.includes(landmark.id)) return prev;
-      return { ...prev, discoveredIds: [...prev.discoveredIds, landmark.id] };
+      const discoveredIds = prev.discoveredIds.includes(landmark.id)
+        ? prev.discoveredIds
+        : [...prev.discoveredIds, landmark.id];
+      const visitHistory = recordVisitHistory(prev.visitHistory, landmark.id);
+      return { ...prev, discoveredIds, visitHistory };
     });
   }, []);
 
   const callbacksRef = useRef({
     onSelectLandmark: openLandmark,
-    onHudUpdate: (snapshot: WorldHudSnapshot) => setHud(snapshot),
+    onHudUpdate: (snapshot: WorldHudSnapshot) => {
+      setHud(snapshot);
+      if (snapshot.distanceWalked - lastSavedDistanceRef.current >= 10) {
+        lastSavedDistanceRef.current = snapshot.distanceWalked;
+        setPersisted((prev) =>
+          snapshot.distanceWalked > prev.totalDistanceWalked
+            ? { ...prev, totalDistanceWalked: Math.round(snapshot.distanceWalked) }
+            : prev,
+        );
+      }
+    },
+    onBellRing: () => {
+      setPersisted((prev) => ({ ...prev, bellRingsCount: prev.bellRingsCount + 1 }));
+    },
     onPlaceWaypointRequest: (x: number, z: number) => {
       setPlacementMode(false);
       setPendingWaypointCoords({ x, z });
@@ -191,10 +262,12 @@ export default function App() {
     const engine = new WorldEngine(container, {
       onSelectLandmark: (lm) => callbacksRef.current.onSelectLandmark(lm),
       onHudUpdate: (snap) => callbacksRef.current.onHudUpdate(snap),
+      onBellRing: () => callbacksRef.current.onBellRing(),
       onPlaceWaypointRequest: (x, z) => callbacksRef.current.onPlaceWaypointRequest(x, z),
       onWebglError: (msg) => callbacksRef.current.onWebglError(msg),
     });
     engineRef.current = engine;
+    engine.setInitialDistanceWalked(persisted.totalDistanceWalked);
     engine.setGameState(initialAutostart ? 'playing' : 'title');
     engine.syncCustomWaypoints(persisted.customWaypoints);
 
@@ -296,6 +369,10 @@ export default function App() {
           setPendingWaypointCoords(null);
           return;
         }
+        if (achievementsOpen) {
+          setAchievementsOpen(false);
+          return;
+        }
         if (atlasOpen) {
           setAtlasOpen(false);
           return;
@@ -315,6 +392,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    achievementsOpen,
     atlasOpen,
     contactOpen,
     gameState,
@@ -410,6 +488,8 @@ export default function App() {
             zoneName={hud.zoneName}
             discoveredCount={persisted.discoveredIds.length}
             totalLandmarks={LANDMARKS.length}
+            unlockedAchievementsCount={unlockedAchievementsCount}
+            totalAchievementsCount={ACHIEVEMENTS.length}
             distanceWalked={hud.distanceWalked}
             timeState={hud.timeState}
             weatherInfo={weatherInfo}
@@ -421,6 +501,7 @@ export default function App() {
             dockCollapsed={dockCollapsed}
             hasOpenLandmark={Boolean(selectedLandmark)}
             onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
+            onOpenAchievements={() => setAchievementsOpen(true)}
             onOpenAtlas={() => setAtlasOpen(true)}
             onOpenContact={() => setContactOpen(true)}
             onPause={() => setGameState('paused')}
@@ -450,10 +531,19 @@ export default function App() {
       {/* Landmark Story & Project Drawer */}
       <LandmarkDrawer
         landmark={selectedLandmark}
+        progress={achievementProgress}
+        visitHistory={persisted.visitHistory}
         onClose={handleCloseLandmark}
         onNavigateTo={handleTeleportLandmark}
         onSelectLandmark={openLandmark}
         onOpenContact={() => setContactOpen(true)}
+      />
+
+      {/* Achievements & Milestones Modal */}
+      <Achievements
+        progress={achievementProgress}
+        open={achievementsOpen}
+        onClose={() => setAchievementsOpen(false)}
       />
 
       {/* World Atlas Fast Travel Modal */}

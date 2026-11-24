@@ -4,26 +4,37 @@ export interface JanakiMandirTextures {
   brickPlazaMap: THREE.CanvasTexture;
   brickPlazaNormal: THREE.CanvasTexture;
   brickPlazaRough: THREE.CanvasTexture;
+  brickPlazaAo: THREE.CanvasTexture;
   marbleAshlarMap: THREE.CanvasTexture;
   marbleAshlarNormal: THREE.CanvasTexture;
   marbleAshlarRough: THREE.CanvasTexture;
+  marbleAshlarAo: THREE.CanvasTexture;
   marbleTrimMap: THREE.CanvasTexture;
   marbleTrimNormal: THREE.CanvasTexture;
   marbleTrimRough: THREE.CanvasTexture;
+  marbleTrimAo: THREE.CanvasTexture;
+  stairMarbleMap: THREE.CanvasTexture;
+  stairMarbleNormal: THREE.CanvasTexture;
+  stairMarbleRough: THREE.CanvasTexture;
+  stairMarbleAo: THREE.CanvasTexture;
   pillarCarvedMap: THREE.CanvasTexture;
   pillarCarvedNormal: THREE.CanvasTexture;
   pillarCarvedRough: THREE.CanvasTexture;
+  pillarCarvedAo: THREE.CanvasTexture;
   carvedDoorMap: THREE.CanvasTexture;
   carvedDoorNormal: THREE.CanvasTexture;
   courtyardMandalaMap: THREE.CanvasTexture;
   courtyardMandalaNormal: THREE.CanvasTexture;
   courtyardMandalaRough: THREE.CanvasTexture;
+  courtyardMandalaAo: THREE.CanvasTexture;
   courtyardMedallionMap: THREE.CanvasTexture;
   courtyardMedallionNormal: THREE.CanvasTexture;
   courtyardMedallionRough: THREE.CanvasTexture;
+  courtyardMedallionAo: THREE.CanvasTexture;
   flagstoneMap: THREE.CanvasTexture;
   flagstoneNormal: THREE.CanvasTexture;
   flagstoneRough: THREE.CanvasTexture;
+  flagstoneAo: THREE.CanvasTexture;
   prayerWheelMap: THREE.CanvasTexture;
   prayerWheelNormal: THREE.CanvasTexture;
   prayerWheelRough: THREE.CanvasTexture;
@@ -35,6 +46,7 @@ export interface JanakiMandirTextures {
   domeRibMap: THREE.CanvasTexture;
   domeRibNormal: THREE.CanvasTexture;
   domeRibRough: THREE.CanvasTexture;
+  domeRibAo: THREE.CanvasTexture;
   nepalFlagMap: THREE.CanvasTexture;
   soilLoamMap: THREE.CanvasTexture;
   soilLoamNormal: THREE.CanvasTexture;
@@ -116,6 +128,69 @@ function heightToNormalCanvas(heightCanvas: HTMLCanvasElement, strength = 2.4): 
   return outCanvas;
 }
 
+/**
+ * Generates an 8-direction multi-radius crevice ambient occlusion canvas from a grayscale heightmap
+ * so mortar joints, stair nosing grooves, fluted columns, and carved reliefs gather natural contact shadow.
+ */
+function heightToAoCanvas(
+  heightCanvas: HTMLCanvasElement,
+  radius = 3,
+  strength = 1.65,
+  floorMin = 85,
+): HTMLCanvasElement {
+  const w = heightCanvas.width;
+  const h = heightCanvas.height;
+  const hCtx = heightCanvas.getContext('2d')!;
+  const src = hCtx.getImageData(0, 0, w, h).data;
+
+  const [outCanvas, outCtx] = makeCanvas(w, h);
+  const outImg = outCtx.createImageData(w, h);
+  const dst = outImg.data;
+
+  const r1 = Math.max(1, Math.round(radius));
+  const r2 = Math.max(2, Math.round(radius * 2));
+  const dirs = [
+    [r1, 0],
+    [-r1, 0],
+    [0, r1],
+    [0, -r1],
+    [r1, r1],
+    [-r1, r1],
+    [r1, -r1],
+    [-r1, -r1],
+    [r2, 0],
+    [-r2, 0],
+    [0, r2],
+    [0, -r2],
+  ];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const center = src[(y * w + x) * 4] / 255;
+      let occ = 0;
+      for (let d = 0; d < dirs.length; d++) {
+        const sx = (((x + dirs[d][0]) % w) + w) % w;
+        const sy = (((y + dirs[d][1]) % h) + h) % h;
+        const neighbor = src[(sy * w + sx) * 4] / 255;
+        if (neighbor > center) {
+          occ += (neighbor - center) * (d < 8 ? 1.0 : 0.55);
+        }
+      }
+      const cavityBoost = center < 0.42 ? (0.42 - center) * 0.48 : 0;
+      const ao = Math.max(floorMin / 255, Math.min(1, 1 - (occ / 6.2) * strength - cavityBoost));
+      const v = Math.round(ao * 255);
+      const idx = (y * w + x) * 4;
+      dst[idx] = v;
+      dst[idx + 1] = v;
+      dst[idx + 2] = v;
+      dst[idx + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(outImg, 0, 0);
+  return outCanvas;
+}
+
 export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirTextures {
   const list: THREE.Texture[] = [];
 
@@ -181,6 +256,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const brickPlazaMap = reg(bpC, true, 16, 10);
   const brickPlazaNormal = reg(heightToNormalCanvas(bpHC, 2.2), false, 16, 10);
   const brickPlazaRough = reg(bpRC, false, 16, 10);
+  const brickPlazaAo = reg(heightToAoCanvas(bpHC, 3, 1.75), false, 16, 10);
 
   // Seamless periodic 256x256 Makrana marble mineral grain generator (fast, organic, zero tile seams)
   const createMarbleGrainTile = (
@@ -361,6 +437,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const marbleAshlarMap = reg(maC, true, 1, 1);
   const marbleAshlarNormal = reg(heightToNormalCanvas(maHC, 2.2), false, 1, 1);
   const marbleAshlarRough = reg(maRC, false, 1, 1);
+  const marbleAshlarAo = reg(heightToAoCanvas(maHC, 4, 1.7), false, 1, 1);
 
   // 2b. 1024x1024 Honed Mughal Makrana Carved Marble Trim (spandrels, pilasters, archivolts)
   const [mtC, mtCtx] = makeCanvas(1024, 1024);
@@ -398,6 +475,71 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const marbleTrimMap = reg(mtC, true, 1, 1);
   const marbleTrimNormal = reg(heightToNormalCanvas(mtHC, 1.8), false, 1, 1);
   const marbleTrimRough = reg(mtRC, false, 1, 1);
+  const marbleTrimAo = reg(heightToAoCanvas(mtHC, 4, 1.55), false, 1, 1);
+
+  // 2c. 512x512 Honed Makrana Stair Tread & Threshold Marble (chiseled anti-slip nosing grooves + joint AO)
+  const [smC, smCtx] = makeCanvas(512, 512);
+  const [smHC, smHCtx] = makeCanvas(512, 512);
+  const [smRC, smRCtx] = makeCanvas(512, 512);
+  smCtx.fillStyle = '#9e9586';
+  smCtx.fillRect(0, 0, 512, 512);
+  smHCtx.fillStyle = '#404040';
+  smHCtx.fillRect(0, 0, 512, 512);
+  smRCtx.fillStyle = '#c8c8c8';
+  smRCtx.fillRect(0, 0, 512, 512);
+
+  for (let sr = 0; sr < 4; sr++) {
+    const sy = sr * 128;
+    const soff = (sr % 2) * 128;
+    for (let sc = -1; sc <= 2; sc++) {
+      const sx = sc * 256 + soff;
+      const sh = ((sc + 3) * 67 + sr * 109) & 255;
+      const bx = sx + 2;
+      const by = sy + 2;
+      const bw = 252;
+      const bh = 124;
+
+      smCtx.save();
+      smCtx.beginPath();
+      smCtx.rect(bx, by, bw, bh);
+      smCtx.clip();
+      smCtx.drawImage(makranaTile, bx - ((sh * 9) % 128), by - ((sh * 13) % 128), 384, 384);
+      // Warm golden-pilgrim foot-worn tread center sheen
+      const wearGrad = smCtx.createLinearGradient(bx, by, bx, by + bh);
+      wearGrad.addColorStop(0, 'rgba(255, 251, 244, 0.14)');
+      wearGrad.addColorStop(0.5, 'rgba(248, 241, 228, 0.22)');
+      wearGrad.addColorStop(1, 'rgba(162, 152, 138, 0.18)');
+      smCtx.fillStyle = wearGrad;
+      smCtx.fillRect(bx, by, bw, bh);
+      // Anti-slip triple chiseled stair nosing flutes near slab edge
+      for (let g = 0; g < 3; g++) {
+        smCtx.fillStyle = 'rgba(132, 122, 108, 0.42)';
+        smCtx.fillRect(bx + 6, by + 12 + g * 8, bw - 12, 3);
+      }
+      smCtx.restore();
+
+      const hBase = 198 + (sh % 18);
+      smHCtx.fillStyle = `rgb(${hBase},${hBase},${hBase})`;
+      smHCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
+      for (let g = 0; g < 3; g++) {
+        smHCtx.fillStyle = '#5e5e5e';
+        smHCtx.fillRect(bx + 6, by + 12 + g * 8, bw - 12, 3);
+      }
+
+      // Honed smooth center (0.34 roughness = ~87) & slightly crisper matte edges/grooves (~148)
+      const rBase = 92 + (sh % 26);
+      smRCtx.fillStyle = `rgb(${rBase},${rBase},${rBase})`;
+      smRCtx.fillRect(bx, by, bw, bh);
+      for (let g = 0; g < 3; g++) {
+        smRCtx.fillStyle = '#acacac';
+        smRCtx.fillRect(bx + 6, by + 12 + g * 8, bw - 12, 3);
+      }
+    }
+  }
+  const stairMarbleMap = reg(smC, true, 1, 1);
+  const stairMarbleNormal = reg(heightToNormalCanvas(smHC, 2.4), false, 1, 1);
+  const stairMarbleRough = reg(smRC, false, 1, 1);
+  const stairMarbleAo = reg(heightToAoCanvas(smHC, 4, 1.85), false, 1, 1);
 
   // 3. Ornate Mithila Simha-Dwar Torana Painting (around central archway arch)
   const [torC, torCtx] = makeCanvas(512, 512);
@@ -567,6 +709,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const domeRibMap = reg(domeC, true, 1, 1);
   const domeRibNormal = reg(heightToNormalCanvas(domeHC, 2.5), false, 1, 1);
   const domeRibRough = reg(domeRC, false, 1, 1);
+  const domeRibAo = reg(heightToAoCanvas(domeHC, 4, 1.6), false, 1, 1);
 
   // 6. Authentic Crimson Double-Pennant National Flag of Nepal (transparent canvas)
   const [flagC, flagCtx] = makeCanvas(256, 256);
@@ -956,6 +1099,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const courtyardMandalaMap = reg(cmC, true, 5, 4, false);
   const courtyardMandalaNormal = reg(heightToNormalCanvas(cmHC, 2.7), false, 5, 4, false);
   const courtyardMandalaRough = reg(cmRC, false, 5, 4, false);
+  const courtyardMandalaAo = reg(heightToAoCanvas(cmHC, 4, 1.8), false, 5, 4, false);
 
   // 7a. Central Sacred 16-Petal Ashtadala Carved Stone Lotus Medallion (1024x1024 flush inlay at ~91 px/m)
   const [medC, medCtx] = makeCanvas(1024, 1024);
@@ -1111,6 +1255,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const courtyardMedallionMap = reg(medC, true, 1, 1, true);
   const courtyardMedallionNormal = reg(heightToNormalCanvas(medHC, 2.3), false, 1, 1, true);
   const courtyardMedallionRough = reg(medRC, false, 1, 1, true);
+  const courtyardMedallionAo = reg(heightToAoCanvas(medHC, 4, 1.75), false, 1, 1, true);
 
   // 7b. Seamless 512x512 Weather-Worn Nepali Diamond-Border Flagstone Walkway Texture (Parikrama verandas & thresholds)
   const [fsC, fsCtx] = makeCanvas(512, 512);
@@ -1177,6 +1322,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const flagstoneMap = reg(fsC, true, 1, 1);
   const flagstoneNormal = reg(heightToNormalCanvas(fsHC, 2.3), false, 1, 1);
   const flagstoneRough = reg(fsRC, false, 1, 1);
+  const flagstoneAo = reg(heightToAoCanvas(fsHC, 3, 1.75), false, 1, 1);
 
   // 7c. Embossed Spun Copper-Brass Prayer Wheel Barrel PBR Maps (512x512)
   const [pwC, pwCtx] = makeCanvas(512, 512);
@@ -1578,6 +1724,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
   const pillarCarvedMap = reg(pilC, true, 1, 1);
   const pillarCarvedNormal = reg(heightToNormalCanvas(pilHC, 2.7), false, 1, 1);
   const pillarCarvedRough = reg(pilRC, false, 1, 1);
+  const pillarCarvedAo = reg(heightToAoCanvas(pilHC, 4, 1.7), false, 1, 1);
 
   // 10. Carved Mithila Teakwood Double-Leaf Chamber Door + Brass Rosette Studs
   const [drC, drCtx] = makeCanvas(256, 512);
@@ -2245,26 +2392,37 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
     brickPlazaMap,
     brickPlazaNormal,
     brickPlazaRough,
+    brickPlazaAo,
     marbleAshlarMap,
     marbleAshlarNormal,
     marbleAshlarRough,
+    marbleAshlarAo,
     marbleTrimMap,
     marbleTrimNormal,
     marbleTrimRough,
+    marbleTrimAo,
+    stairMarbleMap,
+    stairMarbleNormal,
+    stairMarbleRough,
+    stairMarbleAo,
     pillarCarvedMap,
     pillarCarvedNormal,
     pillarCarvedRough,
+    pillarCarvedAo,
     carvedDoorMap,
     carvedDoorNormal,
     courtyardMandalaMap,
     courtyardMandalaNormal,
     courtyardMandalaRough,
+    courtyardMandalaAo,
     courtyardMedallionMap,
     courtyardMedallionNormal,
     courtyardMedallionRough,
+    courtyardMedallionAo,
     flagstoneMap,
     flagstoneNormal,
     flagstoneRough,
+    flagstoneAo,
     prayerWheelMap,
     prayerWheelNormal,
     prayerWheelRough,
@@ -2276,6 +2434,7 @@ export function createJanakiMandirTextures(maxAnisotropy: number): JanakiMandirT
     domeRibMap,
     domeRibNormal,
     domeRibRough,
+    domeRibAo,
     nepalFlagMap,
     soilLoamMap,
     soilLoamNormal,

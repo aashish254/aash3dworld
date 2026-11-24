@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
+  Award,
   Compass,
   Mail,
   Map as MapIcon,
@@ -16,6 +17,8 @@ interface WorldHudProps {
   zoneName: string;
   discoveredCount: number;
   totalLandmarks: number;
+  unlockedAchievementsCount: number;
+  totalAchievementsCount: number;
   distanceWalked: number;
   timeState: TimeLightingState;
   weatherInfo: LiveWeatherInfo;
@@ -27,6 +30,7 @@ interface WorldHudProps {
   dockCollapsed: boolean;
   hasOpenLandmark: boolean;
   onToggleSound: () => void;
+  onOpenAchievements: () => void;
   onOpenAtlas: () => void;
   onOpenContact: () => void;
   onPause: () => void;
@@ -47,6 +51,8 @@ export const WorldHud: React.FC<WorldHudProps> = ({
   zoneName,
   discoveredCount,
   totalLandmarks,
+  unlockedAchievementsCount,
+  totalAchievementsCount,
   distanceWalked,
   timeState,
   weatherInfo,
@@ -58,6 +64,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
   dockCollapsed,
   hasOpenLandmark,
   onToggleSound,
+  onOpenAchievements,
   onOpenAtlas,
   onOpenContact,
   onPause,
@@ -163,6 +170,24 @@ export const WorldHud: React.FC<WorldHudProps> = ({
             ) : (
               <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden="true" />
             )}
+          </button>
+
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onOpenAchievements();
+            }}
+            aria-label={`Open Achievements (${unlockedAchievementsCount} of ${totalAchievementsCount} unlocked)`}
+            title="Achievements & Milestones"
+            className="w-8 h-8 sm:w-auto sm:h-10 sm:px-3 rounded-lg border border-slate-300/15 text-slate-100 hover:border-amber-400/60 hover:text-amber-300 inline-flex items-center justify-center gap-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
+            style={{ backgroundColor: 'rgba(13, 20, 34, 0.90)' }}
+          >
+            <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" aria-hidden="true" />
+            <span className="hidden sm:inline">
+              Badges {unlockedAchievementsCount}/{totalAchievementsCount}
+            </span>
           </button>
 
           <button

@@ -10,10 +10,90 @@ import {
   createDetailedGajurSpire,
   createDetailedTempleBell,
   createOnionDomeGeometry,
+  createRectangularHipRoofGeometry,
   getDetailedParterreFinialGeo,
   getSacredTeardropFlameGeo,
 } from './janakiMandirCraft';
 import { applyRealisticWaterShader } from './waterShader';
+
+function extHash01(seed: number): number {
+  const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
+  return s - Math.floor(s);
+}
+
+function createExtArchedSprigGeo(
+  width: number,
+  height: number,
+  archForward: number,
+  cupDepth: number,
+): THREE.BufferGeometry {
+  const geo = new THREE.PlaneGeometry(width, height, 4, 5);
+  geo.translate(0, height * 0.5, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const v = Math.max(0, Math.min(1, y / height));
+    const uNorm = x / (width * 0.5);
+    const droopY = -Math.pow(v, 2.2) * (archForward * 0.32);
+    const forwardZ = Math.pow(v, 1.45) * archForward - uNorm * uNorm * cupDepth * (0.35 + v * 0.65);
+    pos.setY(i, y + droopY);
+    pos.setZ(i, pos.getZ(i) + forwardZ);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createExtMughalUrnGeo(radius: number, height: number): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [
+    new THREE.Vector2(radius * 0.56, 0),
+    new THREE.Vector2(radius * 0.68, height * 0.06),
+    new THREE.Vector2(radius * 0.52, height * 0.13),
+    new THREE.Vector2(radius * 0.46, height * 0.22),
+    new THREE.Vector2(radius * 0.78, height * 0.4),
+    new THREE.Vector2(radius * 0.96, height * 0.58),
+    new THREE.Vector2(radius * 0.98, height * 0.72),
+    new THREE.Vector2(radius * 0.84, height * 0.84),
+    new THREE.Vector2(radius * 0.88, height * 0.91),
+    new THREE.Vector2(radius * 1.04, height * 0.96),
+    new THREE.Vector2(radius * 1.0, height * 1.0),
+    new THREE.Vector2(radius * 0.82, height * 0.98),
+    new THREE.Vector2(radius * 0.76, height * 0.85),
+  ];
+  const geo = new THREE.LatheGeometry(pts, 28);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function addExtWoodyStems(
+  parent: THREE.Object3D,
+  barkMat: THREE.Material,
+  ox: number,
+  oy: number,
+  oz: number,
+  count: number,
+  height: number,
+  spread: number,
+  radius: number,
+  seed: number,
+): void {
+  const GOLDEN = 2.399963229728653;
+  for (let i = 0; i < count; i++) {
+    const angle = i * GOLDEN + extHash01(seed + i) * 0.7;
+    const lean = spread * (0.45 + extHash01(seed + i * 3 + 1) * 0.55);
+    const tipH = height * (0.68 + extHash01(seed + i * 5 + 2) * 0.32);
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(ox, oy - 0.02, oz),
+      new THREE.Vector3(ox + Math.cos(angle) * lean * 0.32, oy + tipH * 0.38, oz + Math.sin(angle) * lean * 0.32),
+      new THREE.Vector3(ox + Math.cos(angle) * lean * 0.78, oy + tipH * 0.74, oz + Math.sin(angle) * lean * 0.78),
+      new THREE.Vector3(ox + Math.cos(angle + 0.18) * lean, oy + tipH, oz + Math.sin(angle + 0.18) * lean),
+    ]);
+    const tubeGeo = new THREE.TubeGeometry(curve, 6, radius * (0.72 + extHash01(seed + i * 7) * 0.35), 5, false);
+    const stem = new THREE.Mesh(tubeGeo, barkMat);
+    stem.castShadow = true;
+    parent.add(stem);
+  }
+}
 
 export interface JanakiExteriorParams {
   group: THREE.Group;
@@ -101,62 +181,249 @@ export function createJanakiMandirExterior({
     roughness: 0.76,
   });
   const slateStoneMat = new THREE.MeshStandardMaterial({
-    color: 0x3b3d42,
-    roughness: 0.84,
+    map: textures.basaltCarvedMap,
+    normalMap: textures.basaltCarvedNormal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: textures.basaltCarvedRough,
+    aoMap: textures.basaltCarvedAo,
+    aoMapIntensity: 0.84,
+    color: 0x5c6066,
+    roughness: 0.9,
+    metalness: 0.05,
   });
 
+  // High-detail exterior botanical materials & instanced alpha-cutout flora collectors
+  const extSoilMat = new THREE.MeshStandardMaterial({
+    map: jTex.soilLoamMap,
+    normalMap: jTex.soilLoamNormal,
+    normalScale: new THREE.Vector2(0.82, 0.82),
+    roughnessMap: jTex.soilLoamRough,
+    color: 0xffffff,
+    roughness: 1.0,
+    metalness: 0.0,
+  });
+  const extUrnMat = new THREE.MeshStandardMaterial({
+    map: jTex.terracottaUrnMap,
+    normalMap: jTex.terracottaUrnNormal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: jTex.terracottaUrnRough,
+    color: 0xffffff,
+    roughness: 1.0,
+    metalness: 0.02,
+  });
+  const extShrubMat = new THREE.MeshStandardMaterial({
+    map: jTex.shrubFoliageMap,
+    normalMap: jTex.shrubFoliageNormal,
+    normalScale: new THREE.Vector2(0.68, 0.68),
+    alphaTest: 0.36,
+    side: THREE.DoubleSide,
+    roughness: 0.82,
+    metalness: 0.0,
+    color: 0xffffff,
+  });
+  const extTulsiMat = new THREE.MeshStandardMaterial({
+    map: jTex.tulsiLeafMap,
+    normalMap: jTex.tulsiLeafNormal,
+    normalScale: new THREE.Vector2(0.68, 0.68),
+    alphaTest: 0.36,
+    side: THREE.DoubleSide,
+    roughness: 0.8,
+    metalness: 0.0,
+    color: 0xffffff,
+  });
+  const extMarigoldMat = new THREE.MeshStandardMaterial({
+    map: jTex.marigoldMap,
+    normalMap: jTex.marigoldNormal,
+    normalScale: new THREE.Vector2(0.68, 0.68),
+    alphaTest: 0.36,
+    side: THREE.DoubleSide,
+    roughness: 0.78,
+    metalness: 0.0,
+    color: 0xffffff,
+  });
+  const extFernMat = new THREE.MeshStandardMaterial({
+    map: jTex.fernPalmMap,
+    normalMap: jTex.fernPalmNormal,
+    normalScale: new THREE.Vector2(0.68, 0.68),
+    alphaTest: 0.36,
+    side: THREE.DoubleSide,
+    roughness: 0.76,
+    metalness: 0.0,
+    color: 0xffffff,
+  });
+
+  const extShrubSprigGeo = createExtArchedSprigGeo(0.84, 0.94, 0.24, 0.11);
+  const extTulsiSprigGeo = createExtArchedSprigGeo(0.56, 0.74, 0.16, 0.07);
+  const extMarigoldSprigGeo = createExtArchedSprigGeo(0.46, 0.54, 0.14, 0.06);
+  const extFernSprigGeo = createExtArchedSprigGeo(0.54, 0.88, 0.28, 0.09);
+
+  interface ExtBotanicalItem {
+    matrix: THREE.Matrix4;
+    tint: THREE.Color;
+  }
+  const extShrubList: ExtBotanicalItem[] = [];
+  const extTulsiList: ExtBotanicalItem[] = [];
+  const extMarigoldList: ExtBotanicalItem[] = [];
+  const extFernList: ExtBotanicalItem[] = [];
+
+  const eTmpPos = new THREE.Vector3();
+  const eTmpQuat = new THREE.Quaternion();
+  const eTmpScale = new THREE.Vector3();
+  const eTmpEuler = new THREE.Euler();
+  const GOLDEN_ANG = 2.399963229728653;
+
+  const pushExtSprig = (
+    list: ExtBotanicalItem[],
+    x: number,
+    y: number,
+    z: number,
+    yaw: number,
+    pitch: number,
+    roll: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    seed: number,
+  ) => {
+    eTmpPos.set(x, y, z);
+    eTmpEuler.set(pitch, yaw, roll, 'YXZ');
+    eTmpQuat.setFromEuler(eTmpEuler);
+    eTmpScale.set(sx, sy, sz);
+    const shade = 0.86 + extHash01(seed) * 0.22;
+    list.push({
+      matrix: new THREE.Matrix4().compose(eTmpPos, eTmpQuat, eTmpScale),
+      tint: new THREE.Color(shade * (0.96 + extHash01(seed + 11) * 0.08), shade, shade * 0.94),
+    });
+  };
+
+  const addExtRealisticShrub = (
+    stemParent: THREE.Object3D,
+    localX: number,
+    localY: number,
+    localZ: number,
+    worldX: number,
+    worldY: number,
+    worldZ: number,
+    scale: number,
+    seed: number,
+    boughCount = 11,
+  ) => {
+    addExtWoodyStems(stemParent, barkMat, localX, localY, localZ, 5, 0.72 * scale, 0.42 * scale, 0.03 * scale, seed);
+    for (let i = 0; i < boughCount; i++) {
+      const h = extHash01(seed + i * 11.3);
+      const layer = i < boughCount * 0.45 ? 0 : i < boughCount * 0.8 ? 1 : 2;
+      const yaw = i * GOLDEN_ANG + extHash01(seed + i * 7.1) * 0.35;
+      const ringR = (layer === 0 ? 0.22 : layer === 1 ? 0.13 : 0.05) * scale;
+      const yOff = (layer === 0 ? 0.04 : layer === 1 ? 0.24 : 0.42) * scale;
+      const pitchOut = (layer === 0 ? 0.62 : layer === 1 ? 0.38 : 0.16) + (h - 0.5) * 0.14;
+      const sBase = scale * (0.82 + h * 0.32);
+      pushExtSprig(
+        extShrubList,
+        worldX + Math.sin(yaw) * ringR,
+        worldY + yOff,
+        worldZ + Math.cos(yaw) * ringR,
+        yaw,
+        pitchOut,
+        (extHash01(seed + i * 5.7) - 0.5) * 0.24,
+        sBase,
+        sBase * (0.88 + extHash01(seed + i * 3.1) * 0.24),
+        sBase,
+        seed + i * 13,
+      );
+    }
+  };
+
+  const addExtMarigoldCluster = (wx: number, wy: number, wz: number, scale: number, seed: number) => {
+    const baseYaw = extHash01(seed) * Math.PI * 2;
+    for (let k = 0; k < 3; k++) {
+      const yaw = baseYaw + k * 2.09 + (extHash01(seed + k * 3) - 0.5) * 0.35;
+      const s = scale * (0.86 + extHash01(seed + k * 7) * 0.26);
+      pushExtSprig(
+        extMarigoldList,
+        wx + Math.sin(yaw) * 0.03 * scale,
+        wy,
+        wz + Math.cos(yaw) * 0.03 * scale,
+        yaw,
+        0.26 + extHash01(seed + k * 5) * 0.18,
+        (extHash01(seed + k * 11) - 0.5) * 0.16,
+        s,
+        s,
+        s,
+        seed + k * 23,
+      );
+    }
+  };
+
   // -------------------------------------------------------------------------
-  // 1. OUTER PARIKRAMA FLAGSTONE WALKWAY BORDER & LANDSCAPED GARDEN CURBS
+  // 1. OUTER PARIKRAMA FLAGSTONE WALKWAY BORDER & CONTINUOUS STONE CURBS
   // -------------------------------------------------------------------------
-  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 43.2), flagstoneMat);
-  westWalk.position.set(-26.8, 0.02, -3.5);
+  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 41.1), flagstoneMat);
+  westWalk.position.set(-26.8, -0.036, -5.05);
   westWalk.receiveShadow = true;
 
-  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 43.2), flagstoneMat);
-  eastWalk.position.set(26.8, 0.02, -3.5);
+  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 41.1), flagstoneMat);
+  eastWalk.position.set(26.8, -0.036, -5.05);
   eastWalk.receiveShadow = true;
 
   const northWalk = new THREE.Mesh(new THREE.BoxGeometry(57.0, 0.08, 3.6), flagstoneMat);
-  northWalk.position.set(0, 0.02, -23.8);
+  northWalk.position.set(0, -0.036, -23.8);
   northWalk.receiveShadow = true;
 
-  // Connecting transverse paths linking Parikrama walks cleanly to outer compound walks & monuments
-  const northStambhaPath = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.075, 8.6), flagstoneMat);
-  northStambhaPath.position.set(0, 0.018, -28.0);
+  // Connecting transverse paths sitting flush (top = +0.004) with continuous white marble lawn curbs
+  const northStambhaPath = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.08, 8.6), flagstoneMat);
+  northStambhaPath.position.set(0, -0.036, -28.0);
   northStambhaPath.receiveShadow = true;
 
-  const westBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(27.8, 0.075, 3.2), flagstoneMat);
-  westBridgeWalk.position.set(-40.8, 0.018, -23.8);
+  const westBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(27.8, 0.08, 3.2), flagstoneMat);
+  westBridgeWalk.position.set(-40.8, -0.036, -23.8);
   westBridgeWalk.receiveShadow = true;
 
-  const eastBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.075, 3.2), flagstoneMat);
-  eastBridgeWalk.position.set(32.0, 0.018, -23.8);
+  const eastBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.08, 3.2), flagstoneMat);
+  eastBridgeWalk.position.set(32.0, -0.036, -23.8);
   eastBridgeWalk.receiveShadow = true;
 
-  const pyaauLinkWalk = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.075, 4.4), flagstoneMat);
-  pyaauLinkWalk.position.set(31.8, 0.018, -3.5);
+  const pyaauLinkWalk = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.08, 5.2), flagstoneMat);
+  pyaauLinkWalk.position.set(31.8, -0.036, -3.5);
   pyaauLinkWalk.receiveShadow = true;
 
-  const southWestLink = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.075, 3.6), brickPlazaMat);
-  southWestLink.position.set(-32.2, 0.016, 16.0);
+  const southWestLink = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.08, 3.6), brickPlazaMat);
+  southWestLink.position.set(-32.2, -0.036, 16.0);
   southWestLink.receiveShadow = true;
 
-  // 4 Perimeter brick apron strips framing Ganga Sagar coping rim (keeping basin interior 100% open!)
+  // Continuous white marble edging curbs separating flagstone walks from grass lawns
+  for (const [cx, cz, cw, cd] of [
+    [-28.58, -5.05, 0.22, 41.1],
+    [28.58, -5.05, 0.22, 41.1],
+    [0, -25.68, 57.0, 0.22],
+    [-40.8, -22.12, 24.4, 0.22],
+    [-40.8, -25.48, 24.4, 0.22],
+    [32.0, -22.12, 7.4, 0.22],
+    [32.0, -25.48, 7.4, 0.22],
+    [31.4, -0.82, 5.8, 0.22],
+    [31.4, -6.18, 5.8, 0.22],
+  ] as Array<[number, number, number, number]>) {
+    const lawnCurb = new THREE.Mesh(new THREE.BoxGeometry(cw, 0.06, cd), marbleWallMat);
+    lawnCurb.position.set(cx, 0.015, cz);
+    lawnCurb.receiveShadow = true;
+    exterior.add(lawnCurb);
+  }
+
+  // 4 Perimeter brick apron strips framing Ganga Sagar coping rim (flush with plazaY)
   const gsNorthApron = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.08, 3.8), brickPlazaMat);
-  gsNorthApron.position.set(-45.3, 0.015, 16.0 - 11.2);
+  gsNorthApron.position.set(-45.3, -0.036, 16.0 - 11.2);
   gsNorthApron.receiveShadow = true;
   const gsSouthApron = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.08, 3.8), brickPlazaMat);
-  gsSouthApron.position.set(-45.3, 0.015, 16.0 + 11.2);
+  gsSouthApron.position.set(-45.3, -0.036, 16.0 + 11.2);
   gsSouthApron.receiveShadow = true;
   const gsWestApron = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.08, 18.6), brickPlazaMat);
-  gsWestApron.position.set(-53.7, 0.015, 16.0);
+  gsWestApron.position.set(-53.7, -0.036, 16.0);
   gsWestApron.receiveShadow = true;
   const gsEastApron = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 18.6), brickPlazaMat);
-  gsEastApron.position.set(-35.4, 0.015, 16.0);
+  gsEastApron.position.set(-35.4, -0.036, 16.0);
   gsEastApron.receiveShadow = true;
 
   const vivahApron = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.08, 13.5), brickPlazaMat);
-  vivahApron.position.set(-45.0, 0.015, 40.0);
+  vivahApron.position.set(-45.0, -0.036, 40.0);
   vivahApron.receiveShadow = true;
 
   exterior.add(
@@ -197,15 +464,15 @@ export function createJanakiMandirExterior({
       bed.add(curb, coping);
     }
 
-    const soil = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.3, 0.14, bd - 0.3), chautaraSoilMat);
+    const soil = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.3, 0.14, bd - 0.3), extSoilMat);
     soil.position.y = 0.07;
     soil.receiveShadow = true;
     bed.add(soil);
 
-    // Corner ornamental brass finials + low manicured shrubs & marigold blossoms
+    // Corner ornamental brass finials + lush multi-layer botanical shrubs & Sayapatri marigold borders
     for (const sx of [-bw / 2, bw / 2]) {
       for (const sz of [-bd / 2, bd / 2]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.42), plinthStoneMat);
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.42), marbleWallMat);
         post.position.set(sx, 0.18, sz);
         const cap = new THREE.Mesh(getDetailedParterreFinialGeo(), tealTrimMat);
         cap.scale.setScalar(0.65);
@@ -220,16 +487,17 @@ export function createJanakiMandirExterior({
       for (let iz = 0; iz < rows; iz++) {
         const px = -bw * 0.34 + (cols > 1 ? (ix / (cols - 1)) * (bw * 0.68) : 0);
         const pz = -bd * 0.34 + (rows > 1 ? (iz / (rows - 1)) * (bd * 0.68) : 0);
-        const bush = new THREE.Mesh(new THREE.DodecahedronGeometry(0.46, 1), chautaraFoliageMat);
-        bush.scale.set(1.1, 0.72, 1.1);
-        bush.position.set(px, 0.34, pz);
-        bush.castShadow = true;
-        bed.add(bush);
+        const seed = Math.round((gx + 100) * 31 + (gz + 100) * 17 + ix * 13 + iz * 29);
+        addExtRealisticShrub(bed, px, 0.14, pz, gx + px, 0.14, gz + pz, 0.92, seed, 11);
         for (let b = 0; b < 3; b++) {
-          const a = (b / 3) * Math.PI * 2 + ix + iz;
-          const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), marigoldMat);
-          bloom.position.set(px + Math.cos(a) * 0.28, 0.56, pz + Math.sin(a) * 0.28);
-          bed.add(bloom);
+          const a = (b / 3) * Math.PI * 2 + ix * 1.1 + iz * 0.7;
+          addExtMarigoldCluster(
+            gx + px + Math.cos(a) * 0.46,
+            0.14,
+            gz + pz + Math.sin(a) * 0.46,
+            0.78,
+            seed + b * 41,
+          );
         }
       }
     }
@@ -262,9 +530,11 @@ export function createJanakiMandirExterior({
     [26.5, -29.2, Math.PI / 2],
   ];
   for (const [bx, bz, rotY] of benchPlacements) {
-    const bench = createChowkStoneBench(plinthStoneMat, marbleWallMat, tealTrimMat);
-    bench.position.set(bx, 0.04, bz);
+    const bench = createChowkStoneBench(marbleWallMat, marbleWallMat, tealTrimMat);
+    bench.position.set(bx, 0.004, bz);
     bench.rotation.y = rotY;
+    bench.userData.noMerge = true;
+    bench.userData.snapCategory = 'sitting';
     exterior.add(bench);
   }
 
@@ -278,49 +548,67 @@ export function createJanakiMandirExterior({
     [-51.8, -29.8],
     [33.8, -29.8],
   ] as Array<[number, number]>) {
-    const ped = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.62), plinthStoneMat);
-    ped.position.set(lx, 0.28, lz);
+    const bollard = new THREE.Group();
+    bollard.position.set(lx, 0.004, lz);
+    bollard.userData.noMerge = true;
+    bollard.userData.snapCategory = 'lantern';
+    const ped = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.62), marbleWallMat);
+    ped.position.set(0, 0.28, 0);
     ped.castShadow = true;
     const cap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.1, 0.72), tealTrimMat);
-    cap.position.set(lx, 0.6, lz);
+    cap.position.set(0, 0.6, 0);
     const diyo = createDetailedBrassSukundaDiyo(goldMat, bronzeMat, diyoGlowMat, 0.9, true);
-    diyo.position.set(lx, 0.65, lz);
-    exterior.add(ped, cap, diyo);
+    diyo.position.set(0, 0.65, 0);
+    bollard.add(ped, cap, diyo);
+    exterior.add(bollard);
   }
 
-  // Carved Stone Floral Planter Urns lining the North & West walkways
-  const urnBodyGeo = new THREE.LatheGeometry(
+  // Carved Stone & Terracotta Mughal Lotus Urns with arching fern rosettes & marigolds
+  const urnBodyGeo = createExtMughalUrnGeo(0.36, 0.7);
+  for (const [uIdx, [ux, uz]] of (
     [
-      new THREE.Vector2(0.0, 0.0),
-      new THREE.Vector2(0.24, 0.0),
-      new THREE.Vector2(0.26, 0.08),
-      new THREE.Vector2(0.14, 0.18),
-      new THREE.Vector2(0.32, 0.42),
-      new THREE.Vector2(0.34, 0.56),
-      new THREE.Vector2(0.26, 0.64),
-      new THREE.Vector2(0.30, 0.68),
-      new THREE.Vector2(0.0, 0.64),
-    ],
-    18,
-  );
-  for (const [ux, uz] of [
-    [-20.5, -25.6],
-    [20.5, -25.6],
-    [-33.5, -21.2],
-    [-33.5, 8.5],
-    [-52.0, 29.0],
-    [-52.0, 50.0],
-  ] as Array<[number, number]>) {
-    const uPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.24, 0.68), plinthStoneMat);
-    uPlinth.position.set(ux, 0.12, uz);
-    const uPot = new THREE.Mesh(urnBodyGeo, terracottaTrimMat);
-    uPot.position.set(ux, 0.24, uz);
+      [-20.5, -25.6],
+      [20.5, -25.6],
+      [-33.5, -21.2],
+      [-33.5, 8.5],
+      [-52.0, 29.0],
+      [-52.0, 50.0],
+    ] as Array<[number, number]>
+  ).entries()) {
+    const urnGroup = new THREE.Group();
+    urnGroup.position.set(ux, 0.004, uz);
+    urnGroup.userData.noMerge = true;
+    urnGroup.userData.snapCategory = 'pot';
+    const uPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.24, 0.68), marbleWallMat);
+    uPlinth.position.set(0, 0.12, 0);
+    const uPot = new THREE.Mesh(urnBodyGeo, extUrnMat);
+    uPot.position.set(0, 0.24, 0);
     uPot.castShadow = true;
-    const uPlant = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34, 1), chautaraFoliageMat);
-    uPlant.position.set(ux, 0.96, uz);
-    const uFlower = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), marigoldMat);
-    uFlower.position.set(ux, 1.24, uz);
-    exterior.add(uPlinth, uPot, uPlant, uFlower);
+    const uSoil = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.06, 18), extSoilMat);
+    uSoil.position.set(0, 0.87, 0);
+    urnGroup.add(uPlinth, uPot, uSoil);
+    exterior.add(urnGroup);
+
+    const seed = 700 + uIdx * 53;
+    for (let f = 0; f < 9; f++) {
+      const yaw = f * GOLDEN_ANG + extHash01(seed + f) * 0.25;
+      const pitch = f < 5 ? 0.34 : 0.06;
+      const s = 0.56 + extHash01(seed + f * 3) * 0.18;
+      pushExtSprig(
+        extFernList,
+        ux + Math.sin(yaw) * 0.05,
+        0.89,
+        uz + Math.cos(yaw) * 0.05,
+        yaw,
+        pitch,
+        (extHash01(seed + f * 5) - 0.5) * 0.16,
+        s,
+        s,
+        s,
+        seed + f * 7,
+      );
+    }
+    addExtMarigoldCluster(ux, 0.90, uz, 0.72, seed + 29);
   }
 
   // -------------------------------------------------------------------------
@@ -358,9 +646,9 @@ export function createJanakiMandirExterior({
     nS.position.set(0, stepY, -outerD / 2 + inset);
     const sS = new THREE.Mesh(new THREE.BoxGeometry(wSpan + 0.56, 0.24, 0.56), passageStoneMat);
     sS.position.set(0, stepY, outerD / 2 - inset);
-    const wS = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.24, dSpan), plinthStoneMat);
+    const wS = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.24, dSpan), passageStoneMat);
     wS.position.set(-outerW / 2 + inset, stepY, 0);
-    const eS = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.24, dSpan), plinthStoneMat);
+    const eS = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.24, dSpan), passageStoneMat);
     eS.position.set(outerW / 2 - inset, stepY, 0);
     nS.receiveShadow = true;
     sS.receiveShadow = true;
@@ -531,7 +819,7 @@ export function createJanakiMandirExterior({
   // North Axis Varuna Arched Ghat Shrine Pavilion overseeing Ganga Sagar
   const vShrine = new THREE.Group();
   vShrine.position.set(0, 0.45, -outerD / 2 - 1.1);
-  const vPlinth = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.48, 2.2), plinthStoneMat);
+  const vPlinth = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.48, 2.2), marbleWallMat);
   vPlinth.position.y = 0.24;
   const vBack = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 0.36), marbleWallMat);
   vBack.position.set(0, 1.56, -0.72);
@@ -558,7 +846,7 @@ export function createJanakiMandirExterior({
   // Carved Stone Dana Bird-Feeding Pedestal & Bowl on Ganga Sagar East Apron (-35.2, 16.0)
   const dana = new THREE.Group();
   dana.position.set(-35.2, 0.04, 16.0);
-  const danaBase = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.2, 0.92), plinthStoneMat);
+  const danaBase = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.2, 0.92), marbleWallMat);
   danaBase.position.y = 0.1;
   danaBase.castShadow = true;
   const danaShaft = new THREE.Mesh(
@@ -614,7 +902,7 @@ export function createJanakiMandirExterior({
   const vivah = new THREE.Group();
   vivah.position.set(-45.0, 0, 40.0);
 
-  const vmStep1 = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.24, 8.2), plinthStoneMat);
+  const vmStep1 = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.24, 8.2), passageStoneMat);
   vmStep1.position.y = 0.12;
   vmStep1.receiveShadow = true;
   const vmStep2 = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.32, 7.2), marbleWallMat);
@@ -736,13 +1024,11 @@ export function createJanakiMandirExterior({
       havan.add(cPost, cFin);
     }
   }
-  for (let m = -0.82; m <= 0.83; m += 0.28) {
+  for (let m = -0.82; m <= 0.83; m += 0.38) {
     for (const side of [-0.94, 0.94]) {
-      const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), marigoldMat);
-      f1.position.set(m, 0.18, side);
-      const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), crimsonClothMat);
-      f2.position.set(side, 0.18, m);
-      havan.add(f1, f2);
+      const mSeed = Math.round((m + 2) * 37 + (side > 0 ? 11 : 23));
+      addExtMarigoldCluster(-45.0 + m, 0.78, 40.0 + side, 0.44, mSeed);
+      addExtMarigoldCluster(-45.0 + side, 0.78, 40.0 + m, 0.44, mSeed + 97);
     }
   }
 
@@ -888,7 +1174,7 @@ export function createJanakiMandirExterior({
   // -------------------------------------------------------------------------
   const northStambha = new THREE.Group();
   northStambha.position.set(0, 0, -29.0);
-  const stBase = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.42, 2.15), plinthStoneMat);
+  const stBase = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.42, 2.15), marbleWallMat);
   stBase.position.y = 0.21;
   stBase.castShadow = true;
   stBase.receiveShadow = true;
@@ -910,7 +1196,7 @@ export function createJanakiMandirExterior({
   for (const sx of [-5.5, 5.5]) {
     const tulsi = new THREE.Group();
     tulsi.position.set(sx, 0, -29.0);
-    const tStep = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.22, 1.65), plinthStoneMat);
+    const tStep = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.22, 1.65), marbleWallMat);
     tStep.position.y = 0.11;
     tStep.castShadow = true;
     const tBody = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.72, 1.12), marbleWallMat);
@@ -918,14 +1204,32 @@ export function createJanakiMandirExterior({
     tBody.castShadow = true;
     const tTrim = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.1, 1.22), tealTrimMat);
     tTrim.position.y = 0.98;
-    const tSoil = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.08, 0.76), chautaraSoilMat);
+    const tSoil = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.08, 0.76), extSoilMat);
     tSoil.position.y = 1.04;
-    const tCrown = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 1), chautaraFoliageMat);
-    tCrown.position.y = 1.38;
-    tCrown.castShadow = true;
+    addExtWoodyStems(tulsi, barkMat, 0, 1.08, 0, 5, 0.56, 0.26, 0.022, sx < 0 ? 811 : 829);
+    const tSeed = sx < 0 ? 811 : 829;
+    for (let t = 0; t < 11; t++) {
+      const yaw = t * GOLDEN_ANG + extHash01(tSeed + t) * 0.3;
+      const layer = t < 6 ? 0 : 1;
+      const rad = layer === 0 ? 0.14 : 0.05;
+      const ts = 0.72 + extHash01(tSeed + t * 5) * 0.22;
+      pushExtSprig(
+        extTulsiList,
+        sx + Math.sin(yaw) * rad,
+        1.08 + (layer === 0 ? 0.02 : 0.20),
+        -29.0 + Math.cos(yaw) * rad,
+        yaw,
+        layer === 0 ? 0.45 : 0.18,
+        (extHash01(tSeed + t * 9) - 0.5) * 0.2,
+        ts,
+        ts,
+        ts,
+        tSeed + t * 13,
+      );
+    }
     const tLamp = createDetailedBrassSukundaDiyo(goldMat, bronzeMat, diyoGlowMat, 0.72, true);
     tLamp.position.set(0, 0.22, 0.68);
-    tulsi.add(tStep, tBody, tTrim, tSoil, tCrown, tLamp);
+    tulsi.add(tStep, tBody, tTrim, tSoil, tLamp);
     exterior.add(tulsi);
   }
 
@@ -950,6 +1254,7 @@ export function createJanakiMandirExterior({
     });
     chautara.position.set(tx, 0, tz);
     chautara.userData.noMerge = true;
+    chautara.userData.snapCategory = 'sitting';
     exterior.add(chautara);
   }
 
@@ -958,10 +1263,12 @@ export function createJanakiMandirExterior({
   // -------------------------------------------------------------------------
   const pati = new THREE.Group();
   pati.position.set(-33.5, 0, 50.5);
-  pati.rotation.y = Math.PI * 0.14;
+  pati.rotation.y = Math.PI / 2;
+  pati.userData.noMerge = true;
+  pati.userData.snapCategory = 'sitting';
 
-  // Two-tier carved brick & stone plinth with front steps + cheek walls
-  const patiStep = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.24, 4.0), plinthStoneMat);
+  // Two-tier carved white Makrana marble & stone plinth with front steps + cheek walls
+  const patiStep = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.24, 4.0), passageStoneMat);
   patiStep.position.y = 0.12;
   patiStep.receiveShadow = true;
   const patiPlinth = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.36, 3.6), brickPlazaMat);
@@ -1055,7 +1362,7 @@ export function createJanakiMandirExterior({
     [2.78, 0.15],
   ];
   for (const [cx, cz] of thamPositions) {
-    const cPad = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.36), plinthStoneMat);
+    const cPad = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.36), marbleWallMat);
     cPad.position.set(cx, 0.72, cz);
     const cShaft = new THREE.Mesh(thamShaftGeo, carvedTimberMat);
     cShaft.position.set(cx, 0.79, cz);
@@ -1079,7 +1386,7 @@ export function createJanakiMandirExterior({
     pati.add(tundal);
   }
 
-  // Multi-tiered hipped Khaprail terracotta roof with exposed timber rafters, fascia & 3 brass Gajurs
+  // True orthogonal multi-tiered hipped Khaprail terracotta roof with exposed timber rafters & 3 brass Gajurs
   const eaveUnderBeam = new THREE.Mesh(new THREE.BoxGeometry(6.85, 0.12, 4.15), carvedTimberMat);
   eaveUnderBeam.position.set(0, 3.3, 0);
   for (let rx = -3.1; rx <= 3.11; rx += 0.62) {
@@ -1087,15 +1394,17 @@ export function createJanakiMandirExterior({
     rafter.position.set(rx, 3.24, 0);
     pati.add(rafter);
   }
-  const patiLowerRoof = new THREE.Mesh(new THREE.ConeGeometry(4.45, 0.85, 4), terracottaTrimMat);
-  patiLowerRoof.rotation.y = Math.PI / 4;
-  patiLowerRoof.scale.set(1.26, 1.0, 0.8);
-  patiLowerRoof.position.y = 3.74;
+  const patiLowerRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(7.2, 0.85, 4.4, 0.68),
+    terracottaTrimMat,
+  );
+  patiLowerRoof.position.y = 3.76;
   patiLowerRoof.castShadow = true;
 
-  const patiUpperRoof = new THREE.Mesh(new THREE.ConeGeometry(3.35, 1.05, 4), terracottaTrimMat);
-  patiUpperRoof.rotation.y = Math.PI / 4;
-  patiUpperRoof.scale.set(1.25, 1.0, 0.72);
+  const patiUpperRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(5.2, 0.92, 3.0, 0.68),
+    terracottaTrimMat,
+  );
   patiUpperRoof.position.y = 4.38;
   patiUpperRoof.castShadow = true;
 
@@ -1177,41 +1486,156 @@ export function createJanakiMandirExterior({
   exterior.add(pati);
 
   // -------------------------------------------------------------------------
-  // 6. EAST HERITAGE PYAAU WATER KIOSK (+32.0, -3.5)
+  // 6. EAST HERITAGE PYAAU WATER KIOSK (+32.0, -3.5) — Lathe Gagri/Matka Vessels, Carved Teak & Brass Taps
   // -------------------------------------------------------------------------
   const pyaau = new THREE.Group();
   pyaau.position.set(32.0, 0, -3.5);
   pyaau.rotation.y = -Math.PI / 2;
-  const pyPlinth = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.42, 2.4), plinthStoneMat);
-  pyPlinth.position.y = 0.21;
+
+  const pyStep = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.18, 2.9), passageStoneMat);
+  pyStep.position.y = 0.09;
+  pyStep.receiveShadow = true;
+  const pyPlinth = new THREE.Mesh(new THREE.BoxGeometry(3.48, 0.28, 2.48), marbleWallMat);
+  pyPlinth.position.y = 0.32;
   pyPlinth.castShadow = true;
   pyPlinth.receiveShadow = true;
-  const pyShelf = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.72, 1.15), marbleWallMat);
-  pyShelf.position.set(0, 0.78, -0.2);
-  const pyRoof = new THREE.Mesh(new THREE.ConeGeometry(2.55, 0.95, 4), terracottaTrimMat);
-  pyRoof.rotation.y = Math.PI / 4;
-  pyRoof.scale.set(1.22, 1.0, 0.92);
-  pyRoof.position.y = 2.96;
-  const pySpire = createDetailedGajurSpire(goldMat, bronzeMat, 0.44, 0.48);
-  pySpire.position.y = 3.44;
-  pyaau.add(pyPlinth, pyShelf, pyRoof, pySpire);
+  const pyPlinthTrim = new THREE.Mesh(new THREE.BoxGeometry(3.54, 0.07, 2.54), tealTrimMat);
+  pyPlinthTrim.position.y = 0.48;
 
+  // Molded marble serving counter with recessed terracotta dado & front brass tap trough
+  const pyCounter = new THREE.Mesh(new THREE.BoxGeometry(2.76, 0.68, 1.05), marbleWallMat);
+  pyCounter.position.set(0, 0.86, -0.2);
+  pyCounter.castShadow = true;
+  const pyCounterTop = new THREE.Mesh(new THREE.BoxGeometry(2.90, 0.08, 1.18), whiteTrimMat);
+  pyCounterTop.position.set(0, 1.24, -0.2);
+  const pyCounterTrim = new THREE.Mesh(new THREE.BoxGeometry(2.84, 0.06, 1.12), tealTrimMat);
+  pyCounterTrim.position.set(0, 1.18, -0.2);
+  const pyDripBasinRim = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.14, 0.36), marbleWallMat);
+  pyDripBasinRim.position.set(0, 0.58, 0.50);
+  const pyDripWater = new THREE.Mesh(new THREE.BoxGeometry(2.26, 0.04, 0.24), pondWaterMat);
+  pyDripWater.position.set(0, 0.635, 0.50);
+  pyDripWater.userData.noMerge = true;
+
+  pyaau.add(
+    pyStep,
+    pyPlinth,
+    pyPlinthTrim,
+    pyCounter,
+    pyCounterTop,
+    pyCounterTrim,
+    pyDripBasinRim,
+    pyDripWater,
+  );
+
+  // Turned carved teak columns + marble pedestals + capitals + roof lintels & exposed rafters
+  const pyColLathe = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.115, 0.0),
+      new THREE.Vector2(0.125, 0.12),
+      new THREE.Vector2(0.085, 0.22),
+      new THREE.Vector2(0.105, 0.88),
+      new THREE.Vector2(0.082, 1.54),
+      new THREE.Vector2(0.115, 1.76),
+      new THREE.Vector2(0.095, 1.96),
+    ],
+    14,
+  );
   for (const cx of [-1.42, 1.42]) {
     for (const cz of [-0.95, 0.95]) {
-      const pCol = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.08, 12), darkWoodMat);
-      pCol.position.set(cx, 1.46, cz);
-      pyaau.add(pCol);
+      const colBase = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.32), marbleWallMat);
+      colBase.position.set(cx, 0.57, cz);
+      const pCol = new THREE.Mesh(pyColLathe, carvedTimberMat);
+      pCol.position.set(cx, 0.63, cz);
+      pCol.castShadow = true;
+      const colCap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), carvedTimberMat);
+      colCap.position.set(cx, 2.66, cz);
+      pyaau.add(colBase, pCol, colCap);
     }
   }
-  const matkaGeo = new THREE.SphereGeometry(0.24, 14, 12);
-  for (const mx of [-0.72, 0, 0.72]) {
-    const pot = new THREE.Mesh(matkaGeo, terracottaTrimMat);
-    pot.scale.set(1.0, 1.15, 1.0);
-    pot.position.set(mx, 1.38, -0.2);
-    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.22, 8), bronzeMat);
-    spout.rotation.x = Math.PI / 2.6;
-    spout.position.set(mx, 0.92, 0.44);
-    pyaau.add(pot, spout);
+  const pyFrontBeam = new THREE.Mesh(new THREE.BoxGeometry(3.26, 0.16, 0.22), carvedTimberMat);
+  pyFrontBeam.position.set(0, 2.78, 0.95);
+  const pyBackBeam = new THREE.Mesh(new THREE.BoxGeometry(3.26, 0.16, 0.22), carvedTimberMat);
+  pyBackBeam.position.set(0, 2.78, -0.95);
+  pyaau.add(pyFrontBeam, pyBackBeam);
+  for (let rx = -1.5; rx <= 1.51; rx += 0.5) {
+    const pyRafter = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 2.68), carvedTimberMat);
+    pyRafter.position.set(rx, 2.88, 0);
+    pyaau.add(pyRafter);
+  }
+  const pyRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(3.9, 0.96, 2.9, 0.65),
+    terracottaTrimMat,
+  );
+  pyRoof.position.y = 3.38;
+  pyRoof.castShadow = true;
+  const pyRidge = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.12, 0.16), terracottaTrimMat);
+  pyRidge.position.y = 3.88;
+  const pySpire = createDetailedGajurSpire(goldMat, bronzeMat, 0.44, 0.48);
+  pySpire.position.y = 3.94;
+  pyaau.add(pyRoof, pyRidge, pySpire);
+
+  // Authentic lathe-turned Nepali Matka/Gagri water vessels with flared rings, lids & brass tap spigots
+  const matkaVesselGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.14, 0.0),
+      new THREE.Vector2(0.11, 0.04),
+      new THREE.Vector2(0.24, 0.16),
+      new THREE.Vector2(0.28, 0.29),
+      new THREE.Vector2(0.25, 0.41),
+      new THREE.Vector2(0.14, 0.49),
+      new THREE.Vector2(0.115, 0.55),
+      new THREE.Vector2(0.155, 0.59),
+      new THREE.Vector2(0.125, 0.60),
+      new THREE.Vector2(0.09, 0.54),
+    ],
+    24,
+  );
+  const pyRingStandGeo = new THREE.TorusGeometry(0.13, 0.026, 8, 18);
+  pyRingStandGeo.rotateX(Math.PI / 2);
+  const pyLidGeo = new THREE.ConeGeometry(0.145, 0.075, 16);
+  const pyWaterStreamMat = new THREE.MeshStandardMaterial({
+    color: 0x93e2ee,
+    roughness: 0.08,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.62,
+  });
+
+  for (const [mIdx, mx] of ([-0.76, 0, 0.76] as const).entries()) {
+    const stand = new THREE.Mesh(pyRingStandGeo, carvedTimberMat);
+    stand.position.set(mx, 1.305, -0.2);
+    const potMat = mIdx === 1 ? bronzeMat : extUrnMat;
+    const pot = new THREE.Mesh(matkaVesselGeo, potMat);
+    pot.position.set(mx, 1.30, -0.2);
+    pot.castShadow = true;
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.265, 0.012, 8, 22), goldMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.set(mx, 1.62, -0.2);
+    const lid = new THREE.Mesh(pyLidGeo, goldMat);
+    lid.position.set(mx, 1.925, -0.2);
+    const lidKnob = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), bronzeMat);
+    lidKnob.position.set(mx, 1.97, -0.2);
+
+    // Wall escutcheon plate + horizontal feed pipe + vertical tap valve + curved gooseneck spout
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.024, 14), goldMat);
+    plate.rotation.x = Math.PI / 2;
+    plate.position.set(mx, 0.94, 0.34);
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10), bronzeMat);
+    pipe.rotation.x = Math.PI / 2;
+    pipe.position.set(mx, 0.94, 0.43);
+    const tapNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.09, 10), goldMat);
+    tapNeck.position.set(mx, 0.90, 0.51);
+    const valveStem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.055, 8), bronzeMat);
+    valveStem.position.set(mx, 0.975, 0.46);
+    const valveCross = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.014, 0.016), goldMat);
+    valveCross.position.set(mx, 1.005, 0.46);
+    const trickle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.013, 0.21, 8), pyWaterStreamMat);
+    trickle.position.set(mx, 0.745, 0.51);
+    trickle.userData.noMerge = true;
+
+    pyaau.add(stand, pot, band, lid, lidKnob, plate, pipe, tapNeck, valveStem, valveCross, trickle);
   }
   markOccluder(pyaau);
   exterior.add(pyaau);
@@ -1219,49 +1643,110 @@ export function createJanakiMandirExterior({
   // -------------------------------------------------------------------------
   // 7. SOUTH PLAZA PILGRIM AMENITIES: PAKHALA FOOT-WASH TROUGH & CHAPPAL STAND
   // -------------------------------------------------------------------------
-  // Carved Stone Pakhala Foot-Wash Basin (+15.5, 22.8)
+  // Carved Stone Pakhala Foot-Wash Trough & Hiti Brass Tap Wall (+15.5, 22.8)
   const pakhala = new THREE.Group();
   pakhala.position.set(15.5, 0, 22.8);
-  const pkSlab = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.12, 1.7), flagstoneMat);
+  const pkSlab = new THREE.Mesh(new THREE.BoxGeometry(3.05, 0.12, 1.95), flagstoneMat);
   pkSlab.position.y = 0.06;
   pkSlab.receiveShadow = true;
+  // Front ribbed marble footrest step for pilgrim shoe-free washing
+  const pkFrontStep = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.16, 0.34), marbleWallMat);
+  pkFrontStep.position.set(0, 0.20, 0.78);
+  pkFrontStep.receiveShadow = true;
+  pakhala.add(pkSlab, pkFrontStep);
+
   const pkRimParts: Array<[number, number, number, number]> = [
-    [0, -0.56, 2.32, 0.2],
-    [0, 0.56, 2.32, 0.2],
-    [-1.06, 0, 0.2, 0.92],
-    [1.06, 0, 0.2, 0.92],
+    [0, -0.56, 2.38, 0.22],
+    [0, 0.56, 2.38, 0.22],
+    [-1.08, 0, 0.22, 0.90],
+    [1.08, 0, 0.22, 0.90],
   ];
   for (const [rx, rz, rw, rd] of pkRimParts) {
-    const rim = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.42, rd), marbleWallMat);
-    rim.position.set(rx, 0.32, rz);
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.44, rd), marbleWallMat);
+    rim.position.set(rx, 0.34, rz);
     rim.castShadow = true;
-    const rTrim = new THREE.Mesh(new THREE.BoxGeometry(rw + 0.04, 0.06, rd + 0.04), tealTrimMat);
-    rTrim.position.set(rx, 0.54, rz);
+    const rTrim = new THREE.Mesh(new THREE.BoxGeometry(rw + 0.04, 0.07, rd + 0.04), tealTrimMat);
+    rTrim.position.set(rx, 0.58, rz);
     pakhala.add(rim, rTrim);
   }
-  const pkWaterGeo = new THREE.PlaneGeometry(1.92, 0.92, 8, 6);
+  for (const cx of [-1.08, 1.08]) {
+    for (const cz of [-0.56, 0.56]) {
+      const cPost = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.52, 0.26), marbleWallMat);
+      cPost.position.set(cx, 0.38, cz);
+      const cFin = new THREE.Mesh(getDetailedParterreFinialGeo(), goldMat);
+      cFin.scale.setScalar(0.45);
+      cFin.position.set(cx, 0.64, cz);
+      pakhala.add(cPost, cFin);
+    }
+  }
+  // Stone basin floor + brass drain grate + rippling clear water
+  const pkBasinFloor = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.08, 0.90), passageStoneMat);
+  pkBasinFloor.position.y = 0.22;
+  const pkDrain = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.015, 16), bronzeMat);
+  pkDrain.position.set(0.62, 0.265, 0.14);
+  const pkWaterGeo = new THREE.PlaneGeometry(1.92, 0.90, 12, 8);
   pkWaterGeo.rotateX(-Math.PI / 2);
   const pkWater = new THREE.Mesh(pkWaterGeo, pondWaterMat);
-  pkWater.position.y = 0.4;
+  pkWater.position.y = 0.43;
   pkWater.userData.noMerge = true;
-  const pkBack = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.88, 0.22), plinthStoneMat);
-  pkBack.position.set(0, 0.54, -0.68);
-  pakhala.add(pkSlab, pkWater, pkBack);
-  for (const sx of [-0.65, 0, 0.65]) {
-    const spoutBase = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.12, 10), goldMat);
+
+  // Sculpted carved Hiti back wall with 3 arched stone niches, cornice cap & 3 brass Kalash finials
+  const pkBack = new THREE.Mesh(new THREE.BoxGeometry(2.38, 1.08, 0.24), marbleWallMat);
+  pkBack.position.set(0, 0.66, -0.68);
+  pkBack.castShadow = true;
+  const pkBackCap = new THREE.Mesh(new THREE.BoxGeometry(2.52, 0.11, 0.34), tealTrimMat);
+  pkBackCap.position.set(0, 1.24, -0.68);
+  const pkBackEave = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.09, 0.42), terracottaTrimMat);
+  pkBackEave.position.set(0, 1.32, -0.66);
+  const pkNicheArchGeo = createCuspedArchSpandrelGeo(0.62, 0.64, 0.44, 0.48, 0.06);
+  pakhala.add(pkBasinFloor, pkDrain, pkWater, pkBack, pkBackCap, pkBackEave);
+
+  for (const sx of [-0.68, 0, 0.68]) {
+    const nicheArch = new THREE.Mesh(pkNicheArchGeo, whiteTrimMat);
+    nicheArch.position.set(sx, 0.56, -0.54);
+    const rosette = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.025, 16), bronzeMat);
+    rosette.rotation.x = Math.PI / 2;
+    rosette.position.set(sx, 0.82, -0.545);
+    const spoutBase = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.068, 0.04, 12), goldMat);
     spoutBase.rotation.x = Math.PI / 2;
-    spoutBase.position.set(sx, 0.72, -0.54);
-    const spoutPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.032, 0.22, 8), bronzeMat);
-    spoutPipe.rotation.x = Math.PI / 2.4;
-    spoutPipe.position.set(sx, 0.67, -0.44);
-    pakhala.add(spoutBase, spoutPipe);
+    spoutBase.position.set(sx, 0.82, -0.525);
+    const spoutArm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10), bronzeMat);
+    spoutArm.rotation.x = Math.PI / 2;
+    spoutArm.position.set(sx, 0.82, -0.43);
+    const spoutTip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.015, 0.08, 10), goldMat);
+    spoutTip.position.set(sx, 0.78, -0.35);
+    const valveStem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.05, 8), bronzeMat);
+    valveStem.position.set(sx, 0.855, -0.40);
+    const valveBar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.014, 0.015), goldMat);
+    valveBar.position.set(sx, 0.88, -0.40);
+    const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.014, 0.33, 8), pyWaterStreamMat);
+    stream.position.set(sx, 0.585, -0.35);
+    stream.userData.noMerge = true;
+    const ripple = new THREE.Mesh(new THREE.RingGeometry(0.04, 0.075, 18), pyWaterStreamMat);
+    ripple.rotation.x = -Math.PI / 2;
+    ripple.position.set(sx, 0.436, -0.35);
+    ripple.userData.noMerge = true;
+    const kalashTop = createDetailedGajurSpire(goldMat, bronzeMat, 0.24, 0.24);
+    kalashTop.position.set(sx, 1.365, -0.66);
+    pakhala.add(
+      nicheArch,
+      rosette,
+      spoutBase,
+      spoutArm,
+      spoutTip,
+      valveStem,
+      valveBar,
+      stream,
+      ripple,
+      kalashTop,
+    );
   }
   exterior.add(pakhala);
 
   // Covered Carved Sal-Wood Paduka / Chappal Shoe Rack (-15.5, 22.8)
   const shoeRack = new THREE.Group();
   shoeRack.position.set(-15.5, 0, 22.8);
-  const srBase = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.14, 1.15), plinthStoneMat);
+  const srBase = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.14, 1.15), marbleWallMat);
   srBase.position.y = 0.07;
   srBase.receiveShadow = true;
   shoeRack.add(srBase);
@@ -1277,7 +1762,6 @@ export function createJanakiMandirExterior({
     const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.06, 0.78), darkWoodMat);
     shelf.position.y = sy;
     shoeRack.add(shelf);
-    // Pairs of neat footwear on each rack tier
     for (const fx of [-0.75, -0.15, 0.45, 0.88]) {
       for (const pairOff of [-0.07, 0.07]) {
         const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.055, 0.24), slateStoneMat);
@@ -1286,9 +1770,10 @@ export function createJanakiMandirExterior({
       }
     }
   }
-  const srRoof = new THREE.Mesh(new THREE.ConeGeometry(1.98, 0.64, 4), terracottaTrimMat);
-  srRoof.rotation.y = Math.PI / 4;
-  srRoof.scale.set(1.38, 1.0, 0.65);
+  const srRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(3.0, 0.64, 1.4, 0.7),
+    terracottaTrimMat,
+  );
   srRoof.position.y = 1.92;
   srRoof.castShadow = true;
   const srSpire = createDetailedGajurSpire(goldMat, bronzeMat, 0.32, 0.32);
@@ -1296,9 +1781,37 @@ export function createJanakiMandirExterior({
   shoeRack.add(srRoof, srSpire);
   exterior.add(shoeRack);
 
+  // Build InstancedMesh botanical foliage groups for exterior beds, urns, Havan borders & Tulsi shrines
+  const buildExtBotanicalInstanced = (
+    items: ExtBotanicalItem[],
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material,
+  ): THREE.InstancedMesh | null => {
+    if (items.length === 0) return null;
+    const inst = new THREE.InstancedMesh(geo, mat, items.length);
+    items.forEach((it, idx) => {
+      inst.setMatrixAt(idx, it.matrix);
+      inst.setColorAt(idx, it.tint);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.castShadow = true;
+    inst.receiveShadow = true;
+    inst.computeBoundingSphere();
+    inst.userData.noMerge = true;
+    inst.userData.nonCollidable = true;
+    exterior.add(inst);
+    return inst;
+  };
+
+  buildExtBotanicalInstanced(extShrubList, extShrubSprigGeo, extShrubMat);
+  buildExtBotanicalInstanced(extTulsiList, extTulsiSprigGeo, extTulsiMat);
+  buildExtBotanicalInstanced(extMarigoldList, extMarigoldSprigGeo, extMarigoldMat);
+  buildExtBotanicalInstanced(extFernList, extFernSprigGeo, extFernMat);
+
   group.add(exterior);
 
-  // Register organic multi-tongue Vedic Havan flame dance
+  // Register organic multi-tongue Vedic Havan flame dance (instanced foliage stays rock-steady on soil)
   const extCtrl = new THREE.Object3D();
   extCtrl.name = 'JanakiExteriorController';
   extCtrl.userData.noMerge = true;
@@ -1319,3 +1832,4 @@ export function createJanakiMandirExterior({
   exterior.add(extCtrl);
   animatedNodes.push(extCtrl);
 }
+

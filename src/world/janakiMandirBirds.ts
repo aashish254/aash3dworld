@@ -11,7 +11,33 @@ export type BirdSpeciesKind =
   | 'blue_rock_pigeon'
   | 'ringneck_dove'
   | 'parakeet_green'
-  | 'himalayan_bulbul';
+  | 'himalayan_bulbul'
+  | 'himalayan_eagle'
+  | 'bar_headed_goose';
+
+export interface BirdEnvironmentState {
+  elapsed: number;
+  windX: number;
+  windZ: number;
+  windSpeed: number;
+  sunColorHex: string;
+  skyColorHex: string;
+  lanternIntensity: number;
+  weather: string;
+}
+
+const _envSunColor = new THREE.Color();
+const _envSkyColor = new THREE.Color();
+const _defaultBirdEnv: BirdEnvironmentState = {
+  elapsed: 0,
+  windX: 0.45,
+  windZ: 0.25,
+  windSpeed: 0.52,
+  sunColorHex: '#fff4d6',
+  skyColorHex: '#93c5fd',
+  lanternIntensity: 0.2,
+  weather: 'clear',
+};
 
 export interface JanakiCourtyardBirdsParams {
   group: THREE.Group;
@@ -119,6 +145,7 @@ export function createJanakiCourtyardBirds({
   const birdsRoot = new THREE.Group();
   birdsRoot.name = 'JanakiCourtyardAmbientBirds';
   birdsRoot.userData.noMerge = true;
+  birdsRoot.userData.nonCollidable = true;
   group.add(birdsRoot);
 
   // Shared sculpted avian geometries
@@ -277,6 +304,60 @@ export function createJanakiCourtyardBirds({
         color: 0x463d39,
         roughness: 0.56,
         metalness: 0.02,
+      }),
+    },
+    himalayan_eagle: {
+      body: new THREE.MeshStandardMaterial({
+        color: 0x4e3928,
+        roughness: 0.72,
+        metalness: 0.04,
+      }),
+      wing: new THREE.MeshStandardMaterial({
+        color: 0x35251a,
+        roughness: 0.74,
+        metalness: 0.04,
+      }),
+      accent: new THREE.MeshStandardMaterial({
+        color: 0xc29b58,
+        roughness: 0.64,
+        metalness: 0.06,
+      }),
+      beak: new THREE.MeshStandardMaterial({
+        color: 0xdba832,
+        roughness: 0.42,
+        metalness: 0.08,
+      }),
+      feet: new THREE.MeshStandardMaterial({
+        color: 0xd6a43c,
+        roughness: 0.52,
+        metalness: 0.04,
+      }),
+    },
+    bar_headed_goose: {
+      body: new THREE.MeshStandardMaterial({
+        color: 0xd4dce4,
+        roughness: 0.7,
+        metalness: 0.03,
+      }),
+      wing: new THREE.MeshStandardMaterial({
+        color: 0x9aa6b4,
+        roughness: 0.72,
+        metalness: 0.04,
+      }),
+      accent: new THREE.MeshStandardMaterial({
+        color: 0x22262d,
+        roughness: 0.66,
+        metalness: 0.04,
+      }),
+      beak: new THREE.MeshStandardMaterial({
+        color: 0xe38f34,
+        roughness: 0.45,
+        metalness: 0.05,
+      }),
+      feet: new THREE.MeshStandardMaterial({
+        color: 0xdf8235,
+        roughness: 0.52,
+        metalness: 0.03,
       }),
     },
   };
@@ -561,6 +642,7 @@ export function createAmbientWorldBirds(): {
   const worldBirdsGroup = new THREE.Group();
   worldBirdsGroup.name = 'WorldAmbientBirds';
   worldBirdsGroup.userData.noMerge = true;
+  worldBirdsGroup.userData.nonCollidable = true;
 
   const torsoGeo = createBirdTorsoGeometry();
   const neckGeo = new THREE.CylinderGeometry(0.026, 0.04, 0.064, 10);
@@ -571,6 +653,8 @@ export function createAmbientWorldBirds(): {
   const tailGeo = createTailFanGeometry();
   const leftWingGeo = createWingAirfoilGeometry(1, 0.25, 0.115);
   const rightWingGeo = createWingAirfoilGeometry(-1, 0.25, 0.115);
+  const leftSoarWingGeo = createWingAirfoilGeometry(1, 0.36, 0.135);
+  const rightSoarWingGeo = createWingAirfoilGeometry(-1, 0.36, 0.135);
 
   const speciesMats: Record<
     BirdSpeciesKind,
@@ -601,7 +685,27 @@ export function createAmbientWorldBirds(): {
       wing: new THREE.MeshStandardMaterial({ color: 0x3f3630, roughness: 0.74 }),
       beak: new THREE.MeshStandardMaterial({ color: 0x2a2726, roughness: 0.45 }),
     },
+    himalayan_eagle: {
+      body: new THREE.MeshStandardMaterial({ color: 0x523c29, roughness: 0.72 }),
+      wing: new THREE.MeshStandardMaterial({ color: 0x35251a, roughness: 0.74 }),
+      beak: new THREE.MeshStandardMaterial({ color: 0xdead37, roughness: 0.44 }),
+    },
+    bar_headed_goose: {
+      body: new THREE.MeshStandardMaterial({ color: 0xd9e1e8, roughness: 0.7 }),
+      wing: new THREE.MeshStandardMaterial({ color: 0x8e9ba8, roughness: 0.72 }),
+      beak: new THREE.MeshStandardMaterial({ color: 0xe38f34, roughness: 0.46 }),
+    },
   };
+
+  // Store canonical base colors so environmental sun/sky bounce tinting allocates zero objects per frame
+  const plumageEntries: Array<{ mat: THREE.MeshStandardMaterial; baseColor: THREE.Color }> = [];
+  for (const key of Object.keys(speciesMats) as BirdSpeciesKind[]) {
+    const entry = speciesMats[key];
+    plumageEntries.push(
+      { mat: entry.body, baseColor: entry.body.color.clone() },
+      { mat: entry.wing, baseColor: entry.wing.color.clone() },
+    );
+  }
 
   interface WorldBirdNode {
     root: THREE.Group;
@@ -610,10 +714,15 @@ export function createAmbientWorldBirds(): {
     rightWing: THREE.Group;
     tailMesh: THREE.Mesh;
     mode: 'flying' | 'perched';
+    isHighSky: boolean;
+    soaringRatio: number;
     track?: BirdFlightTrackSpec;
     flapFreq: number;
     baseYaw: number;
     phase: number;
+    windSensitivity: number;
+    formationSideOffset: number;
+    formationBackOffset: number;
   }
 
   const birds: WorldBirdNode[] = [];
@@ -629,6 +738,11 @@ export function createAmbientWorldBirds(): {
       z?: number;
       yaw?: number;
       phase: number;
+      isHighSky?: boolean;
+      soaringRatio?: number;
+      windSensitivity?: number;
+      formationSideOffset?: number;
+      formationBackOffset?: number;
     },
   ) => {
     const mats = speciesMats[species];
@@ -652,13 +766,14 @@ export function createAmbientWorldBirds(): {
     tailMesh.position.set(0, 0.014, -0.098);
     tailMesh.rotation.x = 0.08;
 
+    const useSoarWings = species === 'himalayan_eagle' || species === 'bar_headed_goose';
     const leftWing = new THREE.Group();
     leftWing.position.set(0.042, 0.025, 0.016);
-    leftWing.add(new THREE.Mesh(leftWingGeo, mats.wing));
+    leftWing.add(new THREE.Mesh(useSoarWings ? leftSoarWingGeo : leftWingGeo, mats.wing));
 
     const rightWing = new THREE.Group();
     rightWing.position.set(-0.042, 0.025, 0.016);
-    rightWing.add(new THREE.Mesh(rightWingGeo, mats.wing));
+    rightWing.add(new THREE.Mesh(useSoarWings ? rightSoarWingGeo : rightWingGeo, mats.wing));
 
     root.add(torso, headPivot, tailMesh, leftWing, rightWing);
     if (mode === 'perched') {
@@ -676,10 +791,15 @@ export function createAmbientWorldBirds(): {
       rightWing,
       tailMesh,
       mode,
+      isHighSky: opts.isHighSky ?? false,
+      soaringRatio: opts.soaringRatio ?? 0,
       track: opts.track,
       flapFreq: opts.flapFreq,
       baseYaw: opts.yaw ?? 0,
       phase: opts.phase,
+      windSensitivity: opts.windSensitivity ?? (opts.isHighSky ? 1.35 : 0.75),
+      formationSideOffset: opts.formationSideOffset ?? 0,
+      formationBackOffset: opts.formationBackOffset ?? 0,
     });
   };
 
@@ -689,6 +809,11 @@ export function createAmbientWorldBirds(): {
     species: BirdSpeciesKind;
     scale: number;
     flapFreq: number;
+    isHighSky?: boolean;
+    soaringRatio?: number;
+    windSensitivity?: number;
+    formationSideOffset?: number;
+    formationBackOffset?: number;
     track: BirdFlightTrackSpec;
   }> = [
     // Ganga Sagar & West Janaki Vivah Mandap thermal loops (-136.5, 110)
@@ -759,11 +884,101 @@ export function createAmbientWorldBirds(): {
     },
   ];
 
+  // 1b. Procedurally spawned high-sky Himalayan Eagles, Migratory Geese V-formation & Alpine Swifts
+  const eagleThermals: Array<[number, number, number, number, number, number]> = [
+    [-82, -138, 42, 28, 36.0, 0.095],
+    [18, -142, 48, 30, 38.5, -0.085],
+    [-112, -55, 34, 26, 29.0, 0.11],
+    [48, -16, 38, 30, 27.5, -0.105],
+    [-46, 36, 44, 34, 26.0, 0.1],
+    [-95, 86, 36, 26, 31.0, -0.09],
+  ];
+  eagleThermals.forEach(([cx, cz, rx, rz, alt, angSpd], idx) => {
+    worldFlightTracks.push({
+      species: 'himalayan_eagle',
+      scale: 1.85 + (idx % 3) * 0.14,
+      flapFreq: 13.5,
+      isHighSky: true,
+      soaringRatio: 0.72,
+      windSensitivity: 1.45,
+      track: {
+        centerX: cx,
+        centerZ: cz,
+        radiusX: rx,
+        radiusZ: rz,
+        baseY: alt,
+        bobAmp: 1.45,
+        angularSpeed: angSpd,
+        phase: idx * 1.17,
+        figureEight: idx % 2 === 0 ? 0.24 : 0,
+      },
+    });
+  });
+
+  // Cohesive V-formation of 5 migratory Bar-headed Geese crossing the sky
+  const gooseVOffsets: Array<[number, number]> = [
+    [0, 0],
+    [-2.4, -2.6],
+    [2.4, -2.6],
+    [-4.8, -5.2],
+    [4.8, -5.2],
+  ];
+  gooseVOffsets.forEach(([sideOff, backOff], idx) => {
+    worldFlightTracks.push({
+      species: 'bar_headed_goose',
+      scale: 1.46,
+      flapFreq: 17.5,
+      isHighSky: true,
+      soaringRatio: 0.25,
+      windSensitivity: 1.25,
+      formationSideOffset: sideOff,
+      formationBackOffset: backOff,
+      track: {
+        centerX: -22,
+        centerZ: -8,
+        radiusX: 92,
+        radiusZ: 68,
+        baseY: 28.5 + idx * 0.35,
+        bobAmp: 0.65,
+        angularSpeed: 0.068,
+        phase: 0.85,
+      },
+    });
+  });
+
+  // High alpine swift & dove pairs wheeling across central & eastern valley sky
+  for (let sIdx = 0; sIdx < 5; sIdx++) {
+    const a = (sIdx / 5) * Math.PI * 2;
+    worldFlightTracks.push({
+      species: sIdx % 2 === 0 ? 'white_dove' : 'blue_rock_pigeon',
+      scale: 1.32,
+      flapFreq: 21 + (sIdx % 3) * 2,
+      isHighSky: true,
+      soaringRatio: 0.32,
+      windSensitivity: 1.15,
+      track: {
+        centerX: Math.cos(a) * 34 - 16,
+        centerZ: Math.sin(a) * 32 + 12,
+        radiusX: 22 + (sIdx % 3) * 5,
+        radiusZ: 18 + (sIdx % 2) * 6,
+        baseY: 16.5 + (sIdx % 3) * 2.4,
+        bobAmp: 0.85,
+        angularSpeed: (sIdx % 2 === 0 ? 1 : -1) * (0.16 + sIdx * 0.015),
+        phase: sIdx * 1.4,
+      },
+    });
+  }
+
   for (const spec of worldFlightTracks) {
     spawnBird(spec.species, spec.scale, 'flying', {
       track: spec.track,
       flapFreq: spec.flapFreq,
       phase: spec.track.phase,
+      isHighSky: spec.isHighSky,
+      soaringRatio: spec.soaringRatio,
+      windSensitivity: spec.windSensitivity,
+      formationSideOffset: spec.formationSideOffset,
+      formationBackOffset: spec.formationBackOffset,
     });
   }
 
@@ -816,34 +1031,131 @@ export function createAmbientWorldBirds(): {
   const controller = new THREE.Object3D();
   controller.name = 'WorldAmbientBirdsController';
   controller.userData.noMerge = true;
-  controller.userData.onFlickerUpdate = (elapsed: number) => {
+
+  const updateBirdsWithEnv = (env: BirdEnvironmentState) => {
+    const { elapsed, windX, windZ, windSpeed, sunColorHex, skyColorHex, lanternIntensity, weather } = env;
+    _envSunColor.set(sunColorHex);
+    _envSkyColor.set(skyColorHex);
+
+    const nightFactor = Math.max(0, Math.min(1, (lanternIntensity - 1.2) / 1.4));
+    const isRain = weather === 'rain';
+    const isHeavyMist = weather === 'foggy';
+    const sunInfluence = (1 - nightFactor * 0.7) * (isRain || isHeavyMist ? 0.08 : 0.22);
+    const skyInfluence = 0.14 + nightFactor * 0.18 + (isRain ? 0.14 : 0);
+
+    for (let i = 0; i < plumageEntries.length; i++) {
+      const p = plumageEntries[i];
+      p.mat.color
+        .copy(p.baseColor)
+        .lerp(_envSunColor, sunInfluence)
+        .lerp(_envSkyColor, skyInfluence);
+    }
+
+    const windNorm = Math.max(0.001, windSpeed);
+    const windDirX = windX / windNorm;
+    const windDirZ = windZ / windNorm;
+    const windYaw = Math.atan2(windX, windZ);
+    const gustPulse = Math.sin(elapsed * 0.62) * 0.35 + Math.cos(elapsed * 1.18) * 0.18;
+
     for (let i = 0; i < birds.length; i++) {
       const b = birds[i];
       if (b.mode === 'flying' && b.track) {
-        const s = sampleBirdFlightState(b.track, elapsed, b.flapFreq);
-        b.root.position.set(s.x, s.y, s.z);
+        // Low courtyard birds settle quietly at deep night or heavy rain while high-sky birds adjust soaring height
+        const hideLowFlock = !b.isHighSky && (isRain || nightFactor > 0.85);
+        b.root.visible = !hideLowFlock;
+        if (!b.root.visible) continue;
+
+        const baseSample = sampleBirdFlightState(b.track, elapsed, b.flapFreq);
+        const fwdX = Math.sin(baseSample.yaw);
+        const fwdZ = Math.cos(baseSample.yaw);
+        const rightX = fwdZ;
+        const rightZ = -fwdX;
+
+        // Headwind increases wingbeat cadence; tailwind invites wide thermal glides
+        const headwind = -(fwdX * windX + fwdZ * windZ);
+        const crosswind = rightX * windX + rightZ * windZ;
+        const effectiveFreq = b.flapFreq * Math.max(0.75, Math.min(1.45, 1 + headwind * 0.12));
+        const s = sampleBirdFlightState(b.track, elapsed, effectiveFreq);
+
+        // Eagles & soaring sky birds hold steady wide glides for most of their thermal loop
+        const soarBlend =
+          b.soaringRatio > 0
+            ? Math.max(
+                0,
+                Math.min(
+                  1,
+                  b.soaringRatio +
+                    (headwind < 0 ? 0.15 : -0.1) +
+                    0.22 * Math.sin(elapsed * 0.45 + b.phase),
+                ),
+              )
+            : 0;
+        const flapAngle =
+          s.wingFlapRad * (1 - soarBlend) +
+          (0.08 + Math.sin(elapsed * 1.3 + b.phase) * 0.04) * soarBlend;
+
+        // Lateral wind drift + V-formation cohesion offsets
+        const gustWave = Math.sin(elapsed * 0.72 + b.phase * 1.4) + gustPulse * 0.5;
+        const driftScale = b.windSensitivity * (0.45 + 0.25 * gustWave);
+        const altShift = isRain ? -2.2 : isHeavyMist ? -1.4 : Math.max(0, windSpeed - 0.6) * 0.75;
+
+        const posX =
+          s.x +
+          windX * driftScale +
+          rightX * b.formationSideOffset +
+          fwdX * b.formationBackOffset;
+        const posZ =
+          s.z +
+          windZ * driftScale +
+          rightZ * b.formationSideOffset +
+          fwdZ * b.formationBackOffset;
+        const posY = Math.max(
+          groundHeightAt(posX, posZ) + 2.8,
+          s.y + altShift + Math.sin(elapsed * 1.2 + b.phase) * windSpeed * 0.12,
+        );
+
+        b.root.position.set(posX, posY, posZ);
         b.root.rotation.order = 'YXZ';
-        b.root.rotation.set(s.pitch, s.yaw, s.roll);
-        b.leftWing.rotation.set(0, 0, s.wingFlapRad);
-        b.rightWing.rotation.set(0, 0, -s.wingFlapRad);
+        b.root.rotation.set(
+          s.pitch - Math.max(-0.1, Math.min(0.1, headwind * 0.025)),
+          s.yaw + crosswind * 0.045,
+          s.roll + crosswind * 0.075,
+        );
+        b.leftWing.rotation.set(0, 0, flapAngle);
+        b.rightWing.rotation.set(0, 0, -flapAngle);
         b.headPivot.rotation.set(-s.pitch * 0.5, 0, 0);
-        b.tailMesh.rotation.x = 0.08 + s.wingFlapRad * 0.12;
+        b.tailMesh.rotation.x = 0.08 + flapAngle * 0.12;
       } else {
-        const lookPhase = elapsed * 1.05 + b.phase;
+        // Perched birds face softly into strong breeze and ruffle feathers more frequently
+        b.root.visible = !isRain;
+        if (!b.root.visible) continue;
+
+        const windAgitation = 1 + Math.min(1.2, windSpeed * 0.45);
+        const lookPhase = elapsed * 1.05 * windAgitation + b.phase;
         b.headPivot.rotation.set(
           0.06 + Math.max(0, Math.sin(elapsed * 2.2 + b.phase)) * 0.16,
-          Math.sin(lookPhase) * 0.42,
+          Math.sin(lookPhase) * 0.42 + (windDirX * 0.08 - windDirZ * 0.06),
           0,
         );
-        b.root.rotation.y = b.baseYaw + Math.sin(elapsed * 0.34 + b.phase) * 0.18;
-        const flutterCycle = ((elapsed * 0.14 + b.phase * 0.51) % 1 + 1) % 1;
+        const windLean = Math.min(0.35, windSpeed * 0.14);
+        b.root.rotation.y =
+          b.baseYaw * (1 - windLean) +
+          (windYaw + Math.PI) * windLean +
+          Math.sin(elapsed * 0.34 + b.phase) * 0.14;
+        const flutterCycle = ((elapsed * 0.14 * windAgitation + b.phase * 0.51) % 1 + 1) % 1;
         const flutter = flutterCycle > 0.86 ? Math.sin((flutterCycle - 0.86) * 105) * 0.28 : 0;
         b.leftWing.rotation.set(0.18, 1.18 - Math.abs(flutter) * 0.45, -0.22 + flutter);
         b.rightWing.rotation.set(0.18, -1.18 + Math.abs(flutter) * 0.45, 0.22 - flutter);
       }
     }
   };
-  controller.userData.onFlickerUpdate(0);
+
+  controller.userData.onEnvironmentUpdate = updateBirdsWithEnv;
+  controller.userData.onFlickerUpdate = (elapsed: number) => {
+    _defaultBirdEnv.elapsed = elapsed;
+    updateBirdsWithEnv(_defaultBirdEnv);
+  };
+  updateBirdsWithEnv(_defaultBirdEnv);
 
   return { group: worldBirdsGroup, controller };
 }

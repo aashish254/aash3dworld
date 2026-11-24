@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ProceduralTextureSet } from './proceduralTextures';
-import { BRIDGE_BOUNDS, groundHeightAt } from './worldLogic';
+import { BRIDGE_BOUNDS, getSurfaceHeightAt, groundHeightAt } from './worldLogic';
 
 export interface ExplorerCharacterRig {
   root: THREE.Group;
@@ -24,15 +24,20 @@ export interface LandmarkBuildResult {
 
 export interface InteractiveProp {
   mesh: THREE.Group;
+  visualGroup: THREE.Group;
   x: number;
   y: number;
   z: number;
   vx: number;
   vy: number;
   vz: number;
+  rotX: number;
+  rotZ: number;
   rotVelX: number;
   rotVelZ: number;
   radius: number;
+  halfHeight: number;
+  halfWidth: number;
 }
 
 function makeShadowDisc(radius: number, shadowTex: THREE.Texture): THREE.Mesh {
@@ -46,6 +51,7 @@ function makeShadowDisc(radius: number, shadowTex: THREE.Texture): THREE.Mesh {
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.y = 0.025;
+  mesh.userData.nonCollidable = true;
   return mesh;
 }
 
@@ -516,16 +522,20 @@ export function createKathmanduPagoda(textures: ProceduralTextureSet): LandmarkB
     normalMap: textures.cobbleNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
     roughnessMap: textures.cobbleRough,
-    color: 0xb0aba0,
-    roughness: 0.88,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.88,
+    color: 0xc2bdb2,
+    roughness: 1.0,
   });
   const brickMat = new THREE.MeshStandardMaterial({
     map: textures.brickMap,
     normalMap: textures.brickNormal,
     normalScale: new THREE.Vector2(0.95, 0.95),
     roughnessMap: textures.brickRough,
+    aoMap: textures.brickAo,
+    aoMapIntensity: 0.84,
     color: 0xd8cec6,
-    roughness: 0.84,
+    roughness: 1.0,
   });
   const timberMat = new THREE.MeshStandardMaterial({
     map: textures.woodMap,
@@ -555,9 +565,12 @@ export function createKathmanduPagoda(textures: ProceduralTextureSet): LandmarkB
   });
   const stuccoMat = new THREE.MeshStandardMaterial({
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.35, 0.35),
-    color: 0xd3ccc0,
-    roughness: 0.92,
+    normalScale: new THREE.Vector2(0.4, 0.4),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.72,
+    color: 0xd8d1c5,
+    roughness: 1.0,
     metalness: 0.0,
   });
   const terracottaCapMat = new THREE.MeshStandardMaterial({
@@ -887,17 +900,23 @@ export function createBoudhanathStupa(textures: ProceduralTextureSet): LandmarkB
 
   const plasterMat = new THREE.MeshStandardMaterial({
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.32, 0.32),
-    color: 0xd9d3c6,
-    roughness: 0.94,
+    normalScale: new THREE.Vector2(0.38, 0.38),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.72,
+    color: 0xdcd6c9,
+    roughness: 1.0,
     metalness: 0.0,
   });
   const domeMat = new THREE.MeshStandardMaterial({
     map: textures.stupaDomeMap,
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.28, 0.28),
+    normalScale: new THREE.Vector2(0.34, 0.34),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.74,
     color: 0xffffff,
-    roughness: 0.92,
+    roughness: 1.0,
     metalness: 0.0,
   });
   const goldMat = new THREE.MeshStandardMaterial({
@@ -908,8 +927,12 @@ export function createBoudhanathStupa(textures: ProceduralTextureSet): LandmarkB
   const stoneMat = new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
-    color: 0xa6a298,
-    roughness: 0.88,
+    normalScale: new THREE.Vector2(0.82, 0.82),
+    roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.86,
+    color: 0xb6b2a8,
+    roughness: 1.0,
   });
   const saffronMat = new THREE.MeshStandardMaterial({
     color: 0xb3641e,
@@ -1117,27 +1140,54 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
   const stoneMat = new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
-    color: 0xa4a096,
-    roughness: 0.88,
+    normalScale: new THREE.Vector2(0.82, 0.82),
+    roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.86,
+    color: 0xb5b1a7,
+    roughness: 1.0,
   });
   const domePlasterMat = new THREE.MeshStandardMaterial({
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.3, 0.3),
-    color: 0xd6d0c4,
-    roughness: 0.92,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.72,
+    color: 0xdad4c8,
+    roughness: 1.0,
   });
   const tigerMat = new THREE.MeshStandardMaterial({
     map: textures.tigerPeltMap,
+    normalMap: textures.basaltCarvedNormal,
+    normalScale: new THREE.Vector2(0.35, 0.35),
     roughness: 0.84,
   });
+  // Photogrammetry-grade sculpted blue-slate stone/patinated bronze deity finish
   const shivaSkinMat = new THREE.MeshStandardMaterial({
-    color: 0x3b6891,
-    roughness: 0.56,
+    map: textures.basaltCarvedMap,
+    normalMap: textures.basaltCarvedNormal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: textures.basaltCarvedRough,
+    aoMap: textures.basaltCarvedAo,
+    aoMapIntensity: 0.8,
+    color: 0x5c89b4,
+    roughness: 0.48,
+    metalness: 0.16,
+  });
+  const hairMat = new THREE.MeshStandardMaterial({
+    map: textures.basaltCarvedMap,
+    normalMap: textures.basaltCarvedNormal,
+    normalScale: new THREE.Vector2(1.0, 1.0),
+    color: 0x262932,
+    roughness: 0.72,
     metalness: 0.08,
   });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x1c1e24, roughness: 0.78 });
   const goldMat = new THREE.MeshStandardMaterial({
-    color: 0xc9942a,
+    map: textures.agedBronzeMap,
+    normalMap: textures.agedBronzeNormal,
+    normalScale: new THREE.Vector2(0.65, 0.65),
+    roughnessMap: textures.agedBronzeRough,
+    color: 0xe2b14a,
     roughness: 0.28,
     metalness: 0.88,
   });
@@ -1172,7 +1222,7 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
     group.add(post, bulb);
   }
 
-  // Ribbed white dome sanctuary base (matching image_5c07c568)
+  // Ribbed white dome sanctuary base
   const shrineDome = new THREE.Mesh(
     new THREE.SphereGeometry(2.75, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.48),
     domePlasterMat,
@@ -1183,7 +1233,7 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
   shrineDome.receiveShadow = true;
   group.add(shrineDome);
 
-  // Base cylindrical plinth band + clean meridian ribs following dome curve & cardinal lamp niches
+  // Base cylindrical plinth band + clean meridian ribs + cardinal lamp niches
   const domeSkirt = new THREE.Mesh(new THREE.CylinderGeometry(2.74, 2.82, 0.24, 32), stoneMat);
   domeSkirt.position.y = 0.52;
   domeSkirt.receiveShadow = true;
@@ -1221,17 +1271,20 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
     }
   }
 
-  // Tiger-Skin Cushion Pedestal atop dome
-  const peltPlinth = new THREE.Mesh(new THREE.CylinderGeometry(1.52, 1.68, 0.34, 20), tigerMat);
+  // Carved bronze & tiger-skin cushion pedestal crowning the dome
+  const lotusBand = new THREE.Mesh(new THREE.CylinderGeometry(1.72, 1.84, 0.14, 24), goldMat);
+  lotusBand.position.y = 2.26;
+  lotusBand.castShadow = true;
+  const peltPlinth = new THREE.Mesh(new THREE.CylinderGeometry(1.52, 1.68, 0.34, 24), tigerMat);
   peltPlinth.position.y = 2.48;
   peltPlinth.castShadow = true;
-  group.add(peltPlinth);
+  group.add(lotusBand, peltPlinth);
 
-  // Sculpted Meditative Seated Lord Shiva Figure facing valley & glacial lake
+  // High-Fidelity Photogrammetry-Grade Seated Lord Shiva Monument
   const shiva = new THREE.Group();
   shiva.position.set(0, 2.65, 0);
 
-  // Sculpted Padmasana crossed legs (anatomical hip-to-knee-to-ankle curves) & tiger-skin dhoti
+  // Sculpted Padmasana crossed legs & tiger-skin dhoti folds
   for (const side of [-1, 1]) {
     const legCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 0.32, 0.24, -0.05),
@@ -1239,49 +1292,72 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
       new THREE.Vector3(side * 0.56, 0.13, 0.46),
       new THREE.Vector3(-side * 0.18, 0.20, 0.42),
     ]);
-    const legMesh = new THREE.Mesh(new THREE.TubeGeometry(legCurve, 18, 0.175, 14, false), shivaSkinMat);
+    const legMesh = new THREE.Mesh(new THREE.TubeGeometry(legCurve, 22, 0.175, 16, false), shivaSkinMat);
     legMesh.castShadow = true;
-    const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), shivaSkinMat);
+    const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 12), shivaSkinMat);
     kneeCap.scale.set(1.05, 0.85, 1.05);
     kneeCap.position.set(side * 0.84, 0.17, 0.18);
-    const footSole = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.16, 6, 10), shivaSkinMat);
+    const footSole = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.16, 8, 12), shivaSkinMat);
     footSole.rotation.z = side * 1.15;
     footSole.rotation.x = Math.PI / 2;
     footSole.position.set(-side * 0.24, 0.22, 0.40);
-    shiva.add(legMesh, kneeCap, footSole);
+    // Bronze ankle kada rings
+    const anklet = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.02, 8, 16), goldMat);
+    anklet.position.set(-side * 0.12, 0.21, 0.41);
+    anklet.rotation.y = Math.PI / 2;
+    shiva.add(legMesh, kneeCap, footSole, anklet);
   }
   const dhotiPts: THREE.Vector2[] = [
     new THREE.Vector2(0.0, 0.08),
     new THREE.Vector2(0.76, 0.12),
-    new THREE.Vector2(0.66, 0.32),
-    new THREE.Vector2(0.46, 0.48),
+    new THREE.Vector2(0.68, 0.30),
+    new THREE.Vector2(0.48, 0.48),
     new THREE.Vector2(0.36, 0.56),
   ];
-  const dhoti = new THREE.Mesh(new THREE.LatheGeometry(dhotiPts, 24), tigerMat);
+  const dhoti = new THREE.Mesh(new THREE.LatheGeometry(dhotiPts, 28), tigerMat);
   dhoti.scale.set(1.12, 1.0, 0.88);
   dhoti.castShadow = true;
-  shiva.add(dhoti);
+  const waistband = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.032, 8, 24), goldMat);
+  waistband.rotation.x = Math.PI / 2;
+  waistband.scale.set(1.12, 0.88, 1.0);
+  waistband.position.y = 0.54;
+  shiva.add(dhoti, waistband);
 
-  // Contoured broad athletic Shiva torso (LatheGeometry waist -> chest -> shoulders -> neck)
+  // Contoured broad athletic Shiva torso + Trivali neck rings + pectoral relief
   const torsoPts: THREE.Vector2[] = [
     new THREE.Vector2(0.0, 0.46),
     new THREE.Vector2(0.35, 0.52),
     new THREE.Vector2(0.33, 0.72),
     new THREE.Vector2(0.42, 0.98),
-    new THREE.Vector2(0.52, 1.28),
-    new THREE.Vector2(0.49, 1.48),
+    new THREE.Vector2(0.53, 1.28),
+    new THREE.Vector2(0.50, 1.48),
     new THREE.Vector2(0.24, 1.58),
-    new THREE.Vector2(0.16, 1.72),
+    new THREE.Vector2(0.16, 1.74),
   ];
-  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 24), shivaSkinMat);
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 30), shivaSkinMat);
   torso.scale.set(1.16, 1.0, 0.72);
   torso.castShadow = true;
   shiva.add(torso);
 
-  // Sculpted Vasuki serpent coiled gracefully around neck with raised hood
+  // Sacred thread (Yajnopavita) draping left shoulder across chest
+  const threadCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.34, 1.52, 0.14),
+    new THREE.Vector3(-0.08, 1.18, 0.34),
+    new THREE.Vector3(0.28, 0.82, 0.25),
+    new THREE.Vector3(0.36, 0.62, -0.05),
+    new THREE.Vector3(-0.02, 1.06, -0.29),
+    new THREE.Vector3(-0.34, 1.52, 0.14),
+  ]);
+  const sacredThread = new THREE.Mesh(
+    new THREE.TubeGeometry(threadCurve, 28, 0.016, 8, true),
+    goldMat,
+  );
+  shiva.add(sacredThread);
+
+  // Sculpted Vasuki serpent coiled gracefully around neck with hood & individual Rudraksha mala beads
   const snakePts: THREE.Vector3[] = [];
-  for (let i = 0; i <= 24; i++) {
-    const t = i / 24;
+  for (let i = 0; i <= 28; i++) {
+    const t = i / 28;
     const a = t * Math.PI * 2.2 - 0.5;
     snakePts.push(
       new THREE.Vector3(
@@ -1292,62 +1368,89 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
     );
   }
   const vasukiBody = new THREE.Mesh(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(snakePts), 28, 0.044, 10, false),
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(snakePts), 32, 0.044, 12, false),
     goldMat,
   );
-  const vasukiHood = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), goldMat);
-  vasukiHood.scale.set(1.15, 1.35, 0.55);
+  const vasukiHood = new THREE.Mesh(new THREE.SphereGeometry(0.088, 14, 12), goldMat);
+  vasukiHood.scale.set(1.18, 1.38, 0.52);
   const tailEnd = snakePts[snakePts.length - 1];
   vasukiHood.position.set(tailEnd.x, tailEnd.y + 0.07, tailEnd.z + 0.02);
-  // Sacred Rudraksha necklace bead ring
-  const rudrakshaMala = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.032, 8, 22), goldMat);
-  rudrakshaMala.rotation.x = Math.PI / 2.35;
-  rudrakshaMala.position.set(0, 1.34, 0.14);
-  shiva.add(vasukiBody, vasukiHood, rudrakshaMala);
+  shiva.add(vasukiBody, vasukiHood);
 
-  // Sculpted serene face, nose bridge, brow arch, elongated ears, tiered Jata topknot & crescent
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 20, 18), shivaSkinMat);
-  head.scale.set(0.92, 1.06, 0.96);
-  head.position.set(0, 1.92, 0.02);
+  const rudrakshaGeo = new THREE.SphereGeometry(0.026, 8, 8);
+  for (let b = 0; b < 22; b++) {
+    const ba = (b / 22) * Math.PI * 2;
+    const bead = new THREE.Mesh(rudrakshaGeo, goldMat);
+    bead.position.set(
+      Math.sin(ba) * 0.29,
+      1.36 + Math.cos(ba) * -0.14,
+      0.12 + Math.cos(ba) * 0.24,
+    );
+    shiva.add(bead);
+  }
+
+  // Sculpted anatomical head: cheekbones, brow arches, serene half-closed eyelids, nose bridge, lips & tiered Jata
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 26, 24), shivaSkinMat);
+  head.scale.set(0.91, 1.07, 0.96);
+  head.position.set(0, 1.93, 0.02);
   head.castShadow = true;
-  const noseBridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.08, 4, 8), shivaSkinMat);
+  const jawChin = new THREE.Mesh(new THREE.SphereGeometry(0.14, 14, 12), shivaSkinMat);
+  jawChin.scale.set(0.95, 0.85, 0.95);
+  jawChin.position.set(0, 1.74, 0.16);
+  const noseBridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.085, 6, 10), shivaSkinMat);
   noseBridge.rotation.x = -0.22;
   noseBridge.position.set(0, 1.92, 0.30);
+  const lips = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.056, 4, 8), shivaSkinMat);
+  lips.rotation.z = Math.PI / 2;
+  lips.position.set(0, 1.81, 0.285);
   const tilak = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.06, 4, 8), goldMat);
   tilak.position.set(0, 2.02, 0.305);
+
   for (const side of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.038, 0.14, 6, 8), shivaSkinMat);
-    ear.position.set(side * 0.29, 1.88, 0.0);
-    ear.rotation.z = side * 0.1;
-    shiva.add(ear);
+    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.013, 0.075, 4, 8), shivaSkinMat);
+    brow.rotation.z = Math.PI / 2 - side * 0.12;
+    brow.position.set(side * 0.088, 1.99, 0.285);
+    const eyelid = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.048, 4, 8), shivaSkinMat);
+    eyelid.rotation.z = Math.PI / 2;
+    eyelid.position.set(side * 0.085, 1.955, 0.288);
+    const earCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side * 0.28, 1.97, 0.0),
+      new THREE.Vector3(side * 0.31, 1.84, 0.01),
+      new THREE.Vector3(side * 0.29, 1.72, 0.02),
+    ]);
+    const ear = new THREE.Mesh(new THREE.TubeGeometry(earCurve, 12, 0.034, 10, false), shivaSkinMat);
+    const kundala = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.012, 6, 14), goldMat);
+    kundala.position.set(side * 0.295, 1.70, 0.025);
+    kundala.rotation.y = Math.PI / 2;
+    shiva.add(brow, eyelid, ear, kundala);
   }
   const jataPts: THREE.Vector2[] = [
     new THREE.Vector2(0.28, 0.0),
-    new THREE.Vector2(0.25, 0.14),
-    new THREE.Vector2(0.18, 0.28),
-    new THREE.Vector2(0.22, 0.36),
+    new THREE.Vector2(0.26, 0.14),
+    new THREE.Vector2(0.19, 0.28),
+    new THREE.Vector2(0.23, 0.36),
     new THREE.Vector2(0.14, 0.48),
     new THREE.Vector2(0.04, 0.56),
   ];
-  const hairBun = new THREE.Mesh(new THREE.LatheGeometry(jataPts, 18), hairMat);
+  const hairBun = new THREE.Mesh(new THREE.LatheGeometry(jataPts, 24), hairMat);
   hairBun.position.set(0, 2.12, -0.02);
-  const crescent = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.024, 6, 14, Math.PI * 1.25), goldMat);
+  const crescent = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.024, 8, 18, Math.PI * 1.25), goldMat);
   crescent.position.set(-0.14, 2.34, 0.16);
   crescent.rotation.z = 0.5;
-  shiva.add(head, noseBridge, tilak, hairBun, crescent);
+  shiva.add(head, jawChin, noseBridge, lips, tilak, hairBun, crescent);
 
-  // Sculpted Right Blessing Arm (Abhaya Mudra with rounded palm + 5 articulated fingers)
+  // Sculpted Right Blessing Arm (Abhaya Mudra with bronze armlet + wrist bracelet + articulated palm & 5 fingers)
   const rightArmCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-0.54, 1.46, 0.04),
     new THREE.Vector3(-0.74, 1.16, 0.16),
     new THREE.Vector3(-0.72, 1.46, 0.42),
   ]);
-  const rightArm = new THREE.Mesh(new THREE.TubeGeometry(rightArmCurve, 16, 0.108, 12, false), shivaSkinMat);
+  const rightArm = new THREE.Mesh(new THREE.TubeGeometry(rightArmCurve, 20, 0.108, 14, false), shivaSkinMat);
   rightArm.castShadow = true;
   const handGroup = new THREE.Group();
   handGroup.position.set(-0.72, 1.56, 0.45);
   handGroup.rotation.x = -0.15;
-  const palmBase = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), shivaSkinMat);
+  const palmBase = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 12), shivaSkinMat);
   palmBase.scale.set(0.95, 1.15, 0.48);
   handGroup.add(palmBase);
   for (let f = 0; f < 4; f++) {
@@ -1361,33 +1464,32 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
   handGroup.add(thumb);
   shiva.add(rightArm, handGroup);
 
-  // Sculpted Left Arm curving cleanly to grip Golden Trishul + Damaru
+  // Sculpted Left Arm curving cleanly to grip Aged-Bronze Trishul + Damaru
   const leftArmCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0.54, 1.46, 0.04),
     new THREE.Vector3(0.76, 1.18, 0.12),
     new THREE.Vector3(0.76, 1.48, 0.32),
   ]);
-  const leftArm = new THREE.Mesh(new THREE.TubeGeometry(leftArmCurve, 16, 0.108, 12, false), shivaSkinMat);
+  const leftArm = new THREE.Mesh(new THREE.TubeGeometry(leftArmCurve, 20, 0.108, 14, false), shivaSkinMat);
   leftArm.castShadow = true;
-  const leftGrip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), shivaSkinMat);
+  const leftGrip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 12), shivaSkinMat);
   leftGrip.position.set(0.76, 1.50, 0.33);
 
-  const trishulShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 3.65, 14), goldMat);
+  const trishulShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 3.65, 16), goldMat);
   trishulShaft.position.set(0.76, 1.88, 0.32);
   trishulShaft.castShadow = true;
-  const trishulCollar = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.026, 8, 16), goldMat);
+  const trishulCollar = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.026, 8, 18), goldMat);
   trishulCollar.rotation.x = Math.PI / 2;
   trishulCollar.position.set(0.76, 3.16, 0.32);
-  const trishulProng = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.036, 10, 20, Math.PI), goldMat);
+  const trishulProng = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.036, 10, 24, Math.PI), goldMat);
   trishulProng.rotation.z = Math.PI;
   trishulProng.position.set(0.76, 3.45, 0.32);
-  const centerSpear = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.56, 12), goldMat);
+  const centerSpear = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.56, 14), goldMat);
   centerSpear.position.set(0.76, 3.84, 0.32);
-  // Hourglass Damaru tied near Trishul neck
-  const damaru1 = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.16, 14), goldMat);
+  const damaru1 = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.16, 16), goldMat);
   damaru1.position.set(0.92, 2.95, 0.32);
   damaru1.rotation.z = Math.PI / 2;
-  const damaru2 = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.16, 14), goldMat);
+  const damaru2 = new THREE.Mesh(new THREE.ConeGeometry(0.115, 0.16, 16), goldMat);
   damaru2.position.set(0.6, 2.95, 0.32);
   damaru2.rotation.z = -Math.PI / 2;
   shiva.add(leftArm, leftGrip, trishulShaft, trishulCollar, trishulProng, centerSpear, damaru1, damaru2);
@@ -1430,26 +1532,48 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
   const beaconLights: THREE.PointLight[] = [];
   const animatedNodes: THREE.Object3D[] = [];
 
-  const marbleMat = new THREE.MeshStandardMaterial({
+  const marbleMat = new THREE.MeshPhysicalMaterial({
     map: textures.marbleWalkMap,
-    normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.35, 0.35),
-    color: 0xffffff,
-    roughness: 0.78,
+    normalMap: textures.marbleWalkNormal,
+    normalScale: new THREE.Vector2(0.55, 0.55),
+    roughnessMap: textures.marbleWalkRough,
+    aoMap: textures.marbleWalkAo,
+    aoMapIntensity: 0.84,
+    color: 0xf6f2ea,
+    roughness: 1.0,
+    metalness: 0.02,
+    clearcoat: 0.18,
+    clearcoatRoughness: 0.4,
+    ior: 1.48,
   });
   const sandstoneMat = new THREE.MeshStandardMaterial({
     map: textures.sandstoneMap,
     normalMap: textures.sandstoneNormal,
-    color: 0xb6ac9c,
-    roughness: 0.86,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.82,
+    color: 0xc4baaa,
+    roughness: 1.0,
   });
+  // High-fidelity photogrammetry basalt stone with carved chisel micro-relief
   const buddhaStoneMat = new THREE.MeshStandardMaterial({
-    color: 0x5c6169,
-    roughness: 0.72,
+    map: textures.basaltCarvedMap,
+    normalMap: textures.basaltCarvedNormal,
+    normalScale: new THREE.Vector2(0.88, 0.88),
+    roughnessMap: textures.basaltCarvedRough,
+    aoMap: textures.basaltCarvedAo,
+    aoMapIntensity: 0.84,
+    color: 0x8d939c,
+    roughness: 0.62,
     metalness: 0.08,
   });
   const goldMat = new THREE.MeshStandardMaterial({
-    color: 0xc9942a,
+    map: textures.agedBronzeMap,
+    normalMap: textures.agedBronzeNormal,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    roughnessMap: textures.agedBronzeRough,
+    color: 0xe4b24e,
     roughness: 0.28,
     metalness: 0.86,
   });
@@ -1486,33 +1610,56 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     }
   }
 
-  // Golden Lotus Throne Pedestal
+  // Sculpted Double-Tier Carved Lotus Throne Pedestal (ExtrudeGeometry petals replace cone spikes)
   const lotusCore = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.75, 1.98, 0.62, 20),
-    new THREE.MeshStandardMaterial({ color: 0x7e251e, roughness: 0.72 }),
+    new THREE.CylinderGeometry(1.75, 1.98, 0.62, 28),
+    new THREE.MeshStandardMaterial({
+      map: textures.basaltCarvedMap,
+      normalMap: textures.basaltCarvedNormal,
+      color: 0x862b23,
+      roughness: 0.68,
+    }),
   );
   lotusCore.position.set(0, 0.96, -1.65);
   lotusCore.castShadow = true;
   group.add(lotusCore);
 
-  for (let p = 0; p < 16; p++) {
-    const a = (p / 16) * Math.PI * 2;
-    const petalPivot = new THREE.Group();
-    petalPivot.position.set(Math.sin(a) * 1.62, 1.05, -1.65 + Math.cos(a) * 1.62);
-    petalPivot.rotation.y = a;
-    const petal = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.62, 5), goldMat);
-    petal.scale.set(1.0, 1.0, 0.36);
-    petal.rotation.x = 0.62;
-    petal.position.set(0, 0.24, 0.14);
-    petalPivot.add(petal);
-    group.add(petalPivot);
+  const petalShape = new THREE.Shape();
+  petalShape.moveTo(0, 0);
+  petalShape.bezierCurveTo(0.28, 0.1, 0.34, 0.44, 0, 0.66);
+  petalShape.bezierCurveTo(-0.34, 0.44, -0.28, 0.1, 0, 0);
+  const sculptedPetalGeo = new THREE.ExtrudeGeometry(petalShape, {
+    depth: 0.075,
+    bevelEnabled: true,
+    bevelThickness: 0.032,
+    bevelSize: 0.028,
+    bevelSegments: 3,
+    curveSegments: 10,
+  });
+  sculptedPetalGeo.center();
+
+  for (let tier = 0; tier < 2; tier++) {
+    const count = 16;
+    const rad = tier === 0 ? 1.88 : 1.72;
+    const py = tier === 0 ? 0.92 : 1.14;
+    const tilt = tier === 0 ? 0.85 : 0.42;
+    for (let p = 0; p < count; p++) {
+      const a = ((p + tier * 0.5) / count) * Math.PI * 2;
+      const petalPivot = new THREE.Group();
+      petalPivot.position.set(Math.sin(a) * rad, py, -1.65 + Math.cos(a) * rad);
+      petalPivot.rotation.y = a;
+      const petal = new THREE.Mesh(sculptedPetalGeo, goldMat);
+      petal.rotation.x = tilt;
+      petal.castShadow = true;
+      petalPivot.add(petal);
+      group.add(petalPivot);
+    }
   }
 
-  // Monumental Meditative Seated Buddha (Dhyana Mudra) + Dharma Halo Arch
+  // Monumental Photogrammetry-Style Meditative Seated Buddha (Dhyana Mudra) + Dharma Halo Arch
   const buddha = new THREE.Group();
   buddha.position.set(0, 1.28, -1.65);
 
-  // Sculpted crossed Padmasana base & draped Sanghati hem folds
   const basePts: THREE.Vector2[] = [
     new THREE.Vector2(0.0, 0.0),
     new THREE.Vector2(1.48, 0.0),
@@ -1520,7 +1667,7 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     new THREE.Vector2(1.16, 0.48),
     new THREE.Vector2(0.78, 0.62),
   ];
-  const crossedBase = new THREE.Mesh(new THREE.LatheGeometry(basePts, 28), buddhaStoneMat);
+  const crossedBase = new THREE.Mesh(new THREE.LatheGeometry(basePts, 32), buddhaStoneMat);
   crossedBase.scale.set(1.18, 1, 0.78);
   crossedBase.castShadow = true;
 
@@ -1530,15 +1677,14 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
       new THREE.Vector3(side * 0.88, 0.28, 0.54),
       new THREE.Vector3(side * 0.18, 0.34, 0.58),
     ]);
-    const legFold = new THREE.Mesh(new THREE.TubeGeometry(legFoldCurve, 16, 0.24, 14, false), buddhaStoneMat);
+    const legFold = new THREE.Mesh(new THREE.TubeGeometry(legFoldCurve, 20, 0.24, 16, false), buddhaStoneMat);
     legFold.castShadow = true;
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 14), buddhaStoneMat);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 16), buddhaStoneMat);
     knee.position.set(side * 1.05, 0.28, 0.16);
     knee.scale.set(1.22, 0.72, 1.02);
     buddha.add(legFold, knee);
   }
 
-  // Contoured meditative Buddha torso wrapped in smooth monastic robe curves
   const buddhaTorsoPts: THREE.Vector2[] = [
     new THREE.Vector2(0.0, 0.48),
     new THREE.Vector2(0.84, 0.56),
@@ -1547,21 +1693,21 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     new THREE.Vector2(0.78, 1.84),
     new THREE.Vector2(0.66, 2.08),
     new THREE.Vector2(0.28, 2.22),
-    new THREE.Vector2(0.21, 2.38),
+    new THREE.Vector2(0.21, 2.40),
   ];
-  const torso = new THREE.Mesh(new THREE.LatheGeometry(buddhaTorsoPts, 26), buddhaStoneMat);
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(buddhaTorsoPts, 32), buddhaStoneMat);
   torso.scale.set(1.14, 1, 0.72);
   torso.castShadow = true;
 
-  // Flowing Sanghati monastic robe sash & layered chest drapery folds (TubeGeometry)
-  for (const rOff of [0, 0.12, 0.24]) {
+  // Flowing Sanghati monastic robe sash & layered chest drapery folds
+  for (const rOff of [0, 0.11, 0.22, 0.33]) {
     const foldCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.68 + rOff * 0.35, 2.02 - rOff * 0.3, 0.18),
-      new THREE.Vector3(-0.18, 1.66 - rOff * 0.55, 0.56),
-      new THREE.Vector3(0.46, 1.38 - rOff * 0.45, 0.46),
-      new THREE.Vector3(0.72, 1.18 - rOff * 0.3, 0.08),
+      new THREE.Vector3(-0.68 + rOff * 0.28, 2.04 - rOff * 0.28, 0.18),
+      new THREE.Vector3(-0.18, 1.68 - rOff * 0.52, 0.55),
+      new THREE.Vector3(0.46, 1.40 - rOff * 0.42, 0.46),
+      new THREE.Vector3(0.72, 1.18 - rOff * 0.28, 0.08),
     ]);
-    const fold = new THREE.Mesh(new THREE.TubeGeometry(foldCurve, 18, 0.055, 10, false), buddhaStoneMat);
+    const fold = new THREE.Mesh(new THREE.TubeGeometry(foldCurve, 22, 0.048, 12, false), buddhaStoneMat);
     buddha.add(fold);
   }
 
@@ -1573,57 +1719,71 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
       new THREE.Vector3(side * 0.68, 0.88, 0.42),
       new THREE.Vector3(side * 0.26, 0.68, 0.58),
     ]);
-    const arm = new THREE.Mesh(new THREE.TubeGeometry(armCurve, 20, 0.165, 12, false), buddhaStoneMat);
+    const arm = new THREE.Mesh(new THREE.TubeGeometry(armCurve, 22, 0.165, 14, false), buddhaStoneMat);
     arm.castShadow = true;
-    const sleeveFold = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 14), buddhaStoneMat);
+    const sleeveFold = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), buddhaStoneMat);
     sleeveFold.position.set(side * 0.50, 0.78, 0.50);
     sleeveFold.rotation.y = side * 0.6;
     buddha.add(arm, sleeveFold);
   }
 
-  // Sculpted Cupped Dhyana Mudra Palms & Joined Thumbs (replaces flat BoxGeometry!)
-  const lowerPalm = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), buddhaStoneMat);
+  // Cupped Dhyana Mudra Palms & Joined Thumbs
+  const lowerPalm = new THREE.Mesh(new THREE.SphereGeometry(0.24, 18, 14), buddhaStoneMat);
   lowerPalm.scale.set(1.45, 0.32, 0.92);
   lowerPalm.position.set(0, 0.62, 0.60);
-  const upperPalm = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), buddhaStoneMat);
+  const upperPalm = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), buddhaStoneMat);
   upperPalm.scale.set(1.32, 0.28, 0.84);
   upperPalm.position.set(0, 0.69, 0.58);
   for (const side of [-1, 1]) {
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.036, 0.14, 6, 8), buddhaStoneMat);
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.036, 0.14, 6, 10), buddhaStoneMat);
     thumb.rotation.z = side * 1.1;
     thumb.rotation.x = 0.25;
     thumb.position.set(side * 0.10, 0.77, 0.60);
     buddha.add(thumb);
   }
 
-  // Serene sculpted head, gentle nose & smile contour, snail-curl hair rows, Ushnisha & rounded elongated earlobes
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 22, 20), buddhaStoneMat);
+  // Serene sculpted head with brow arches, half-closed eyelids, nose bridge, lips, 4-tier snail curls & Ushnisha
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 28, 24), buddhaStoneMat);
   head.position.y = 2.66;
   head.scale.set(0.92, 1.08, 0.96);
   head.castShadow = true;
-  const nose = new THREE.Mesh(new THREE.CapsuleGeometry(0.034, 0.11, 6, 8), buddhaStoneMat);
+  const nose = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.115, 6, 10), buddhaStoneMat);
   nose.rotation.x = -0.22;
   nose.position.set(0, 2.66, 0.42);
-  const lips = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.08, 4, 8), buddhaStoneMat);
+  const lips = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.085, 6, 10), buddhaStoneMat);
   lips.rotation.z = Math.PI / 2;
   lips.position.set(0, 2.51, 0.415);
 
-  const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 14), buddhaStoneMat);
+  for (const side of [-1, 1]) {
+    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.11, 4, 8), buddhaStoneMat);
+    brow.rotation.z = Math.PI / 2 - side * 0.1;
+    brow.position.set(side * 0.13, 2.75, 0.39);
+    const eyelid = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.075, 4, 8), buddhaStoneMat);
+    eyelid.rotation.z = Math.PI / 2;
+    eyelid.position.set(side * 0.128, 2.70, 0.395);
+    buddha.add(brow, eyelid);
+  }
+
+  const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 16), buddhaStoneMat);
   ushnisha.position.y = 3.16;
-  const crownGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 1), goldMat);
+  const crownGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.078, 1), goldMat);
   crownGem.position.y = 3.38;
-  // Concentric snail-curl hair locks over crown
-  for (let row = 0; row < 2; row++) {
-    const count = row === 0 ? 12 : 8;
-    const rr = row === 0 ? 0.36 : 0.24;
-    const ry = row === 0 ? 2.94 : 3.09;
+  // 4 concentric snail-curl hair lock tiers
+  const curlGeo = new THREE.SphereGeometry(0.052, 8, 8);
+  const curlRows: Array<[number, number, number]> = [
+    [16, 0.40, 2.84],
+    [14, 0.36, 2.95],
+    [10, 0.27, 3.06],
+    [7, 0.16, 3.22],
+  ];
+  curlRows.forEach(([count, rr, ry], rIdx) => {
     for (let c = 0; c < count; c++) {
-      const a = (c / count) * Math.PI * 2 + row * 0.3;
-      const curl = new THREE.Mesh(new THREE.SphereGeometry(0.056, 8, 8), buddhaStoneMat);
+      const a = (c / count) * Math.PI * 2 + rIdx * 0.25;
+      const curl = new THREE.Mesh(curlGeo, buddhaStoneMat);
       curl.position.set(Math.sin(a) * rr * 0.9, ry, Math.cos(a) * rr * 0.92);
       buddha.add(curl);
     }
-  }
+  });
 
   // Sculpted rounded elongated ears & lobes
   for (const side of [-1, 1]) {
@@ -1632,18 +1792,30 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
       new THREE.Vector3(side * 0.45, 2.54, 0.01),
       new THREE.Vector3(side * 0.42, 2.34, 0.03),
     ]);
-    const earLoop = new THREE.Mesh(new THREE.TubeGeometry(earCurve, 12, 0.048, 8, false), buddhaStoneMat);
+    const earLoop = new THREE.Mesh(new THREE.TubeGeometry(earCurve, 14, 0.048, 10, false), buddhaStoneMat);
     const earLobe = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 8), buddhaStoneMat);
     earLobe.position.set(side * 0.42, 2.33, 0.03);
     buddha.add(earLoop, earLobe);
   }
-  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), goldMat);
+  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), goldMat);
   urna.position.set(0, 2.76, 0.43);
 
-  const haloOuter = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.06, 10, 36), goldMat);
+  // Carved Filigree Bronze Dharma Halo with radial spokes & outer lotus-flame beads
+  const haloOuter = new THREE.Mesh(new THREE.TorusGeometry(1.22, 0.065, 12, 40), goldMat);
   haloOuter.position.set(0, 2.68, -0.58);
-  const haloInner = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.04, 10, 32), goldMat);
+  const haloInner = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.042, 12, 36), goldMat);
   haloInner.position.set(0, 2.68, -0.58);
+  const spokeGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.72, 6);
+  const flameBeadGeo = new THREE.SphereGeometry(0.042, 8, 8);
+  for (let s = 0; s < 12; s++) {
+    const sa = (s / 12) * Math.PI * 2;
+    const spoke = new THREE.Mesh(spokeGeo, goldMat);
+    spoke.position.set(Math.cos(sa) * 0.84, 2.68 + Math.sin(sa) * 0.84, -0.58);
+    spoke.rotation.z = sa - Math.PI / 2;
+    const bead = new THREE.Mesh(flameBeadGeo, goldMat);
+    bead.position.set(Math.cos(sa) * 1.29, 2.68 + Math.sin(sa) * 1.29, -0.58);
+    buddha.add(spoke, bead);
+  }
 
   buddha.add(
     crossedBase,
@@ -1699,16 +1871,20 @@ export function createVitClockTower(textures: ProceduralTextureSet): LandmarkBui
     normalMap: textures.sandstoneNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
     roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.85,
     color: 0xffffff,
-    roughness: 0.82,
+    roughness: 1.0,
   });
   const brickMat = new THREE.MeshStandardMaterial({
     map: textures.brickMap,
     normalMap: textures.brickNormal,
     normalScale: new THREE.Vector2(0.95, 0.95),
     roughnessMap: textures.brickRough,
+    aoMap: textures.brickAo,
+    aoMapIntensity: 0.82,
     color: 0xffffff,
-    roughness: 0.78,
+    roughness: 1.0,
   });
   // Oxidized patinated copper-verdigris dome + warm terracotta copper trim
   const domeMat = new THREE.MeshStandardMaterial({
@@ -2266,9 +2442,12 @@ export function createRecruiterBeacon(textures: ProceduralTextureSet): LandmarkB
   const stoneMat = new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
+    normalScale: new THREE.Vector2(0.82, 0.82),
     roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.86,
     color: 0xffffff,
-    roughness: 0.88,
+    roughness: 1.0,
   });
   const brassMat = new THREE.MeshStandardMaterial({
     color: 0xb3872e,
@@ -2350,9 +2529,12 @@ export function createSuspensionBridge(textures: ProceduralTextureSet): THREE.Gr
   const stoneMat = new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
+    normalScale: new THREE.Vector2(0.82, 0.82),
     roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.86,
     color: 0xffffff,
-    roughness: 0.88,
+    roughness: 1.0,
   });
   const woodMat = new THREE.MeshStandardMaterial({
     map: textures.woodMap,
@@ -2506,6 +2688,7 @@ export function createPrayerFlagLine(
     new THREE.TubeGeometry(curve, 16, 0.018, 5, false),
     new THREE.MeshStandardMaterial({ color: 0xb5afa5, roughness: 0.85 }),
   );
+  rope.userData.nonCollidable = true;
   group.add(rope);
 
   const flagGeo = new THREE.PlaneGeometry(0.36, 0.46);
@@ -2522,6 +2705,7 @@ export function createPrayerFlagLine(
     );
     flag.position.set(pos.x, pos.y - 0.23, pos.z);
     flag.rotation.y = Math.atan2(end.z - start.z, end.x - start.x);
+    flag.userData.nonCollidable = true;
     group.add(flag);
     flags.push(flag);
   }
@@ -2588,8 +2772,12 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
   const cairnMat = new THREE.MeshStandardMaterial({
     map: textures.sandstoneMap,
     normalMap: textures.sandstoneNormal,
-    color: 0x8c877c,
-    roughness: 0.88,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.84,
+    color: 0x9b9589,
+    roughness: 1.0,
   });
 
   const placements: Array<{ x: number; z: number; kind: 'crate' | 'pot' | 'case' | 'cairn' }> = [
@@ -2640,35 +2828,58 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
 
   for (const pl of placements) {
     const g = new THREE.Group();
+    const visualGroup = new THREE.Group();
     let mesh: THREE.Mesh;
+    let halfHeight = 0.35;
+    let halfWidth = 0.35;
+
     if (pl.kind === 'crate') {
       mesh = new THREE.Mesh(crateGeo, crateMat);
-      mesh.position.y = 0.35;
+      halfHeight = 0.35;
+      halfWidth = 0.35;
     } else if (pl.kind === 'pot') {
       mesh = new THREE.Mesh(potGeo, potMat);
+      halfHeight = 0.31;
+      halfWidth = 0.32;
+      mesh.position.y = -halfHeight;
     } else if (pl.kind === 'cairn') {
       mesh = new THREE.Mesh(cairnGeo, cairnMat);
+      halfHeight = 0.325;
+      halfWidth = 0.32;
+      mesh.position.y = -halfHeight;
     } else {
       mesh = new THREE.Mesh(caseGeo, caseMat);
-      mesh.position.y = 0.21;
+      halfHeight = 0.21;
+      halfWidth = 0.31;
     }
     mesh.castShadow = true;
-    const contact = makeShadowDisc(0.64, textures.contactShadowMap);
-    g.add(mesh, contact);
+    mesh.receiveShadow = true;
+    visualGroup.add(mesh);
+    visualGroup.position.y = halfHeight;
 
-    const y = groundHeightAt(pl.x, pl.z);
+    const contact = makeShadowDisc(0.64, textures.contactShadowMap);
+    g.add(visualGroup, contact);
+    g.userData.isInteractiveProp = true;
+    g.userData.snapCategory = 'pot';
+
+    const y = getSurfaceHeightAt(pl.x, pl.z);
     g.position.set(pl.x, y, pl.z);
     props.push({
       mesh: g,
+      visualGroup,
       x: pl.x,
       y,
       z: pl.z,
       vx: 0,
       vy: 0,
       vz: 0,
+      rotX: 0,
+      rotZ: 0,
       rotVelX: 0,
       rotVelZ: 0,
       radius: 0.52,
+      halfHeight,
+      halfWidth,
     });
   }
 

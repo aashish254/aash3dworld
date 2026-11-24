@@ -1278,7 +1278,7 @@ export function createChowkMonumentalDeepastambha(
   flameMat: THREE.Material,
 ): THREE.Group {
   const g = new THREE.Group();
-  const base1 = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.22, 1.42), plinthStoneMat);
+  const base1 = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.22, 1.42), marbleMat);
   base1.position.y = 0.11;
   base1.castShadow = true;
   base1.receiveShadow = true;
@@ -1584,12 +1584,13 @@ export function createChowkPujaStall(params: {
   // Carved wooden eave fascia & sloped terracotta Khaprail pagoda roof + brass Kalash spire
   const topBeam = new THREE.Mesh(new THREE.BoxGeometry(2.74, 0.14, 1.82), woodMat);
   topBeam.position.y = 2.44;
-  const canopyRoof = new THREE.Mesh(new THREE.ConeGeometry(2.05, 0.86, 4), terracottaMat);
-  canopyRoof.rotation.y = Math.PI / 4;
-  canopyRoof.scale.set(1.24, 1.0, 0.92);
+  const canopyRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(3.04, 0.86, 2.12, 0.52),
+    terracottaMat,
+  );
   canopyRoof.position.y = 2.94;
   canopyRoof.castShadow = true;
-  const roofTrim = new THREE.Mesh(new THREE.BoxGeometry(2.92, 0.08, 2.02), tealMat);
+  const roofTrim = new THREE.Mesh(new THREE.BoxGeometry(2.96, 0.08, 2.04), tealMat);
   roofTrim.position.y = 2.52;
   const roofGajur = createDetailedGajurSpire(goldMat, bronzeMat, 0.48, 0.56);
   roofGajur.position.y = 3.36;
@@ -1887,3 +1888,84 @@ export function createCurvedBracketGeometry(
   geo.computeVertexNormals();
   return geo;
 }
+
+/**
+ * Generates an undistorted, true orthogonal rectangular hipped terracotta roof
+ * (replacing skewed ConeGeometry+scale pyramids) centered vertically on [-height/2 .. +height/2].
+ */
+export function createRectangularHipRoofGeometry(
+  width: number,
+  height: number,
+  depth: number,
+  ridgeInsetScale = 0.68,
+): THREE.BufferGeometry {
+  const hw = width * 0.5;
+  const hh = height * 0.5;
+  const hd = depth * 0.5;
+
+  const fl = new THREE.Vector3(-hw, -hh, hd);
+  const fr = new THREE.Vector3(hw, -hh, hd);
+  const br = new THREE.Vector3(hw, -hh, -hd);
+  const bl = new THREE.Vector3(-hw, -hh, -hd);
+
+  const positions: number[] = [];
+  const uvs: number[] = [];
+
+  const pushTri = (
+    a: THREE.Vector3,
+    b: THREE.Vector3,
+    c: THREE.Vector3,
+    ua: number,
+    va: number,
+    ub: number,
+    vb: number,
+    uc: number,
+    vc: number,
+  ) => {
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    uvs.push(ua, va, ub, vb, uc, vc);
+  };
+
+  if (width >= depth) {
+    const rx = Math.max(0.04, Math.min(hw * 0.84, hw - hd * ridgeInsetScale));
+    const rl = new THREE.Vector3(-rx, hh, 0);
+    const rr = new THREE.Vector3(rx, hh, 0);
+
+    // Front (+Z) slope
+    pushTri(fl, fr, rr, 0, 0, width * 0.5, 0, (hw + rx) * 0.5, 1);
+    pushTri(fl, rr, rl, 0, 0, (hw + rx) * 0.5, 1, (hw - rx) * 0.5, 1);
+    // Back (-Z) slope
+    pushTri(br, bl, rl, 0, 0, width * 0.5, 0, (hw + rx) * 0.5, 1);
+    pushTri(br, rl, rr, 0, 0, (hw + rx) * 0.5, 1, (hw - rx) * 0.5, 1);
+    // Left (-X) hip
+    pushTri(bl, fl, rl, 0, 0, depth * 0.5, 0, depth * 0.25, 1);
+    // Right (+X) hip
+    pushTri(fr, br, rr, 0, 0, depth * 0.5, 0, depth * 0.25, 1);
+  } else {
+    const rz = Math.max(0.04, Math.min(hd * 0.84, hd - hw * ridgeInsetScale));
+    const rf = new THREE.Vector3(0, hh, rz);
+    const rb = new THREE.Vector3(0, hh, -rz);
+
+    // Right (+X) slope
+    pushTri(fr, br, rb, 0, 0, depth * 0.5, 0, (hd + rz) * 0.5, 1);
+    pushTri(fr, rb, rf, 0, 0, (hd + rz) * 0.5, 1, (hd - rz) * 0.5, 1);
+    // Left (-X) slope
+    pushTri(bl, fl, rf, 0, 0, depth * 0.5, 0, (hd + rz) * 0.5, 1);
+    pushTri(bl, rf, rb, 0, 0, (hd + rz) * 0.5, 1, (hd - rz) * 0.5, 1);
+    // Front (+Z) hip
+    pushTri(fl, fr, rf, 0, 0, width * 0.5, 0, width * 0.25, 1);
+    // Back (-Z) hip
+    pushTri(br, bl, rb, 0, 0, width * 0.5, 0, width * 0.25, 1);
+  }
+
+  // Bottom soffit cap (-Y normal)
+  pushTri(bl, fr, fl, 0, 0, 1, 1, 0, 1);
+  pushTri(bl, br, fr, 0, 0, 1, 0, 1, 1);
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+

@@ -627,6 +627,7 @@ export function createJanakiCourtyardGarden({
       alphaTest: 0.36,
     });
     inst.computeBoundingSphere();
+    inst.userData.nonCollidable = true;
     group.add(inst);
   };
 

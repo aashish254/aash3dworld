@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LANDMARKS } from '../data/portfolioData';
+import { createRectangularHipRoofGeometry } from './janakiMandirCraft';
 import { ProceduralTextureSet } from './proceduralTextures';
 import {
   BRIDGE_BOUNDS,
@@ -7,12 +8,77 @@ import {
   ROAD_LANTERN_COORDS,
   ROAD_PATHS,
   SPAWN_POSITION,
+  TreeSpecies,
+  TreeSpot,
   getRiverCenterX,
   getWorldBoulderSpots,
   getWorldTreeSpots,
   groundHeightAt,
 } from './worldLogic';
 import { applyRealisticWaterShader } from './waterShader';
+
+export const WORLD_HAZE_UNIFORMS = {
+  uHazeColor: { value: new THREE.Color('#c9dfef') },
+  uSunDir: { value: new THREE.Vector3(0.5, 0.6, 0.4).normalize() },
+  uSunColor: { value: new THREE.Color('#fff1db') },
+  uHazeDensity: { value: 0.0028 },
+  uHeightFalloff: { value: 0.055 },
+  uMaxHaze: { value: 0.84 },
+};
+
+/**
+ * Injects height-attenuated volumetric distance haze & aerial sun-scattering perspective
+ * onto large landscape/mountain PBR materials so distant Himalayan ridges gain scale and depth.
+ */
+export function applyVolumetricHazeShader(mat: THREE.MeshStandardMaterial): void {
+  mat.customProgramCacheKey = () => 'volumetric-haze-v1';
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uHazeColor = WORLD_HAZE_UNIFORMS.uHazeColor;
+    shader.uniforms.uSunDir = WORLD_HAZE_UNIFORMS.uSunDir;
+    shader.uniforms.uSunColor = WORLD_HAZE_UNIFORMS.uSunColor;
+    shader.uniforms.uHazeDensity = WORLD_HAZE_UNIFORMS.uHazeDensity;
+    shader.uniforms.uHeightFalloff = WORLD_HAZE_UNIFORMS.uHeightFalloff;
+    shader.uniforms.uMaxHaze = WORLD_HAZE_UNIFORMS.uMaxHaze;
+
+    shader.vertexShader = `varying vec3 vHazeWorldPos;\n${shader.vertexShader}`.replace(
+      '#include <project_vertex>',
+      `#ifdef USE_INSTANCING
+         vHazeWorldPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+       #else
+         vHazeWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+       #endif
+       #include <project_vertex>`,
+    );
+
+    shader.fragmentShader = `
+      uniform vec3 uHazeColor;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uHazeDensity;
+      uniform float uHeightFalloff;
+      uniform float uMaxHaze;
+      varying vec3 vHazeWorldPos;
+      ${shader.fragmentShader}
+    `.replace(
+      '#include <fog_fragment>',
+      `#include <fog_fragment>
+      {
+        vec3 toFrag = vHazeWorldPos - cameraPosition;
+        float fragDist = length(toFrag);
+        vec3 rayDir = toFrag / max(fragDist, 0.0001);
+        float camH = max(cameraPosition.y, -2.0);
+        float fragH = max(vHazeWorldPos.y, -2.0);
+        float avgH = mix(camH, fragH, 0.48);
+        float heightAtten = exp(-max(0.0, avgH + 1.5) * uHeightFalloff);
+        float opticalDepth = max(0.0, fragDist - 18.0) * uHazeDensity * (0.34 + 0.66 * heightAtten);
+        float hazeFactor = clamp(1.0 - exp(-opticalDepth), 0.0, uMaxHaze);
+        float sunScatter = pow(max(dot(rayDir, normalize(uSunDir)), 0.0), 5.0);
+        vec3 aerialTint = mix(uHazeColor, mix(uHazeColor, uSunColor, 0.42), sunScatter * 0.65);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, aerialTint, hazeFactor);
+      }`,
+    );
+  };
+}
 
 export interface AnimatedWaterController {
   group: THREE.Group;
@@ -220,10 +286,13 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
     vertexColors: true,
     normalMap: textures.rockNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
+    aoMap: textures.rockAo,
+    aoMapIntensity: 0.72,
     roughness: 0.9,
     metalness: 0.03,
     flatShading: false,
   });
+  applyVolumetricHazeShader(mat);
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -237,6 +306,7 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
  */
 export function createMountainClouds(): MountainCloudController {
   const group = new THREE.Group();
+  group.userData.nonCollidable = true;
 
   const cCanvas = document.createElement('canvas');
   cCanvas.width = 256;
@@ -269,27 +339,36 @@ export function createMountainClouds(): MountainCloudController {
   const ribbonGeo = new THREE.PlaneGeometry(110, 22);
   const banks: Array<{ obj: THREE.Group; baseX: number; speed: number; phase: number }> = [];
 
-  const seeds: Array<[number, number, number, number]> = [
-    [-190, 42, -255, 1.15],
-    [-65, 48, -280, 1.3],
-    [78, 46, -268, 1.2],
-    [195, 43, -245, 1.1],
+  const seeds: Array<[number, number, number, number, number]> = [
+    [-190, 42, -255, 1.15, 0],
+    [-65, 48, -280, 1.3, 1],
+    [78, 46, -268, 1.2, 2],
+    [195, 43, -245, 1.1, 3],
+    // Low-altitude drifting Himalayan valley mist banks along the northern foothills
+    [-150, 10.5, -175, 1.35, 4],
+    [-42, 9.2, -168, 1.45, 5],
+    [65, 11.0, -172, 1.3, 6],
+    [155, 9.8, -162, 1.25, 7],
   ];
 
-  seeds.forEach(([x, y, z, s], idx) => {
+  const mistMat = cloudMat.clone();
+  mistMat.opacity = 0.24;
+
+  seeds.forEach(([x, y, z, s, idx]) => {
     const cluster = new THREE.Group();
     cluster.position.set(x, y, z);
-    const p1 = new THREE.Mesh(ribbonGeo, cloudMat);
+    const mat = idx >= 4 ? mistMat : cloudMat;
+    const p1 = new THREE.Mesh(ribbonGeo, mat);
     p1.scale.set(s, s, 1);
-    const p2 = new THREE.Mesh(ribbonGeo, cloudMat);
-    p2.position.set(22 * s, 3.5, -8);
+    const p2 = new THREE.Mesh(ribbonGeo, mat);
+    p2.position.set(22 * s, idx >= 4 ? 1.8 : 3.5, -8);
     p2.scale.set(s * 0.78, s * 0.75, 1);
     cluster.add(p1, p2);
     group.add(cluster);
     banks.push({
       obj: cluster,
       baseX: x,
-      speed: 1.4 + (idx % 3) * 0.45,
+      speed: (idx >= 4 ? 0.9 : 1.4) + (idx % 3) * 0.45,
       phase: idx * 1.3,
     });
   });
@@ -389,6 +468,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     roughness: 0.94,
     metalness: 0.02,
   });
+  applyVolumetricHazeShader(mat);
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -400,6 +480,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
  */
 export function createInstancedGrassField(): AnimatedGrassController {
   const group = new THREE.Group();
+  group.userData.nonCollidable = true;
   const roadSamples = sampleRoadPoints();
   const plazas = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 8.5 },
@@ -636,6 +717,7 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   const waterMesh = new THREE.Mesh(geo, mat);
   waterMesh.position.y = -0.34;
   waterMesh.receiveShadow = true;
+  waterMesh.userData.nonCollidable = true;
   group.add(waterMesh);
 
   const stoneGeo = new THREE.IcosahedronGeometry(0.82, 2);
@@ -652,6 +734,8 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   const riverStoneMat = new THREE.MeshStandardMaterial({
     normalMap: textures.rockNormal,
     normalScale: new THREE.Vector2(0.95, 0.95),
+    aoMap: textures.rockAo,
+    aoMapIntensity: 0.78,
     color: 0xffffff,
     roughness: 0.38,
     metalness: 0.04,
@@ -740,8 +824,10 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     normalMap: textures.cobbleNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
     roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.88,
     color: 0xffffff,
-    roughness: 0.88,
+    roughness: 1.0,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -757,14 +843,19 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   const roadCobbleRough = textures.cobbleRough.clone();
   roadCobbleRough.repeat.set(1, 1);
   roadCobbleRough.needsUpdate = true;
+  const roadCobbleAo = textures.cobbleAo.clone();
+  roadCobbleAo.repeat.set(1, 1);
+  roadCobbleAo.needsUpdate = true;
 
   const roadRibbonMat = new THREE.MeshStandardMaterial({
     map: roadCobbleColor,
     normalMap: roadCobbleNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
     roughnessMap: roadCobbleRough,
+    aoMap: roadCobbleAo,
+    aoMapIntensity: 0.88,
     color: 0xffffff,
-    roughness: 0.88,
+    roughness: 1.0,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -773,19 +864,24 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   const curbMat = new THREE.MeshStandardMaterial({
     map: textures.sandstoneMap,
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.5, 0.5),
-    color: 0x9b9589,
-    roughness: 0.88,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.85,
+    color: 0xa69f93,
+    roughness: 1.0,
     metalness: 0.03,
   });
 
   const sandstonePlazaMat = new THREE.MeshStandardMaterial({
     map: textures.sandstoneMap,
     normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.8, 0.8),
+    normalScale: new THREE.Vector2(0.82, 0.82),
     roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.86,
     color: 0xffffff,
-    roughness: 0.84,
+    roughness: 1.0,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -814,7 +910,11 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     group.add(pad, rim);
   }
 
-  const curbTransforms: THREE.Matrix4[] = [];
+  const curbPositions: number[] = [];
+  const curbUvs: number[] = [];
+  const curbIndices: number[] = [];
+  let curbVertCount = 0;
+
   for (const rawPts of ROAD_PATHS) {
     const pts = trimPathBetweenPlazas(rawPts, aprons);
     const curve = new THREE.CatmullRomCurve3(
@@ -830,6 +930,17 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     const positions: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
+
+    const ringMeta: Array<{
+      lx: number;
+      lz: number;
+      rxp: number;
+      rzp: number;
+      dirX: number;
+      dirZ: number;
+      deckY: number;
+      v: number;
+    }> = [];
 
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -852,7 +963,6 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
       const srx = p.x + dirX * outerW;
       const srz = p.z + dirZ * outerW;
 
-      // Level cross-section deck height so left & right road edges never cant or sink under sloped grass
       const deckY =
         Math.max(
           groundHeightAt(p.x, p.z),
@@ -879,7 +989,6 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
       if (i < steps) {
         const base = i * 4;
         const next = base + 4;
-        // Left sloped shoulder, flat level crown deck, right sloped shoulder
         indices.push(base, base + 1, next);
         indices.push(base + 1, next + 1, next);
         indices.push(base + 1, base + 2, next + 1);
@@ -888,22 +997,7 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
         indices.push(base + 3, next + 3, next + 2);
       }
 
-      if (i % 2 === 0) {
-        for (const side of [-1, 1]) {
-          const cx = p.x + dirX * (halfW + 0.16) * side;
-          const cz = p.z + dirZ * (halfW + 0.16) * side;
-          // Exclude road curb blocks inside Janaki Chowk plaza or overlapping its East/South gate thresholds
-          if (cx > -131.5 && cx < -53.0 && cz > 70 && cz < 150.4) continue;
-          const cy = deckY;
-          if (cy > -0.1) {
-            _vec3.set(cx, cy + 0.035, cz);
-            _quat.setFromEuler(_euler.set(0, Math.atan2(tan.x, tan.z), 0));
-            _scale.set(1, 1, 1);
-            _mat4.compose(_vec3, _quat, _scale);
-            curbTransforms.push(_mat4.clone());
-          }
-        }
-      }
+      ringMeta.push({ lx, lz, rxp, rzp, dirX, dirZ, deckY, v });
     }
 
     const roadGeo = new THREE.BufferGeometry();
@@ -914,25 +1008,83 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     const roadMesh = new THREE.Mesh(roadGeo, roadRibbonMat);
     roadMesh.receiveShadow = true;
     group.add(roadMesh);
+
+    // Continuous flush beveled granite curbstone ribbons on both road shoulders (no gapped boxes)
+    const curbW = 0.28;
+    const curbTop = 0.068;
+    const curbBot = -0.18;
+    for (const side of [-1, 1]) {
+      let prevRingStart = -1;
+      for (let i = 0; i <= steps; i++) {
+        const rm = ringMeta[i];
+        const baseX = side === -1 ? rm.lx : rm.rxp;
+        const baseZ = side === -1 ? rm.lz : rm.rzp;
+        const inChowk =
+          baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
+        if (inChowk || rm.deckY <= -0.1) {
+          prevRingStart = -1;
+          continue;
+        }
+        const outX = rm.dirX * side;
+        const outZ = rm.dirZ * side;
+        const ix = baseX - outX * 0.02;
+        const iz = baseZ - outZ * 0.02;
+        const ox = baseX + outX * curbW;
+        const oz = baseZ + outZ * curbW;
+        const topY = rm.deckY + curbTop;
+        const botY = rm.deckY + curbBot;
+
+        const ringStart = curbVertCount;
+        // 4-point beveled profile: inner-base, inner-top, outer-top, outer-base
+        curbPositions.push(
+          ix, rm.deckY - 0.04, iz,
+          ix + outX * 0.03, topY, iz + outZ * 0.03,
+          ox - outX * 0.03, topY, oz - outZ * 0.03,
+          ox, botY, oz,
+        );
+        curbUvs.push(0, rm.v, 0.25, rm.v, 0.75, rm.v, 1, rm.v);
+        curbVertCount += 4;
+
+        if (prevRingStart >= 0) {
+          for (let s = 0; s < 3; s++) {
+            const a = prevRingStart + s;
+            const b = prevRingStart + s + 1;
+            const c = ringStart + s;
+            const d = ringStart + s + 1;
+            if (side === 1) {
+              curbIndices.push(a, b, c, b, d, c);
+            } else {
+              curbIndices.push(a, c, b, b, c, d);
+            }
+          }
+        }
+        prevRingStart = ringStart;
+      }
+    }
   }
 
-  if (curbTransforms.length > 0) {
-    const curbGeo = new THREE.BoxGeometry(0.32, 0.18, 0.72);
-    const curbInst = new THREE.InstancedMesh(curbGeo, curbMat, curbTransforms.length);
-    curbTransforms.forEach((m, i) => curbInst.setMatrixAt(i, m));
-    curbInst.castShadow = true;
-    curbInst.receiveShadow = true;
-    curbInst.instanceMatrix.needsUpdate = true;
-    curbInst.computeBoundingSphere();
-    group.add(curbInst);
+  if (curbPositions.length > 0) {
+    const continuousCurbGeo = new THREE.BufferGeometry();
+    continuousCurbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbPositions, 3));
+    continuousCurbGeo.setAttribute('uv', new THREE.Float32BufferAttribute(curbUvs, 2));
+    continuousCurbGeo.setIndex(curbIndices);
+    continuousCurbGeo.computeVertexNormals();
+    const continuousCurbMesh = new THREE.Mesh(continuousCurbGeo, curbMat);
+    continuousCurbMesh.castShadow = true;
+    continuousCurbMesh.receiveShadow = true;
+    group.add(continuousCurbMesh);
   }
 
   const lanternCoords = ROAD_LANTERN_COORDS;
   const lanternStoneMat = new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
-    color: 0x8b8a84,
-    roughness: 0.88,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    roughnessMap: textures.cobbleRough,
+    aoMap: textures.cobbleAo,
+    aoMapIntensity: 0.86,
+    color: 0x94938c,
+    roughness: 1.0,
   });
   const lanternBronzeMat = new THREE.MeshStandardMaterial({
     color: 0x8c6427,
@@ -991,6 +1143,7 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     const ly = groundHeightAt(lx, lz);
     const post = new THREE.Group();
     post.position.set(lx, ly, lz);
+    post.userData.snapCategory = 'lantern';
 
     const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.62), lanternStoneMat);
     plinth.position.y = 0.1;
@@ -1037,15 +1190,125 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   return { group, lanternLights };
 }
 
+function mergeStaticGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const nonIndexed = geos.map((g) => (g.index ? g.toNonIndexed() : g));
+  let totalVerts = 0;
+  for (const g of nonIndexed) {
+    totalVerts += g.attributes.position.count;
+  }
+  const posArr = new Float32Array(totalVerts * 3);
+  const normArr = new Float32Array(totalVerts * 3);
+  const uvArr = new Float32Array(totalVerts * 2);
+
+  let vOffset = 0;
+  for (const g of nonIndexed) {
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const pos = g.attributes.position;
+    const norm = g.attributes.normal;
+    const uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const dst3 = (vOffset + i) * 3;
+      const dst2 = (vOffset + i) * 2;
+      posArr[dst3] = pos.getX(i);
+      posArr[dst3 + 1] = pos.getY(i);
+      posArr[dst3 + 2] = pos.getZ(i);
+      normArr[dst3] = norm.getX(i);
+      normArr[dst3 + 1] = norm.getY(i);
+      normArr[dst3 + 2] = norm.getZ(i);
+      uvArr[dst2] = uv ? uv.getX(i) : 0;
+      uvArr[dst2 + 1] = uv ? uv.getY(i) : 0;
+    }
+    vOffset += pos.count;
+  }
+
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(normArr, 3));
+  const uvAttr = new THREE.BufferAttribute(uvArr, 2);
+  out.setAttribute('uv', uvAttr);
+  out.setAttribute('uv1', uvAttr.clone());
+  return out;
+}
+
+function makeBranchSkeletonGeo(
+  curves: Array<{ pts: Array<[number, number, number]>; rStart: number; rEnd: number }>,
+): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const br of curves) {
+    const curve = new THREE.CatmullRomCurve3(
+      br.pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)),
+    );
+    const tube = new THREE.TubeGeometry(curve, 8, (br.rStart + br.rEnd) * 0.5, 6, false);
+    const p = tube.attributes.position;
+    // Taper radius cleanly along curve length
+    const center = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      const ringIdx = Math.floor(i / 7);
+      const t = Math.min(1, ringIdx / 8);
+      curve.getPointAt(t, center);
+      const taper = THREE.MathUtils.lerp(br.rStart, br.rEnd, t) / ((br.rStart + br.rEnd) * 0.5);
+      p.setXYZ(
+        i,
+        center.x + (p.getX(i) - center.x) * taper,
+        center.y + (p.getY(i) - center.y) * taper,
+        center.z + (p.getZ(i) - center.z) * taper,
+      );
+    }
+    tube.computeVertexNormals();
+    parts.push(tube);
+  }
+  return mergeStaticGeometries(parts);
+}
+
+function makeBotanicalCanopySprayGeo(
+  clusters: Array<{
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    h: number;
+    rx: number;
+    ry: number;
+    rz: number;
+    arch: number;
+  }>,
+): THREE.BufferGeometry {
+  const planes: THREE.BufferGeometry[] = [];
+  for (const cl of clusters) {
+    for (let cross = 0; cross < 2; cross++) {
+      const g = new THREE.PlaneGeometry(cl.w, cl.h, 2, 3);
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i);
+        const py = pos.getY(i);
+        const nx = px / (cl.w * 0.5);
+        const ny = py / (cl.h * 0.5);
+        const dome = (1 - (nx * nx * 0.55 + ny * ny * 0.55)) * cl.arch;
+        pos.setZ(i, dome);
+      }
+      g.rotateX(cl.rx + (cross === 1 ? 0.28 : 0));
+      g.rotateY(cl.ry + cross * (Math.PI * 0.5));
+      g.rotateZ(cl.rz);
+      g.translate(cl.x, cl.y, cl.z);
+      g.computeVertexNormals();
+      planes.push(g);
+    }
+  }
+  return mergeStaticGeometries(planes);
+}
+
 export function createInstancedFoliage(
   textures: ProceduralTextureSet,
 ): THREE.Group {
   const group = new THREE.Group();
   const treeSpots = getWorldTreeSpots();
 
-  const deodars = treeSpots.filter((t) => t.type === 'deodar');
-  const rhodos = treeSpots.filter((t) => t.type === 'rhodo');
-  const palms = treeSpots.filter((t) => t.type === 'palm');
+  const bySpecies = new Map<TreeSpecies, TreeSpot[]>();
+  for (const spot of treeSpots) {
+    const arr = bySpecies.get(spot.type);
+    if (arr) arr.push(spot);
+    else bySpecies.set(spot.type, [spot]);
+  }
 
   const barkMat = new THREE.MeshStandardMaterial({
     map: textures.barkMap,
@@ -1055,87 +1318,304 @@ export function createInstancedFoliage(
     roughness: 0.92,
   });
 
-  // 1. Dense Multi-Tiered Himalayan Deodar / Spruce Cedars (overlapping organic scalloped bough tiers)
-  if (deodars.length > 0) {
-    const trunkGeo = new THREE.CylinderGeometry(0.08, 0.28, 4.3, 9);
-    trunkGeo.translate(0, 2.15, 0);
+  const silverBirchBarkMat = new THREE.MeshStandardMaterial({
+    map: textures.barkSilverBirchMap,
+    normalMap: textures.barkNormal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    color: 0xffffff,
+    roughness: 0.82,
+  });
 
-    const makeBoughTier = (r: number, h: number, yPos: number, seed: number) => {
-      const cGeo = new THREE.ConeGeometry(r, h, 18, 4, false);
-      const p = cGeo.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const vx = p.getX(i);
-        const vy = p.getY(i);
-        const vz = p.getZ(i);
-        const angle = Math.atan2(vz, vx);
-        const normY = (vy + h * 0.5) / h; // 0 = bottom rim, 1 = tip
-        const branchLobe =
-          0.26 * Math.sin(angle * 7 + seed) +
-          0.16 * Math.cos(angle * 11 - seed * 1.4) +
-          0.09 * Math.sin(angle * 17 + seed * 0.6);
-        const rimFlute = (1 - normY) * branchLobe;
-        const radial = Math.hypot(vx, vz);
-        if (radial > 0.01) {
-          const factor = 1 + rimFlute;
-          const droop = (1 - normY) * -0.22 * (0.45 + 0.55 * Math.sin(angle * 7 + seed));
-          p.setXYZ(i, vx * factor, vy + droop, vz * factor);
-        }
-      }
-      cGeo.computeVertexNormals();
-      cGeo.translate(0, yPos, 0);
-      return cGeo;
-    };
-
-    const t1 = makeBoughTier(1.72, 1.45, 2.0, 0.4);
-    const t2 = makeBoughTier(1.46, 1.38, 2.8, 1.6);
-    const t3 = makeBoughTier(1.18, 1.28, 3.55, 2.8);
-    const t4 = makeBoughTier(0.88, 1.15, 4.25, 4.1);
-    const t5 = makeBoughTier(0.56, 0.95, 4.88, 5.3);
-
-    const pineMat = new THREE.MeshStandardMaterial({
-      map: textures.pineCanopyMap,
-      normalMap: textures.rockNormal,
-      normalScale: new THREE.Vector2(0.45, 0.45),
+  const makeFoliageMat = (map: THREE.Texture, roughness = 0.78) =>
+    new THREE.MeshStandardMaterial({
+      map,
+      alphaTest: 0.34,
       color: 0xffffff,
-      roughness: 0.9,
+      roughness,
       metalness: 0.01,
+      side: THREE.DoubleSide,
     });
 
-    const mTrunks = new THREE.InstancedMesh(trunkGeo, barkMat, deodars.length);
-    const mT1 = new THREE.InstancedMesh(t1, pineMat, deodars.length);
-    const mT2 = new THREE.InstancedMesh(t2, pineMat, deodars.length);
-    const mT3 = new THREE.InstancedMesh(t3, pineMat, deodars.length);
-    const mT4 = new THREE.InstancedMesh(t4, pineMat, deodars.length);
-    const mT5 = new THREE.InstancedMesh(t5, pineMat, deodars.length);
+  const makeFoliageDepthMat = (map: THREE.Texture) =>
+    new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking,
+      map,
+      alphaTest: 0.34,
+    });
 
-    deodars.forEach((p, idx) => {
+  // Shared branching trunks & rich organic alpha-cutout canopy sprays across 11 real-world species
+  const wideGnarledTrunkGeo = makeBranchSkeletonGeo([
+    { pts: [[0, 0, 0], [0.06, 1.05, 0.03], [-0.04, 2.05, -0.02]], rStart: 0.25, rEnd: 0.14 },
+    { pts: [[-0.02, 1.75, 0], [-0.62, 2.38, 0.38], [-1.24, 2.75, 0.65]], rStart: 0.12, rEnd: 0.045 },
+    { pts: [[0.02, 1.82, -0.02], [0.68, 2.45, -0.35], [1.28, 2.84, -0.62]], rStart: 0.12, rEnd: 0.045 },
+    { pts: [[-0.03, 1.9, 0.02], [-0.42, 2.52, -0.68], [-0.76, 2.95, -1.16]], rStart: 0.11, rEnd: 0.04 },
+    { pts: [[0.01, 1.95, 0.04], [0.46, 2.58, 0.66], [0.82, 3.05, 1.1]], rStart: 0.11, rEnd: 0.04 },
+  ]);
+
+  const tallForkedTrunkGeo = makeBranchSkeletonGeo([
+    { pts: [[0, 0, 0], [0.04, 1.35, -0.03], [-0.02, 2.7, 0.04], [0.03, 3.6, 0]], rStart: 0.24, rEnd: 0.08 },
+    { pts: [[0, 2.2, 0], [-0.72, 2.92, 0.34], [-1.18, 3.45, 0.56]], rStart: 0.11, rEnd: 0.04 },
+    { pts: [[0, 2.4, 0], [0.75, 3.1, -0.28], [1.22, 3.62, -0.52]], rStart: 0.11, rEnd: 0.04 },
+    { pts: [[0, 2.6, 0], [-0.36, 3.3, -0.72], [-0.6, 3.85, -1.05]], rStart: 0.095, rEnd: 0.035 },
+    { pts: [[0, 2.7, 0], [0.32, 3.42, 0.72], [0.55, 3.95, 1.02]], rStart: 0.095, rEnd: 0.035 },
+  ]);
+
+  const birchMultiStemGeo = makeBranchSkeletonGeo([
+    { pts: [[-0.12, 0, 0.05], [-0.32, 1.6, 0.18], [-0.52, 3.45, 0.28]], rStart: 0.12, rEnd: 0.038 },
+    { pts: [[0.14, 0, -0.06], [0.36, 1.75, -0.16], [0.56, 3.7, -0.26]], rStart: 0.12, rEnd: 0.038 },
+    { pts: [[0.0, 0, 0.0], [0.05, 1.9, 0.04], [-0.08, 3.95, -0.06]], rStart: 0.14, rEnd: 0.04 },
+    { pts: [[-0.25, 2.1, 0.12], [-0.78, 2.9, 0.48]], rStart: 0.05, rEnd: 0.02 },
+    { pts: [[0.28, 2.3, -0.1], [0.85, 3.15, -0.45]], rStart: 0.05, rEnd: 0.02 },
+  ]);
+
+  const coniferTrunkGeo = makeBranchSkeletonGeo([
+    { pts: [[0, 0, 0], [0.03, 2.1, -0.02], [-0.02, 4.3, 0.02], [0, 5.5, 0]], rStart: 0.24, rEnd: 0.04 },
+    { pts: [[0, 1.85, 0], [-0.85, 1.72, 0.25]], rStart: 0.065, rEnd: 0.02 },
+    { pts: [[0, 2.15, 0], [0.82, 2.02, -0.25]], rStart: 0.065, rEnd: 0.02 },
+    { pts: [[0, 2.65, 0], [0.18, 2.52, 0.72]], rStart: 0.055, rEnd: 0.02 },
+    { pts: [[0, 3.15, 0], [-0.22, 3.02, -0.68]], rStart: 0.05, rEnd: 0.02 },
+  ]);
+
+  const wideUmbrellaSprayGeo = makeBotanicalCanopySprayGeo([
+    { x: 0, y: 3.45, z: 0, w: 2.35, h: 2.05, rx: 0.22, ry: 0.15, rz: 0.05, arch: 0.45 },
+    { x: -1.15, y: 2.85, z: 0.58, w: 1.95, h: 1.75, rx: 0.35, ry: 0.7, rz: 0.14, arch: 0.38 },
+    { x: 1.22, y: 2.95, z: -0.52, w: 1.95, h: 1.75, rx: 0.32, ry: -0.6, rz: -0.12, arch: 0.38 },
+    { x: -0.72, y: 3.05, z: -1.08, w: 1.85, h: 1.7, rx: -0.3, ry: 0.4, rz: 0.1, arch: 0.35 },
+    { x: 0.78, y: 3.12, z: 1.02, w: 1.85, h: 1.7, rx: 0.32, ry: -0.35, rz: -0.08, arch: 0.35 },
+    { x: -0.45, y: 3.65, z: 0.32, w: 1.65, h: 1.5, rx: 0.18, ry: 1.1, rz: 0.04, arch: 0.3 },
+    { x: 0.48, y: 3.72, z: -0.28, w: 1.65, h: 1.5, rx: -0.2, ry: 2.1, rz: -0.04, arch: 0.3 },
+  ]);
+
+  const tallCrownSprayGeo = makeBotanicalCanopySprayGeo([
+    { x: 0, y: 4.15, z: 0, w: 2.1, h: 2.05, rx: 0.25, ry: 0.2, rz: 0.05, arch: 0.42 },
+    { x: -1.05, y: 3.45, z: 0.52, w: 1.8, h: 1.75, rx: 0.34, ry: 0.85, rz: 0.12, arch: 0.34 },
+    { x: 1.1, y: 3.55, z: -0.48, w: 1.8, h: 1.75, rx: -0.32, ry: 0.55, rz: -0.1, arch: 0.34 },
+    { x: -0.58, y: 3.72, z: -0.95, w: 1.7, h: 1.65, rx: -0.28, ry: 1.4, rz: 0.08, arch: 0.32 },
+    { x: 0.52, y: 3.85, z: 0.94, w: 1.7, h: 1.65, rx: 0.28, ry: -1.1, rz: -0.08, arch: 0.32 },
+    { x: 0.1, y: 4.55, z: 0.1, w: 1.55, h: 1.55, rx: 0.16, ry: 0.9, rz: 0.02, arch: 0.28 },
+  ]);
+
+  const weepingWillowSprayGeo = makeBotanicalCanopySprayGeo([
+    { x: 0, y: 3.85, z: 0, w: 2.15, h: 2.35, rx: 0.12, ry: 0.1, rz: 0.04, arch: 0.38 },
+    { x: -1.2, y: 2.75, z: 0.45, w: 1.65, h: 2.75, rx: 0.08, ry: 0.72, rz: 0.12, arch: 0.28 },
+    { x: 1.2, y: 2.75, z: -0.45, w: 1.65, h: 2.75, rx: -0.08, ry: -0.72, rz: -0.12, arch: 0.28 },
+    { x: -0.48, y: 2.8, z: -1.15, w: 1.65, h: 2.7, rx: -0.1, ry: 1.4, rz: 0.08, arch: 0.28 },
+    { x: 0.48, y: 2.8, z: 1.15, w: 1.65, h: 2.7, rx: 0.1, ry: -1.4, rz: -0.08, arch: 0.28 },
+    { x: -0.95, y: 3.25, z: -0.82, w: 1.55, h: 2.45, rx: -0.1, ry: 0.45, rz: 0.06, arch: 0.25 },
+    { x: 0.95, y: 3.25, z: 0.82, w: 1.55, h: 2.45, rx: 0.1, ry: -0.45, rz: -0.06, arch: 0.25 },
+  ]);
+
+  const deodarBoughSprayGeo = makeBotanicalCanopySprayGeo([
+    { x: -0.75, y: 1.95, z: 0.55, w: 1.85, h: 1.25, rx: -1.15, ry: 0.5, rz: 0.12, arch: 0.24 },
+    { x: 0.78, y: 1.98, z: -0.52, w: 1.85, h: 1.25, rx: 1.15, ry: 0.6, rz: -0.12, arch: 0.24 },
+    { x: -0.52, y: 2.02, z: -0.78, w: 1.8, h: 1.25, rx: 1.18, ry: 2.1, rz: 0.08, arch: 0.24 },
+    { x: 0.55, y: 2.05, z: 0.75, w: 1.8, h: 1.25, rx: -1.18, ry: -0.8, rz: -0.08, arch: 0.24 },
+    { x: -0.55, y: 2.95, z: 0.42, w: 1.5, h: 1.1, rx: -1.1, ry: 0.9, rz: 0.1, arch: 0.22 },
+    { x: 0.58, y: 3.0, z: -0.42, w: 1.5, h: 1.1, rx: 1.1, ry: 0.3, rz: -0.1, arch: 0.22 },
+    { x: 0.0, y: 3.85, z: 0.0, w: 1.45, h: 1.15, rx: -1.05, ry: 1.5, rz: 0.05, arch: 0.2 },
+    { x: 0.0, y: 4.75, z: 0.0, w: 1.05, h: 1.1, rx: 0.3, ry: 0.4, rz: 0.0, arch: 0.18 },
+    { x: 0.0, y: 5.35, z: 0.0, w: 0.72, h: 0.9, rx: 0.1, ry: 1.2, rz: 0.0, arch: 0.14 },
+  ]);
+
+  const cypressColumnSprayGeo = makeBotanicalCanopySprayGeo([
+    { x: 0, y: 1.85, z: 0, w: 1.05, h: 1.75, rx: 0.08, ry: 0.2, rz: 0.04, arch: 0.22 },
+    { x: 0, y: 2.95, z: 0, w: 0.95, h: 1.85, rx: -0.08, ry: 1.05, rz: -0.04, arch: 0.2 },
+    { x: 0, y: 4.05, z: 0, w: 0.8, h: 1.75, rx: 0.06, ry: 0.65, rz: 0.03, arch: 0.16 },
+    { x: 0, y: 5.05, z: 0, w: 0.55, h: 1.35, rx: -0.05, ry: 1.5, rz: -0.02, arch: 0.12 },
+  ]);
+
+  interface SpeciesBuildConfig {
+    trunkGeo: THREE.BufferGeometry;
+    trunkMat: THREE.Material;
+    canopyGeo: THREE.BufferGeometry;
+    canopyTex: THREE.Texture;
+    palette: number[];
+    roughness?: number;
+  }
+
+  const speciesConfigs: Record<Exclude<TreeSpecies, 'palm'>, SpeciesBuildConfig> = {
+    sakura: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.sakuraBlossomMap,
+      palette: [0xffd8e4, 0xffc6d9, 0xffe6ef, 0xf7b8cd],
+      roughness: 0.68,
+    },
+    maple: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.mapleFoliageMap,
+      palette: [0xd94b2b, 0xe8732a, 0xc43728, 0xeb922f],
+      roughness: 0.74,
+    },
+    jacaranda: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.jacarandaBloomMap,
+      palette: [0x9275eb, 0xa88ef5, 0x8062db, 0xb89ef7],
+      roughness: 0.7,
+    },
+    gulmohar: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.gulmoharBloomMap,
+      palette: [0xf25224, 0xf57827, 0xdc3a20, 0xf7942a],
+      roughness: 0.7,
+    },
+    willow: {
+      trunkGeo: tallForkedTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: weepingWillowSprayGeo,
+      canopyTex: textures.willowFrondMap,
+      palette: [0x7ea64b, 0x6f9641, 0x8cb356, 0x648a38],
+      roughness: 0.76,
+    },
+    birch: {
+      trunkGeo: birchMultiStemGeo,
+      trunkMat: silverBirchBarkMat,
+      canopyGeo: tallCrownSprayGeo,
+      canopyTex: textures.birchLeafMap,
+      palette: [0xd2de64, 0xb8cf55, 0xe5d75c, 0x9ec250],
+      roughness: 0.75,
+    },
+    peepal: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.broadleafFoliageMap,
+      palette: [0x58873d, 0x669647, 0x4b7733, 0x72a150],
+      roughness: 0.78,
+    },
+    rhodo: {
+      trunkGeo: wideGnarledTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: wideUmbrellaSprayGeo,
+      canopyTex: textures.gulmoharBloomMap,
+      palette: [0xba2544, 0xcf3255, 0xa31b38, 0xd64566],
+      roughness: 0.72,
+    },
+    deodar: {
+      trunkGeo: coniferTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: deodarBoughSprayGeo,
+      canopyTex: textures.pineNeedlesMap,
+      palette: [0x4c6e4b, 0x426141, 0x577a54, 0x3b573b],
+      roughness: 0.84,
+    },
+    cypress: {
+      trunkGeo: coniferTrunkGeo,
+      trunkMat: barkMat,
+      canopyGeo: cypressColumnSprayGeo,
+      canopyTex: textures.pineNeedlesMap,
+      palette: [0x3d5c42, 0x344f38, 0x47694b],
+      roughness: 0.84,
+    },
+  };
+
+  (Object.keys(speciesConfigs) as Array<Exclude<TreeSpecies, 'palm'>>).forEach((sp, spIdx) => {
+    const spots = bySpecies.get(sp);
+    if (!spots || spots.length === 0) return;
+    const cfg = speciesConfigs[sp];
+    const canopyMat = makeFoliageMat(cfg.canopyTex, cfg.roughness ?? 0.76);
+    const depthMat = makeFoliageDepthMat(cfg.canopyTex);
+
+    const mTrunks = new THREE.InstancedMesh(cfg.trunkGeo, cfg.trunkMat, spots.length);
+    const mCanopy = new THREE.InstancedMesh(cfg.canopyGeo, canopyMat, spots.length);
+    mCanopy.userData.nonCollidable = true;
+    mCanopy.customDepthMaterial = depthMat;
+
+    spots.forEach((p, idx) => {
       const y = groundHeightAt(p.x, p.z);
       _vec3.set(p.x, y - 0.06, p.z);
-      _quat.setFromEuler(_euler.set(0, idx * 1.15, 0));
-      _scale.set(p.scale, p.scale * (0.95 + (idx % 3) * 0.08), p.scale);
+      _quat.setFromEuler(_euler.set(0, idx * 1.47 + spIdx * 0.7, 0));
+      const hStretch = 0.92 + ((idx * 11) % 24) / 100;
+      _scale.set(p.scale, p.scale * hStretch, p.scale);
       _mat4.compose(_vec3, _quat, _scale);
       mTrunks.setMatrixAt(idx, _mat4);
-      mT1.setMatrixAt(idx, _mat4);
-      mT2.setMatrixAt(idx, _mat4);
-      mT3.setMatrixAt(idx, _mat4);
-      mT4.setMatrixAt(idx, _mat4);
-      mT5.setMatrixAt(idx, _mat4);
-
-      const tint = idx % 3;
-      // Subtle ambient-occlusion vertical gradient from deep shaded lower boughs to sunlit crown tip
-      _color.setHex(tint === 0 ? 0x6f846b : tint === 1 ? 0x677c64 : 0x768b71);
-      mT1.setColorAt(idx, _color);
-      _color.setHex(tint === 0 ? 0x7c9277 : tint === 1 ? 0x73886f : 0x84997e);
-      mT2.setColorAt(idx, _color);
-      _color.setHex(tint === 0 ? 0x89a083 : tint === 1 ? 0x80967b : 0x91a88b);
-      mT3.setColorAt(idx, _color);
-      _color.setHex(tint === 0 ? 0x96ad8f : tint === 1 ? 0x8da487 : 0x9eb696);
-      mT4.setColorAt(idx, _color);
-      _color.setHex(tint === 0 ? 0xa3ba9b : tint === 1 ? 0x9ab192 : 0xabc2a3);
-      mT5.setColorAt(idx, _color);
+      mCanopy.setMatrixAt(idx, _mat4);
+      _color.setHex(cfg.palette[idx % cfg.palette.length]);
+      mCanopy.setColorAt(idx, _color);
     });
 
-    [mTrunks, mT1, mT2, mT3, mT4, mT5].forEach((m) => {
+    [mTrunks, mCanopy].forEach((m) => {
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      m.computeBoundingSphere();
+      group.add(m);
+    });
+  });
+
+  // Instanced Vellore Tropical Coconut Palms with Pinnate Leaflets
+  const palms = bySpecies.get('palm') ?? [];
+  if (palms.length > 0) {
+    const palmCurvePts = [
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0.14, 1.45, 0.06),
+      new THREE.Vector3(0.32, 3.05, 0.14),
+      new THREE.Vector3(0.4, 4.65, 0.2),
+    ];
+    const palmTrunkGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(palmCurvePts), 12, 0.15, 8, false);
+
+    const frondGeo = new THREE.PlaneGeometry(0.95, 2.55, 2, 7);
+    const fPos = frondGeo.attributes.position;
+    for (let i = 0; i < fPos.count; i++) {
+      const fx = fPos.getX(i);
+      const fy = fPos.getY(i) + 1.275;
+      const t = fy / 2.55;
+      const archY = Math.sin(t * Math.PI * 0.75) * 0.56 - t * t * 0.92;
+      fPos.setXYZ(i, fx, archY, fy);
+    }
+    frondGeo.computeVertexNormals();
+
+    const crownParts: THREE.BufferGeometry[] = [];
+    for (let f = 0; f < 9; f++) {
+      const fg = frondGeo.clone();
+      fg.rotateX(f % 2 === 0 ? 0.08 : 0.24);
+      fg.rotateY((f / 9) * Math.PI * 2);
+      fg.translate(0.4, 4.62, 0.2);
+      crownParts.push(fg);
+    }
+    const palmCrownGeo = mergeStaticGeometries(crownParts);
+
+    const nutParts: THREE.BufferGeometry[] = [];
+    for (let c = 0; c < 4; c++) {
+      const a = (c / 4) * Math.PI * 2;
+      const ng = new THREE.SphereGeometry(0.13, 8, 6);
+      ng.translate(0.4 + Math.cos(a) * 0.16, 4.48, 0.2 + Math.sin(a) * 0.16);
+      nutParts.push(ng);
+    }
+    const palmNutsGeo = mergeStaticGeometries(nutParts);
+
+    const palmMat = makeFoliageMat(textures.palmFrondMap, 0.72);
+    const coconutMat = new THREE.MeshStandardMaterial({ color: 0x4f3a1e, roughness: 0.82 });
+
+    const mPalmTrunks = new THREE.InstancedMesh(palmTrunkGeo, barkMat, palms.length);
+    const mPalmCrowns = new THREE.InstancedMesh(palmCrownGeo, palmMat, palms.length);
+    const mPalmNuts = new THREE.InstancedMesh(palmNutsGeo, coconutMat, palms.length);
+    mPalmCrowns.userData.nonCollidable = true;
+    mPalmNuts.userData.nonCollidable = true;
+    mPalmCrowns.customDepthMaterial = makeFoliageDepthMat(textures.palmFrondMap);
+
+    palms.forEach((p, idx) => {
+      const y = groundHeightAt(p.x, p.z);
+      _vec3.set(p.x, y - 0.05, p.z);
+      _quat.setFromEuler(_euler.set(0, idx * 1.1, 0));
+      _scale.setScalar(p.scale);
+      _mat4.compose(_vec3, _quat, _scale);
+      mPalmTrunks.setMatrixAt(idx, _mat4);
+      mPalmCrowns.setMatrixAt(idx, _mat4);
+      mPalmNuts.setMatrixAt(idx, _mat4);
+      _color.setHex(idx % 2 === 0 ? 0xdbe6cc : 0xcde0bc);
+      mPalmCrowns.setColorAt(idx, _color);
+    });
+
+    [mPalmTrunks, mPalmCrowns, mPalmNuts].forEach((m) => {
       m.castShadow = true;
       m.receiveShadow = true;
       m.instanceMatrix.needsUpdate = true;
@@ -1145,137 +1625,7 @@ export function createInstancedFoliage(
     });
   }
 
-  // 2. Real Organic Himalayan Rhododendrons (Lali Gurans) with smooth organic crowns & crimson blossoms
-  if (rhodos.length > 0) {
-    const rTrunkGeo = new THREE.CylinderGeometry(0.11, 0.23, 2.0, 9);
-    rTrunkGeo.translate(0, 1.0, 0);
-
-    const makeOrganicCanopy = (radius: number, ox: number, oy: number, oz: number) => {
-      const g = new THREE.IcosahedronGeometry(radius, 2);
-      const p = g.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const vx = p.getX(i);
-        const vy = p.getY(i);
-        const vz = p.getZ(i);
-        const disp = 0.86 + 0.22 * Math.sin(vx * 3.8 + vz * 2.9) * Math.cos(vy * 4.2);
-        p.setXYZ(i, vx * disp + ox, vy * disp * 0.78 + oy, vz * disp + oz);
-      }
-      g.computeVertexNormals();
-      return g;
-    };
-
-    const rLeaf1Geo = makeOrganicCanopy(1.06, -0.25, 2.45, 0.12);
-    const rLeaf2Geo = makeOrganicCanopy(0.9, 0.34, 2.78, -0.18);
-    const rBloom1Geo = makeOrganicCanopy(0.24, 0.65, 3.05, 0.36);
-    const rBloom2Geo = makeOrganicCanopy(0.22, -0.56, 2.75, -0.38);
-    const rBloom3Geo = makeOrganicCanopy(0.2, 0.08, 3.3, 0.24);
-
-    const leafMat = new THREE.MeshStandardMaterial({
-      normalMap: textures.meadowNormal,
-      normalScale: new THREE.Vector2(0.45, 0.45),
-      color: 0x2c4a2b,
-      roughness: 0.82,
-    });
-    const bloomMat = new THREE.MeshStandardMaterial({
-      color: 0xa11b2d,
-      roughness: 0.62,
-    });
-
-    const rTrunks = new THREE.InstancedMesh(rTrunkGeo, barkMat, rhodos.length);
-    const rLeaves1 = new THREE.InstancedMesh(rLeaf1Geo, leafMat, rhodos.length);
-    const rLeaves2 = new THREE.InstancedMesh(rLeaf2Geo, leafMat, rhodos.length);
-    const rBlooms1 = new THREE.InstancedMesh(rBloom1Geo, bloomMat, rhodos.length);
-    const rBlooms2 = new THREE.InstancedMesh(rBloom2Geo, bloomMat, rhodos.length);
-    const rBlooms3 = new THREE.InstancedMesh(rBloom3Geo, bloomMat, rhodos.length);
-
-    rhodos.forEach((p, idx) => {
-      const y = groundHeightAt(p.x, p.z);
-      _vec3.set(p.x, y - 0.05, p.z);
-      _quat.setFromEuler(_euler.set(0, idx * 1.3, 0));
-      _scale.setScalar(p.scale);
-      _mat4.compose(_vec3, _quat, _scale);
-      rTrunks.setMatrixAt(idx, _mat4);
-      rLeaves1.setMatrixAt(idx, _mat4);
-      rLeaves2.setMatrixAt(idx, _mat4);
-      rBlooms1.setMatrixAt(idx, _mat4);
-      rBlooms2.setMatrixAt(idx, _mat4);
-      rBlooms3.setMatrixAt(idx, _mat4);
-    });
-    [rTrunks, rLeaves1, rLeaves2, rBlooms1, rBlooms2, rBlooms3].forEach((m) => {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.instanceMatrix.needsUpdate = true;
-      m.computeBoundingSphere();
-      group.add(m);
-    });
-  }
-
-  // 3. Vellore Campus Tropical Coconut Palms with Pinnate Leaflets (palmFrondMap alphaTest)
-  if (palms.length > 0) {
-    const palmMat = new THREE.MeshStandardMaterial({
-      map: textures.palmFrondMap,
-      alphaTest: 0.38,
-      color: 0xdbe6cc,
-      roughness: 0.74,
-      side: THREE.DoubleSide,
-    });
-    const coconutMat = new THREE.MeshStandardMaterial({ color: 0x4f3a1e, roughness: 0.82 });
-
-    const frondGeo = new THREE.PlaneGeometry(0.95, 2.55, 2, 7);
-    const fPos = frondGeo.attributes.position;
-    for (let i = 0; i < fPos.count; i++) {
-      const fx = fPos.getX(i);
-      const fy = fPos.getY(i) + 1.275; // 0..2.55
-      const t = fy / 2.55;
-      const archY = Math.sin(t * Math.PI * 0.75) * 0.56 - t * t * 0.92;
-      fPos.setXYZ(i, fx, archY, fy);
-    }
-    frondGeo.computeVertexNormals();
-
-    palms.forEach((p, idx) => {
-      const y = groundHeightAt(p.x, p.z);
-      const palmGroup = new THREE.Group();
-      palmGroup.position.set(p.x, y - 0.05, p.z);
-      palmGroup.scale.setScalar(p.scale);
-      palmGroup.rotation.y = idx * 1.1;
-
-      const curvePts = [
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0.14, 1.45, 0.06),
-        new THREE.Vector3(0.32, 3.05, 0.14),
-        new THREE.Vector3(0.4, 4.65, 0.2),
-      ];
-      const trunkGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 12, 0.15, 8, false);
-      const trunk = new THREE.Mesh(trunkGeo, barkMat);
-      trunk.castShadow = true;
-      palmGroup.add(trunk);
-
-      const crownOrigin = new THREE.Vector3(0.4, 4.62, 0.2);
-      for (let c = 0; c < 4; c++) {
-        const a = (c / 4) * Math.PI * 2;
-        const nut = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), coconutMat);
-        nut.position.set(
-          crownOrigin.x + Math.cos(a) * 0.16,
-          crownOrigin.y - 0.14,
-          crownOrigin.z + Math.sin(a) * 0.16,
-        );
-        palmGroup.add(nut);
-      }
-
-      for (let f = 0; f < 9; f++) {
-        const frond = new THREE.Mesh(frondGeo, palmMat);
-        const angle = (f / 9) * Math.PI * 2 + (idx % 3) * 0.25;
-        frond.position.copy(crownOrigin);
-        frond.rotation.y = angle;
-        frond.rotation.x = f % 2 === 0 ? 0.08 : 0.24;
-        frond.castShadow = true;
-        palmGroup.add(frond);
-      }
-      group.add(palmGroup);
-    });
-  }
-
-  // 4. Real Subdivided Displaced Granite Field Boulders across the 200m valley
+  // Real Subdivided Displaced Granite Field Boulders across the 200m valley
   const rockSpots = getWorldBoulderSpots();
 
   const rockGeo = new THREE.IcosahedronGeometry(0.75, 2);
@@ -1432,18 +1782,20 @@ export function createHimalayanGompaAndLodge(textures: ProceduralTextureSet): TH
   const mainWing = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.55, 2.3), stoneMat);
   mainWing.position.set(-0.9, 1.28, -0.35);
   mainWing.castShadow = true;
-  const mainRoof = new THREE.Mesh(new THREE.ConeGeometry(3.2, 0.85, 4), blueRoofMat);
-  mainRoof.rotation.y = Math.PI / 4;
-  mainRoof.scale.set(1.25, 1, 0.72);
-  mainRoof.position.set(-0.9, 2.45, -0.35);
+  const mainRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(5.1, 0.92, 2.95),
+    blueRoofMat,
+  );
+  mainRoof.position.set(-0.9, 2.48, -0.35);
 
   const sideWing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.35, 2.1), stoneMat);
   sideWing.position.set(2.0, 1.18, 0.35);
   sideWing.castShadow = true;
-  const sideRoof = new THREE.Mesh(new THREE.ConeGeometry(2.05, 0.75, 4), redRoofMat);
-  sideRoof.rotation.y = Math.PI / 4;
-  sideRoof.scale.set(1.05, 1, 0.85);
-  sideRoof.position.set(2.0, 2.22, 0.35);
+  const sideRoof = new THREE.Mesh(
+    createRectangularHipRoofGeometry(3.2, 0.82, 2.7),
+    redRoofMat,
+  );
+  sideRoof.position.set(2.0, 2.24, 0.35);
 
   for (const wx of [-2.1, -1.2, -0.3, 1.7]) {
     const win = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), warmWinMat);
@@ -1492,6 +1844,7 @@ export function createGlacialLakeAndWaterfall(
   const lakeSurface = new THREE.Mesh(lakeGeo, lakeMat);
   lakeSurface.position.y = GLACIAL_LAKE.waterLevel;
   lakeSurface.receiveShadow = true;
+  lakeSurface.userData.nonCollidable = true;
   group.add(lakeSurface);
 
   // 2. Stepped North Rock Cliff & Cascading Waterfall feeding the 26m Glacial Lake
@@ -1523,9 +1876,11 @@ export function createGlacialLakeAndWaterfall(
   const fallRibbon1 = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 14.2, 4, 10), cascadeMat);
   fallRibbon1.position.set(-2.0, 5.8, -20.5);
   fallRibbon1.rotation.x = -0.14;
+  fallRibbon1.userData.nonCollidable = true;
   const fallRibbon2 = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 13.2, 4, 8), cascadeMat);
   fallRibbon2.position.set(1.5, 5.2, -20.7);
   fallRibbon2.rotation.x = -0.16;
+  fallRibbon2.userData.nonCollidable = true;
   const splashRing = new THREE.Mesh(
     new THREE.RingGeometry(1.4, 4.2, 24),
     new THREE.MeshBasicMaterial({
@@ -1537,6 +1892,7 @@ export function createGlacialLakeAndWaterfall(
   );
   splashRing.rotation.x = -Math.PI / 2;
   splashRing.position.set(-0.8, GLACIAL_LAKE.waterLevel + 0.04, -18.8);
+  splashRing.userData.nonCollidable = true;
   group.add(fallRibbon1, fallRibbon2, splashRing);
 
   // 3. Tal Barahi Island Mini-Pagoda at center-west of lake

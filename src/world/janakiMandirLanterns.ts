@@ -304,23 +304,23 @@ export function createJanakiCourtyardLanterns({
     { kind: 'standing', x: -2.85, y: 0, z: 8.85, rotY: 0, scale: 1.02, phaseIdx: 3, hasPointLight: true, lightDistance: 15 },
     { kind: 'standing', x: 2.85, y: 0, z: 8.85, rotY: 0, scale: 1.02, phaseIdx: 0, hasPointLight: true, lightDistance: 15 },
 
-    // 2 Hanging Akashdeep lanterns under Central Mughal Gate cusped arch shoulders
-    { kind: 'hanging', x: -1.85, y: 4.42, z: 0.35, rotY: 0, scale: 1.05, phaseIdx: 0, hasPointLight: false },
-    { kind: 'hanging', x: 1.85, y: 4.42, z: 0.35, rotY: 0, scale: 1.05, phaseIdx: 2, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns under Central Mughal Gate cusped arch shoulders (5.4m clear span -> ±1.22m clears arch tips)
+    { kind: 'hanging', x: -1.22, y: 4.80, z: 0.35, rotY: 0, scale: 0.76, phaseIdx: 0, hasPointLight: false },
+    { kind: 'hanging', x: 1.22, y: 4.80, z: 0.35, rotY: 0, scale: 0.76, phaseIdx: 2, hasPointLight: false },
 
-    // 2 Hanging Akashdeep lanterns under Inner Simha Dwar Pishtaq arch
-    { kind: 'hanging', x: -1.35, y: 4.24, z: 11.15, rotY: 0, scale: 1.0, phaseIdx: 1, hasPointLight: false },
-    { kind: 'hanging', x: 1.35, y: 4.24, z: 11.15, rotY: 0, scale: 1.0, phaseIdx: 3, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns under Inner Simha Dwar Pishtaq arch (4.0m clear span -> ±1.02m clears vault haunches)
+    { kind: 'hanging', x: -1.02, y: 4.56, z: 11.15, rotY: 0, scale: 0.78, phaseIdx: 1, hasPointLight: false },
+    { kind: 'hanging', x: 1.02, y: 4.56, z: 11.15, rotY: 0, scale: 0.78, phaseIdx: 3, hasPointLight: false },
 
-    // 2 Hanging Akashdeep lanterns in Mukhamandapa Sanctum side porch arches
-    { kind: 'hanging', x: -1.68, y: 4.22, z: -2.65, rotY: 0, scale: 0.92, phaseIdx: 2, hasPointLight: false },
-    { kind: 'hanging', x: 1.68, y: 4.22, z: -2.65, rotY: 0, scale: 0.92, phaseIdx: 0, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns in Mukhamandapa Sanctum side porch arches (clear of ±0.95m & ±2.4m columns)
+    { kind: 'hanging', x: -1.42, y: 4.42, z: -2.35, rotY: 0, scale: 0.74, phaseIdx: 2, hasPointLight: false },
+    { kind: 'hanging', x: 1.42, y: 4.42, z: -2.35, rotY: 0, scale: 0.74, phaseIdx: 0, hasPointLight: false },
 
-    // 4 Hanging Akashdeep lanterns flanking East & West Dalan Royal Gates under Parikrama veranda soffit
-    { kind: 'hanging', x: -14.2, y: 4.11, z: -5.1, rotY: Math.PI / 2, scale: 1.0, phaseIdx: 1, hasPointLight: true, lightDistance: 14 },
-    { kind: 'hanging', x: -14.2, y: 4.11, z: 1.7, rotY: Math.PI / 2, scale: 1.0, phaseIdx: 3, hasPointLight: false },
-    { kind: 'hanging', x: 14.2, y: 4.11, z: -5.1, rotY: -Math.PI / 2, scale: 1.0, phaseIdx: 0, hasPointLight: true, lightDistance: 14 },
-    { kind: 'hanging', x: 14.2, y: 4.11, z: 1.7, rotY: -Math.PI / 2, scale: 1.0, phaseIdx: 2, hasPointLight: false },
+    // 4 Hanging Akashdeep lanterns centered cleanly under East & West Parikrama veranda canopy soffits (±15.48m clears ±14.4m colonnade arches)
+    { kind: 'hanging', x: -15.48, y: 4.35, z: -5.1, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 1, hasPointLight: true, lightDistance: 14 },
+    { kind: 'hanging', x: -15.48, y: 4.35, z: 1.7, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 3, hasPointLight: false },
+    { kind: 'hanging', x: 15.48, y: 4.35, z: -5.1, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 0, hasPointLight: true, lightDistance: 14 },
+    { kind: 'hanging', x: 15.48, y: 4.35, z: 1.7, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 2, hasPointLight: false },
   ];
 
   // Register synchronous flickering PointLights + anchor groups immediately so Frame 0 pool picks them up
@@ -330,6 +330,9 @@ export function createJanakiCourtyardLanterns({
     anchor.rotation.y = spec.rotY;
     anchor.scale.setScalar(spec.scale);
     anchor.userData.noMerge = true;
+    if (spec.kind === 'standing') {
+      anchor.userData.snapCategory = 'lantern';
+    }
     lanternsRoot.add(anchor);
 
     const flameLocalY = spec.kind === 'standing' ? 1.8 : -0.8;
@@ -339,6 +342,7 @@ export function createJanakiCourtyardLanterns({
     const halo = new THREE.Sprite(ch.haloMat);
     halo.position.set(0, flameLocalY, 0);
     halo.scale.set(1.55, 1.55, 1.55);
+    halo.userData.nonCollidable = true;
     anchor.add(halo);
 
     if (spec.hasPointLight) {
@@ -357,6 +361,7 @@ export function createJanakiCourtyardLanterns({
 
   // Subtle, particle-based incense smoke rising from the pagoda eaves of every courtyard brass lantern
   const incenseSmoke = createCourtyardIncenseSmoke(anchors);
+  incenseSmoke.points.userData.nonCollidable = true;
   lanternsRoot.add(incenseSmoke.points);
 
   // Register flicker animation controller node into animatedNodes (WorldEngine invokes onFlickerUpdate each tick)

@@ -136,11 +136,24 @@ export const PRAYER_FLAG_POLES: Array<[number, number]> = [
   [-101, 9],
 ];
 
+export type TreeSpecies =
+  | 'sakura'
+  | 'deodar'
+  | 'rhodo'
+  | 'maple'
+  | 'peepal'
+  | 'jacaranda'
+  | 'willow'
+  | 'birch'
+  | 'gulmohar'
+  | 'cypress'
+  | 'palm';
+
 export interface TreeSpot {
   x: number;
   z: number;
   scale: number;
-  type: 'deodar' | 'rhodo' | 'palm';
+  type: TreeSpecies;
 }
 
 export interface BoulderSpot {
@@ -148,6 +161,44 @@ export interface BoulderSpot {
   z: number;
   idx: number;
 }
+
+export interface OuterTempleArtifactSpot {
+  x: number;
+  z: number;
+  kind: 'offering-bowl' | 'incense-stand' | 'prayer-flags';
+  rotY: number;
+  scale: number;
+}
+
+// Detailed ritual artifacts (carved marble & bronze Urli offering bowls, Dhupauro censers, stone-anchored prayer flags)
+export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
+  // Janaki Mandir outer compound flanking approaches & sacred garden borders
+  { x: -127.8, z: 131.0, kind: 'incense-stand', rotY: 0.6, scale: 1.05 },
+  { x: -141.5, z: 74.5, kind: 'prayer-flags', rotY: 0.45, scale: 1.05 },
+  { x: -142.5, z: 90.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -141.5, z: 151.5, kind: 'prayer-flags', rotY: -0.4, scale: 1.05 },
+  { x: -133.5, z: 147.0, kind: 'offering-bowl', rotY: 0.3, scale: 1.0 },
+  { x: -69.0, z: 71.5, kind: 'incense-stand', rotY: 0.15, scale: 1.0 },
+  { x: -58.5, z: 118.0, kind: 'offering-bowl', rotY: -0.5, scale: 1.05 },
+  { x: -59.5, z: 144.5, kind: 'prayer-flags', rotY: 0.35, scale: 1.0 },
+  { x: -68.5, z: 152.5, kind: 'offering-bowl', rotY: -0.2, scale: 1.05 },
+  { x: -116.5, z: 152.5, kind: 'incense-stand', rotY: 0.25, scale: 1.0 },
+  // Pashupatinath outer temple grounds (-48, -24)
+  { x: -58.5, z: -31.5, kind: 'incense-stand', rotY: 0.3, scale: 1.05 },
+  { x: -37.5, z: -16.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -57.5, z: -14.5, kind: 'prayer-flags', rotY: 0.5, scale: 1.0 },
+  { x: -38.5, z: -33.0, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
+  // Boudhanath Stupa outer kora grounds (-108, 4)
+  { x: -119.5, z: -5.5, kind: 'offering-bowl', rotY: 0.4, scale: 1.05 },
+  { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
+  { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
+  { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
+  // Lumbini Peace Garden outer grounds (-8, 120)
+  { x: -18.5, z: 113.5, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
+  { x: 2.5, z: 113.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -17.5, z: 127.5, kind: 'prayer-flags', rotY: 0.6, scale: 1.0 },
+  { x: 3.0, z: 127.5, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
+];
 
 function catmullRomValue(p0: number, p1: number, p2: number, p3: number, t: number): number {
   const t2 = t * t;
@@ -162,6 +213,7 @@ function catmullRomValue(p0: number, p1: number, p2: number, p3: number, t: numb
 }
 
 let cachedRoadSamples: Array<{ x: number; z: number }> | null = null;
+let cachedRoadDeckSamples: Array<{ x: number; z: number; deckY: number }> | null = null;
 
 function getCoarseRoadSamples(): Array<{ x: number; z: number }> {
   if (cachedRoadSamples) return cachedRoadSamples;
@@ -208,10 +260,10 @@ export function getWorldTreeSpots(): TreeSpot[] {
   const goldenAngle = 2.39996323;
   const treeSpots: TreeSpot[] = [];
 
-  for (let i = 0; i < 650 && treeSpots.length < 220; i++) {
+  for (let i = 0; i < 2400 && treeSpots.length < 400; i++) {
     const angle = i * goldenAngle;
-    const t = (i + 0.5) / 650;
-    const radius = 16 + Math.sqrt(t) * 185;
+    const t = (i + 0.5) / 2400;
+    const radius = 14.5 + Math.sqrt(t) * 190;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
 
@@ -225,22 +277,57 @@ export function getWorldTreeSpots(): TreeSpot[] {
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
       return inPlazaRadius || inCameraCorridor;
     });
-    const nearSpawn = Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < 13.0;
+    const nearSpawn = Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < 12.5;
     const riverCenterX = getRiverCenterX(z);
-    const nearRiver = Math.abs(x - riverCenterX) < 10.5;
-    const nearLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 4.5;
-    const nearRoad = minDistToRoadSamples(x, z, roadSamples) < 4.8;
+    const nearRiver = Math.abs(x - riverCenterX) < 10.2;
+    const nearLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 4.2;
+    const nearRoad = minDistToRoadSamples(x, z, roadSamples) < 4.6;
+    const nearArtifact = OUTER_TEMPLE_ARTIFACT_SPOTS.some((a) => Math.hypot(x - a.x, z - a.z) < 3.0);
 
-    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearRoad) {
+    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearRoad || nearArtifact) {
       continue;
     }
 
-    const type: 'deodar' | 'rhodo' | 'palm' =
-      x > riverCenterX + 10 && i % 2 === 0 ? 'palm' : i % 4 === 0 ? 'rhodo' : 'deodar';
+    const nearWater =
+      Math.abs(x - riverCenterX) < 22 ||
+      Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 18;
+    const nearPeaceGarden = Math.hypot(x + 8, z - 120) < 42;
+    const isEastBank = x > riverCenterX + 10;
+    const isHighNorth = z < -48;
+
+    let type: TreeSpecies;
+    if (nearPeaceGarden) {
+      const pool: TreeSpecies[] = ['sakura', 'peepal', 'sakura', 'jacaranda', 'willow', 'maple'];
+      type = pool[i % pool.length];
+    } else if (nearWater) {
+      const pool: TreeSpecies[] = ['willow', 'sakura', 'birch', 'willow', 'maple'];
+      type = pool[i % pool.length];
+    } else if (isEastBank) {
+      const pool: TreeSpecies[] = ['palm', 'gulmohar', 'jacaranda', 'peepal', 'cypress', 'sakura'];
+      type = pool[i % pool.length];
+    } else if (isHighNorth) {
+      const pool: TreeSpecies[] = ['deodar', 'rhodo', 'birch', 'cypress', 'maple', 'deodar'];
+      type = pool[i % pool.length];
+    } else {
+      const pool: TreeSpecies[] = [
+        'sakura',
+        'maple',
+        'deodar',
+        'jacaranda',
+        'birch',
+        'rhodo',
+        'peepal',
+        'cypress',
+        'gulmohar',
+        'willow',
+      ];
+      type = pool[i % pool.length];
+    }
+
     treeSpots.push({
       x,
       z,
-      scale: 1.2 + ((i * 13) % 45) / 100,
+      scale: 1.05 + ((i * 17) % 52) / 100,
       type,
     });
   }
@@ -398,6 +485,98 @@ export function groundHeightAt(x: number, z: number): number {
   return h;
 }
 
+function getRoadDeckSamples(): Array<{ x: number; z: number; deckY: number }> {
+  if (cachedRoadDeckSamples) return cachedRoadDeckSamples;
+  const out: Array<{ x: number; z: number; deckY: number }> = [];
+  for (const chain of ROAD_PATHS) {
+    const n = chain.length;
+    if (n < 2) continue;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = chain[Math.max(0, i - 1)];
+      const p1 = chain[i];
+      const p2 = chain[i + 1];
+      const p3 = chain[Math.min(n - 1, i + 2)];
+      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      const steps = Math.max(8, Math.ceil(segLen * 1.4));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const px = catmullRomValue(p0[0], p1[0], p2[0], p3[0], t);
+        const pz = catmullRomValue(p0[1], p1[1], p2[1], p3[1], t);
+        const tNext = Math.min(1, t + 0.02);
+        const nx = catmullRomValue(p0[0], p1[0], p2[0], p3[0], tNext);
+        const nz = catmullRomValue(p0[1], p1[1], p2[1], p3[1], tNext);
+        let tx = nx - px;
+        let tz = nz - pz;
+        const tLen = Math.hypot(tx, tz);
+        if (tLen < 1e-4) {
+          const tPrev = Math.max(0, t - 0.02);
+          tx = px - catmullRomValue(p0[0], p1[0], p2[0], p3[0], tPrev);
+          tz = pz - catmullRomValue(p0[1], p1[1], p2[1], p3[1], tPrev);
+        }
+        const len = Math.hypot(tx, tz) || 1;
+        const dirX = -tz / len;
+        const dirZ = tx / len;
+        const halfW = 2.0;
+        const deckY =
+          Math.max(
+            groundHeightAt(px, pz),
+            groundHeightAt(px - dirX * halfW, pz - dirZ * halfW),
+            groundHeightAt(px + dirX * halfW, pz + dirZ * halfW),
+          ) + 0.022;
+        out.push({ x: px, z: pz, deckY });
+      }
+    }
+  }
+  cachedRoadDeckSamples = out;
+  return out;
+}
+
+/**
+ * Returns the exact visible walkable/prop surface height at (x, z), accounting for raised stone
+ * plaza aprons and level crowned cobblestone road decks so props and artifacts never sink into roads.
+ */
+export function getSurfaceHeightAt(x: number, z: number): number {
+  const base = groundHeightAt(x, z);
+  if (isOnBridgeDeck(x, z)) {
+    return base + 0.02;
+  }
+
+  let surfaceY = base;
+
+  // Raised circular stone plaza aprons at Spawn & non-Janaki landmarks (cylinder top = centerY + 0.10)
+  if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.45) {
+    surfaceY = Math.max(surfaceY, groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) + 0.105);
+  }
+  for (const lm of LANDMARKS) {
+    if (lm.id === 'janaki-mandir') continue;
+    const r = lm.id === 'boudhanath-stupa' ? 8.25 : lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
+    if (Math.hypot(x - lm.position.x, z - lm.position.z) <= r) {
+      surfaceY = Math.max(surfaceY, groundHeightAt(lm.position.x, lm.position.z) + 0.105);
+    }
+  }
+
+  // Raised level cobblestone road decks outside Janaki Chowk plaza
+  const inJanakiChowk = x >= -131.0 && x <= -53.5 && z >= 70.0 && z <= 150.2;
+  if (!inJanakiChowk) {
+    const roadSamples = getRoadDeckSamples();
+    let bestDist = 2.35;
+    let bestDeckY = surfaceY;
+    for (let i = 0; i < roadSamples.length; i++) {
+      const s = roadSamples[i];
+      const d = Math.hypot(x - s.x, z - s.z);
+      if (d < bestDist) {
+        bestDist = d;
+        bestDeckY = s.deckY;
+      }
+    }
+    if (bestDist < 2.35) {
+      surfaceY = Math.max(surfaceY, bestDeckY);
+    }
+  }
+
+  return surfaceY;
+}
+
 /**
  * Checks whether (x, z) is walkable without stepping into deep river/lake water,
  * solid palace masonry walls, or outside the open-world boundary.
@@ -424,24 +603,31 @@ export function isWalkablePosition(x: number, z: number): boolean {
 
   // Prayer flag poles
   for (const [fx, fz] of PRAYER_FLAG_POLES) {
-    if (Math.hypot(x - fx, z - fz) <= 0.45) return false;
+    if (Math.hypot(x - fx, z - fz) <= 0.58) return false;
   }
 
-  // Roadside stone lanterns
+  // Outer temple ground ritual artifacts (offering bowls, incense stands, prayer flag poles)
+  for (let i = 0; i < OUTER_TEMPLE_ARTIFACT_SPOTS.length; i++) {
+    const art = OUTER_TEMPLE_ARTIFACT_SPOTS[i];
+    const hitR = art.kind === 'prayer-flags' ? 0.95 : 0.92;
+    if (Math.hypot(x - art.x, z - art.z) <= hitR * art.scale) return false;
+  }
+
+  // Roadside stone lanterns (padded for body radius)
   for (const [lx, lz] of ROAD_LANTERN_COORDS) {
-    if (Math.hypot(x - lx, z - lz) <= 0.62) return false;
+    if (Math.hypot(x - lx, z - lz) <= 0.72) return false;
   }
 
-  // Open-world trees & boulders
+  // Open-world trees & boulders (padded for full trunk/boulder silhouette)
   const trees = getWorldTreeSpots();
   for (let i = 0; i < trees.length; i++) {
     const tr = trees[i];
-    if (Math.hypot(x - tr.x, z - tr.z) <= 0.65 * tr.scale) return false;
+    if (Math.hypot(x - tr.x, z - tr.z) <= 0.78 * tr.scale) return false;
   }
   const boulders = getWorldBoulderSpots();
   for (let i = 0; i < boulders.length; i++) {
     const b = boulders[i];
-    if (Math.hypot(x - b.x, z - b.z) <= 0.85) return false;
+    if (Math.hypot(x - b.x, z - b.z) <= 0.98) return false;
   }
 
   // Non-Janaki landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
@@ -620,13 +806,13 @@ export function isWalkablePosition(x: number, z: number): boolean {
     }
 
     // 12. Closed 4-Sided Compound Balustrade Fence & Octagonal Corner Burj Turrets (prevents passing through fence!)
-    if (Math.abs(jdx + 56.5) <= 0.65 && jdz >= -35.2 && jdz <= 58.2) return false;
-    if (Math.abs(jdz + 34.5) <= 0.65 && jdx >= -57.2 && jdx <= 38.8) return false;
-    if (Math.abs(jdz - 57.5) <= 0.65 && jdx >= -57.2 && jdx <= 38.8 && Math.abs(jdx) >= 2.25) {
+    if (Math.abs(jdx + 56.5) <= 0.78 && jdz >= -35.2 && jdz <= 58.2) return false;
+    if (Math.abs(jdz + 34.5) <= 0.78 && jdx >= -57.2 && jdx <= 38.8) return false;
+    if (Math.abs(jdz - 57.5) <= 0.78 && jdx >= -57.2 && jdx <= 38.8 && Math.abs(jdx) >= 2.25) {
       return false;
     }
     if (
-      Math.abs(jdx - 38.1) <= 0.65 &&
+      Math.abs(jdx - 38.1) <= 0.78 &&
       jdz >= -35.2 &&
       jdz <= 58.2 &&
       Math.abs(jdz - 36.5) >= 2.25
@@ -640,7 +826,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
       [-56.5, -34.5],
       [0, -34.5],
     ] as Array<[number, number]>) {
-      if (Math.hypot(jdx - bx, jdz - bz) <= 1.05) return false;
+      if (Math.hypot(jdx - bx, jdz - bz) <= 1.18) return false;
     }
 
     // Paired interior Chowk cast-bronze lamp posts
@@ -660,28 +846,28 @@ export function isWalkablePosition(x: number, z: number): boolean {
       [-53.2, 29.5],
       [-53.2, 50.5],
     ] as Array<[number, number]>) {
-      if (Math.hypot(jdx - lx, jdz - lz) <= 0.55) return false;
+      if (Math.hypot(jdx - lx, jdz - lz) <= 0.68) return false;
     }
 
     // 13. Outer West, North & East Janaki Sacred Grounds (Ganga Sagar, Vivah Mandap, North Stambha, Chautaras, Pati, Pyaau & Amenities)
-    // Ganga Sagar kund water basin & stepped coping rim (-44.5, 16.0)
-    if (jdx >= -52.0 && jdx <= -37.0 && jdz >= 6.8 && jdz <= 25.2) return false;
+    // Ganga Sagar kund water basin & stepped coping rim (-44.5, 16.0) padded for player body radius
+    if (jdx >= -52.68 && jdx <= -36.32 && jdz >= 6.02 && jdz <= 25.98) return false;
     // Varuna Ghat shrine north of Ganga Sagar (-44.5, 5.9)
-    if (Math.abs(jdx + 44.5) <= 1.85 && Math.abs(jdz - 5.9) <= 1.35) return false;
+    if (Math.abs(jdx + 44.5) <= 2.05 && Math.abs(jdz - 5.9) <= 1.55) return false;
     // Dana bird-feeding pedestal (-35.2, 16.0)
-    if (Math.hypot(jdx + 35.2, jdz - 16.0) <= 0.78) return false;
+    if (Math.hypot(jdx + 35.2, jdz - 16.0) <= 0.92) return false;
     // Vivah Mandap (-45.0, 40.0): stepped Vedic Havan Kund altar + 12 perimeter columns
-    if (Math.abs(jdx + 45.0) <= 1.25 && Math.abs(jdz - 40.0) <= 1.25) return false;
+    if (Math.abs(jdx + 45.0) <= 1.45 && Math.abs(jdz - 40.0) <= 1.45) return false;
     for (const [mx, mz] of [
       [-2.9, -2.9], [-1.0, -2.9], [1.0, -2.9], [2.9, -2.9],
       [-2.9, 2.9], [-1.0, 2.9], [1.0, 2.9], [2.9, 2.9],
       [-2.9, -1.0], [-2.9, 1.0], [2.9, -1.0], [2.9, 1.0],
     ] as Array<[number, number]>) {
-      if (Math.hypot(jdx + 45.0 - mx, jdz - 40.0 - mz) <= 0.48) return false;
+      if (Math.hypot(jdx + 45.0 - mx, jdz - 40.0 - mz) <= 0.62) return false;
     }
     // North Garuda Stambha column (0, -29.0) & twin North Tulsi shrines (±5.5, -29.0)
-    if (Math.abs(jdx) <= 1.35 && Math.abs(jdz + 29.0) <= 1.35) return false;
-    if (Math.abs(Math.abs(jdx) - 5.5) <= 1.05 && Math.abs(jdz + 29.0) <= 1.05) return false;
+    if (Math.abs(jdx) <= 1.55 && Math.abs(jdz + 29.0) <= 1.55) return false;
+    if (Math.abs(Math.abs(jdx) - 5.5) <= 1.2 && Math.abs(jdz + 29.0) <= 1.2) return false;
     // 4 Exterior Peepal Chautara platforms
     for (const [cx, cz] of [
       [-13.5, -28.5],
@@ -689,35 +875,29 @@ export function isWalkablePosition(x: number, z: number): boolean {
       [-32.5, -10.0],
       [32.5, -17.5],
     ] as Array<[number, number]>) {
-      if (Math.abs(jdx - cx) <= 1.65 && Math.abs(jdz - cz) <= 1.65) return false;
+      if (Math.abs(jdx - cx) <= 1.85 && Math.abs(jdz - cz) <= 1.85) return false;
     }
-    // Ornate West Pilgrim Pati Rest Pavilion (-33.5, 50.5, rotY = PI * 0.14, 6.8 x 4.0m)
-    const patiRelX = jdx + 33.5;
-    const patiRelZ = jdz - 50.5;
-    const pCos = Math.cos(-Math.PI * 0.14);
-    const pSin = Math.sin(-Math.PI * 0.14);
-    const patiLocalX = patiRelX * pCos - patiRelZ * pSin;
-    const patiLocalZ = patiRelX * pSin + patiRelZ * pCos;
-    if (Math.abs(patiLocalX) <= 3.72 && Math.abs(patiLocalZ) <= 2.25) return false;
+    // Ornate West Pilgrim Pati Rest Pavilion (-33.5, 50.5, orthogonal East-facing rotY = PI/2, 6.8 x 4.0m -> 4.0m X by 6.8m Z)
+    if (Math.abs(jdx + 33.5) <= 2.38 && Math.abs(jdz - 50.5) <= 3.88) return false;
     // East Heritage Pyaau Water Kiosk (+32.0, -3.5)
-    if (Math.abs(jdx - 32.0) <= 1.55 && Math.abs(jdz + 3.5) <= 1.85) return false;
+    if (Math.abs(jdx - 32.0) <= 1.75 && Math.abs(jdz + 3.5) <= 2.05) return false;
     // South Plaza Pilgrim Amenities: Pakhala foot-wash trough (+15.5, 22.8) & Chappal rack (-15.5, 22.8)
-    if (Math.abs(jdx - 15.5) <= 1.55 && Math.abs(jdz - 22.8) <= 0.95) return false;
-    if (Math.abs(jdx + 15.5) <= 1.6 && Math.abs(jdz - 22.8) <= 0.78) return false;
+    if (Math.abs(jdx - 15.5) <= 1.75 && Math.abs(jdz - 22.8) <= 1.1) return false;
+    if (Math.abs(jdx + 15.5) <= 1.78 && Math.abs(jdz - 22.8) <= 0.95) return false;
     // Landscaped Raised Perimeter Garden Beds
-    if (Math.abs(jdx + 42.5) <= 5.15 && Math.abs(jdz + 16.5) <= 4.15) return false;
-    if (Math.abs(jdx + 42.5) <= 5.15 && Math.abs(jdz + 2.5) <= 3.95) return false;
-    if (Math.abs(jdx - 32.5) <= 3.05 && Math.abs(jdz - 7.5) <= 3.95) return false;
+    if (Math.abs(jdx + 42.5) <= 5.35 && Math.abs(jdz + 16.5) <= 4.35) return false;
+    if (Math.abs(jdx + 42.5) <= 5.35 && Math.abs(jdz + 2.5) <= 4.15) return false;
+    if (Math.abs(jdx - 32.5) <= 3.25 && Math.abs(jdz - 7.5) <= 4.15) return false;
     // Exterior Parikrama sandstone benches, lanterns & floral urns
     for (const [bx, bz, hw, hd] of [
-      [-27.8, -9.0, 0.58, 1.12],
-      [-27.8, 5.5, 0.58, 1.12],
-      [27.8, -9.0, 0.58, 1.12],
-      [27.8, 5.5, 0.58, 1.12],
-      [-6.5, -24.8, 1.12, 0.58],
-      [6.5, -24.8, 1.12, 0.58],
-      [-40.5, -29.2, 1.12, 0.58],
-      [26.5, -29.2, 1.12, 0.58],
+      [-27.8, -9.0, 0.72, 1.28],
+      [-27.8, 5.5, 0.72, 1.28],
+      [27.8, -9.0, 0.72, 1.28],
+      [27.8, 5.5, 0.72, 1.28],
+      [-6.5, -24.8, 1.28, 0.72],
+      [6.5, -24.8, 1.28, 0.72],
+      [-40.5, -29.2, 1.28, 0.72],
+      [26.5, -29.2, 1.28, 0.72],
     ] as Array<[number, number, number, number]>) {
       if (Math.abs(jdx - bx) <= hw && Math.abs(jdz - bz) <= hd) return false;
     }
@@ -737,7 +917,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
       [-52.0, 29.0],
       [-52.0, 50.0],
     ] as Array<[number, number]>) {
-      if (Math.hypot(jdx - px, jdz - pz) <= 0.62) return false;
+      if (Math.hypot(jdx - px, jdz - pz) <= 0.75) return false;
     }
   }
 

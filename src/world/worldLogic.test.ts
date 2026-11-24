@@ -450,5 +450,115 @@ test('world obstacles prevent walking through trees, boulders, lanterns, kiosks,
   }
 });
 
+test('400 botanical multi-species trees, outer temple artifacts, and raised surface heights align cleanly', async () => {
+  const { OUTER_TEMPLE_ARTIFACT_SPOTS, getSurfaceHeightAt, getWorldTreeSpots } = await import('./worldLogic');
 
+  const trees = getWorldTreeSpots();
+  assert.equal(trees.length, 400, 'Expected 400 diverse trees across the valley');
+  const speciesSet = new Set(trees.map((t) => t.type));
+  for (const required of ['sakura', 'maple', 'willow', 'jacaranda', 'birch', 'deodar', 'peepal']) {
+    assert.ok(speciesSet.has(required as never), `Missing species ${required} in world trees`);
+  }
+
+  // Spawn plaza apron and road decks sit cleanly above groundHeightAt so props never sink
+  assert.ok(
+    getSurfaceHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) >=
+      groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) + 0.09,
+  );
+  assert.ok(
+    getSurfaceHeightAt(-20, 6) >= groundHeightAt(-20, 6),
+    'Road deck height should never dip below terrain height',
+  );
+
+  // Outer temple grounds are populated with refined marble/brass artifacts (no dark chaitya cones) that block walking
+  assert.ok(OUTER_TEMPLE_ARTIFACT_SPOTS.length >= 20);
+  assert.equal(
+    OUTER_TEMPLE_ARTIFACT_SPOTS.some((spot) => (spot.kind as string) === 'chaitya'),
+    false,
+    'Dark cone chaitya artifacts should be removed from outer temple grounds',
+  );
+  for (const spot of OUTER_TEMPLE_ARTIFACT_SPOTS) {
+    assert.equal(
+      isWalkablePosition(spot.x, spot.z),
+      false,
+      `Outer temple artifact ${spot.kind} at (${spot.x}, ${spot.z}) should block walking`,
+    );
+  }
+});
+
+test('StaticPhysicsWorld BVH blocks walls and instanced trunks while allowing arch pass-through and accurate pot floor support', async () => {
+  const THREE = await import('three');
+  const { StaticPhysicsWorld } = await import('./physicsBvh');
+
+  const scene = new THREE.Scene();
+
+  // Floor slab (12m x 12m at y = 0.25)
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
+  const floorGeo = new THREE.BoxGeometry(12, 0.2, 12);
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.position.set(0, 0.15, 0); // top surface at y = 0.25
+  scene.add(floor);
+
+  // Solid marble wall along z = -2 (blocking x = -4..4, y = 0.25..3.25)
+  const wallGeo = new THREE.BoxGeometry(8, 3.0, 0.6);
+  const wall = new THREE.Mesh(wallGeo, floorMat);
+  wall.position.set(0, 1.75, -2.0);
+  scene.add(wall);
+
+  // Overhead arch lintel along z = +2 starting at y = 2.6 (player height 1.75 must walk underneath!)
+  const archLintel = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.8), floorMat);
+  archLintel.position.set(0, 3.2, 2.0);
+  scene.add(archLintel);
+
+  // Sloped road ramp at x = +4, z = 0 rising from 0.25 to 0.75
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 4.0), floorMat);
+  ramp.position.set(4.0, 0.45, 0);
+  ramp.rotation.x = -0.18;
+  scene.add(ramp);
+
+  // Instanced boulders/trunks at (-4, 0.25, 0)
+  const trunkGeo = new THREE.CylinderGeometry(0.32, 0.38, 3.0, 8);
+  const trunks = new THREE.InstancedMesh(trunkGeo, floorMat, 1);
+  const mat4 = new THREE.Matrix4().makeTranslation(-4.0, 1.75, 0);
+  trunks.setMatrixAt(0, mat4);
+  trunks.instanceMatrix.needsUpdate = true;
+  scene.add(trunks);
+
+  const physics = new StaticPhysicsWorld();
+  physics.buildFromScene(scene);
+
+  const stats = physics.getStats();
+  assert.ok(stats.floorTriangles > 0, 'BVH must index floor triangles');
+  assert.ok(stats.wallTriangles > 0, 'BVH must index wall triangles');
+  assert.equal(stats.instancedColliders, 1, 'BVH must index solid instanced trunk');
+  assert.ok(stats.navVertices >= 12, 'Floor nav-mesh must subdivide large boxes');
+
+  // 1. Sprinting straight into wall at z = -2 cannot tunnel through
+  const wallHit = physics.resolveHorizontalCollision(0, -0.5, 0, -3.5, 0.25, 1.75, 0.4, 0.25);
+  assert.equal(wallHit.collided, true);
+  assert.ok(wallHit.z >= -1.7 + 0.39, `Expected stop outside wall face z=-1.7, got z=${wallHit.z}`);
+
+  // 2. Walking cleanly beneath overhead arch at z = +2 succeeds without collision
+  const archPass = physics.resolveHorizontalCollision(0, 0.8, 0, 3.2, 0.25, 1.75, 0.4, 0.25);
+  assert.equal(archPass.collided, false);
+  assert.ok(Math.abs(archPass.z - 3.2) < 1e-4);
+
+  // 3. Instanced trunk at x = -4, z = 0 blocks horizontal movement
+  const trunkHit = physics.resolveHorizontalCollision(-2.8, 0, -4.5, 0, 0.25, 1.75, 0.4, 0.25);
+  assert.equal(trunkHit.collided, true);
+  assert.ok(trunkHit.x > -3.7, `Expected stop before trunk radius, got x=${trunkHit.x}`);
+
+  // 4. Pot footprint support detects sloped road ramp above base terrain without sinking
+  const supportY = physics.sampleFootprintSupportY(4.0, 0.0, 0.52, 1.2);
+  assert.ok(supportY !== null && supportY > 0.45, `Expected raised ramp support > 0.45, got ${supportY}`);
+
+  // 5. Nearest nav-mesh vertex & wall clearance snaps a floating/wall-clipped asset flush
+  const nav = physics.findNearestNavVertex(0.3, 0.65, -1.5, 4.0);
+  assert.ok(nav !== null, 'Should find nearest floor nav-mesh vertex');
+  assert.ok(Math.abs(nav!.y - 0.25) < 0.02, `Expected floor nav vertex y=0.25, got ${nav!.y}`);
+
+  const clear = physics.findNearestWallClearance(0, -1.55, 0.25, 0.8, 0.4);
+  assert.equal(clear.pushed, true, 'Asset overlapping wall at z=-1.55 must push out flush');
+  assert.ok(clear.z >= -1.7 + 0.39);
+});
 
