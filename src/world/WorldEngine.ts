@@ -595,7 +595,7 @@ export class WorldEngine {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.92;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = !this.isSoftwareGl;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.renderer.domElement.style.display = 'block';
@@ -681,7 +681,7 @@ export class WorldEngine {
 
     this.sunLight = new THREE.DirectionalLight(0xffd29d, 2.2);
     this.sunLight.position.set(48, 72, 44);
-    this.sunLight.castShadow = true;
+    this.sunLight.castShadow = !this.isSoftwareGl;
     const shadowRes = this.isSoftwareGl ? 512 : 2048;
     this.sunLight.shadow.mapSize.set(shadowRes, shadowRes);
     const d = 68;

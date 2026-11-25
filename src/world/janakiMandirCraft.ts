@@ -341,6 +341,7 @@ export function createDetailedBrassSukundaDiyo(
   const flame = createSacredFlameGroup(flameMat, 0.92);
   flame.position.set(0, 0.145, 0.132);
   g.add(flame);
+  g.userData.flameGroup = flame;
 
   g.scale.setScalar(scale);
   return g;

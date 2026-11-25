@@ -173,24 +173,25 @@ export function buildDetailedSanctuaryWallLantern(mats: {
   const amberGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xffd592,
     emissive: 0xff9328,
-    emissiveIntensity: 0.56,
+    emissiveIntensity: 0.48,
     roughness: 0.14,
     metalness: 0.04,
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.34,
     clearcoat: 0.9,
     depthWrite: false,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
   });
 
   const chimneyGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xfff7e2,
     emissive: 0xffba5c,
-    emissiveIntensity: 0.25,
+    emissiveIntensity: 0.22,
     roughness: 0.08,
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.26,
     depthWrite: false,
+    side: THREE.FrontSide,
   });
 
   const flameCoreMat = new THREE.MeshBasicMaterial({ color: 0xfff8de });
@@ -241,7 +242,7 @@ export function buildDetailedSanctuaryWallLantern(mats: {
     root.add(rivet);
   }
 
-  // B. S-Scroll Cantilever Gooseneck Arm + Lower Tension Scroll Strut (extending to lantern at z = 0.38)
+  // B. S-Scroll Cantilever Gooseneck Arm + Anchored Lower Tension Strut (extending to lantern at z = 0.38)
   const lanternZ = 0.38;
   const bracketCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 0.025, 0.036),
@@ -261,31 +262,39 @@ export function buildDetailedSanctuaryWallLantern(mats: {
   armCollar.rotation.x = Math.PI * 0.5;
   armCollar.position.set(0, 0.025, 0.045);
 
+  // Lower brace anchors firmly from backplate base directly into the main gooseneck spine
   const lowerBraceCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, -0.09, 0.030),
-    new THREE.Vector3(0, 0.06, 0.135),
-    new THREE.Vector3(0, 0.23, 0.195),
+    new THREE.Vector3(0, -0.085, 0.024),
+    new THREE.Vector3(0, 0.08, 0.115),
+    new THREE.Vector3(0, 0.28, 0.175),
   ]);
   const lowerBrace = new THREE.Mesh(
-    createTaperedLimbGeometry(lowerBraceCurve, (t) => THREE.MathUtils.lerp(0.014, 0.010, t), 14, 8),
+    createTaperedLimbGeometry(lowerBraceCurve, (t) => THREE.MathUtils.lerp(0.014, 0.011, t), 14, 8),
     mats.darkMetalMat,
   );
 
-  // Decorative Curled Scroll Volutes tucked under gooseneck & backplate
-  const upperVolute = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.0085, 8, 18, Math.PI * 1.45), mats.giltGoldMat);
+  const braceJoinCollar = new THREE.Mesh(new THREE.SphereGeometry(0.020, 10, 8), mats.giltGoldMat);
+  braceJoinCollar.position.set(0, 0.28, 0.175);
+
+  const lowerFootCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.024, 0.03, 10), mats.giltGoldMat);
+  lowerFootCollar.rotation.x = Math.PI * 0.5;
+  lowerFootCollar.position.set(0, -0.085, 0.026);
+
+  // Decorative Curled Scroll Volutes seated snugly against arm & brace junctions
+  const upperVolute = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.0085, 8, 18, Math.PI * 1.5), mats.giltGoldMat);
   upperVolute.rotation.y = Math.PI * 0.5;
   upperVolute.rotation.x = 0.45;
-  upperVolute.position.set(0, 0.27, 0.24);
+  upperVolute.position.set(0, 0.34, 0.24);
 
-  const lowerVolute = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.0075, 8, 16, Math.PI * 1.55), mats.warmBronzeMat);
+  const lowerVolute = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.0075, 8, 16, Math.PI * 1.55), mats.warmBronzeMat);
   lowerVolute.rotation.y = Math.PI * 0.5;
-  lowerVolute.rotation.x = -0.6;
-  lowerVolute.position.set(0, -0.045, 0.088);
+  lowerVolute.rotation.x = -0.5;
+  lowerVolute.position.set(0, -0.035, 0.068);
 
   const hookRing = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0055, 8, 16), mats.giltGoldMat);
   hookRing.position.set(0, 0.295, lanternZ);
 
-  root.add(mainArm, armCollar, lowerBrace, upperVolute, lowerVolute, hookRing);
+  root.add(mainArm, armCollar, lowerBrace, braceJoinCollar, lowerFootCollar, upperVolute, lowerVolute, hookRing);
 
   // C. Suspended Hexagonal Newari Temple Lantern Basket & Pagoda Hood
   const cage = new THREE.Group();
@@ -340,55 +349,51 @@ export function buildDetailedSanctuaryWallLantern(mats: {
     cage.add(strut, midKnop);
   }
 
-  // 4. Frosted Warm-Amber Hexagonal Glass Core Panes
+  // 4. Frosted Warm-Amber Hexagonal Glass Core Panes (inset cleanly inside the lattice bars)
   const amberShell = new THREE.Mesh(
-    new THREE.CylinderGeometry(topR * 0.94, botR * 0.94, glassTopY - glassBotY - 0.01, 6, 1, true),
+    new THREE.CylinderGeometry(topR * 0.92, botR * 0.92, glassTopY - glassBotY - 0.008, 6, 1, true),
     amberGlassMat,
   );
-  amberShell.renderOrder = 4;
+  amberShell.renderOrder = 5;
   cage.add(amberShell);
 
-  // 5. Crisp Geometric Outer X-Filigree Jali Lattice Bars on All 6 Faces (`InstancedMesh`)
+  // 5. Crisp Geometric Outer X-Filigree Jali Lattice Bars on All 6 Slanted Faces (`InstancedMesh`)
   const latticeTransforms: THREE.Matrix4[] = [];
   const barUnitGeo = new THREE.BoxGeometry(1, 1, 1);
-  const midY = (glassTopY + glassBotY) * 0.5;
-  const faceHeight = glassTopY - glassBotY;
+  const unitXAxis = new THREE.Vector3(1, 0, 0);
+
+  const pushLatticeSegment = (pa: THREE.Vector3, pb: THREE.Vector3, thickness = 0.0065) => {
+    const center = pa.clone().add(pb).multiplyScalar(0.5);
+    const dir = pb.clone().sub(pa);
+    const len = dir.length();
+    if (len < 1e-4) return;
+    dir.normalize();
+    _q.setFromUnitVectors(unitXAxis, dir);
+    _s.set(len, thickness, thickness);
+    _m4.compose(center, _q, _s);
+    latticeTransforms.push(_m4.clone());
+  };
 
   for (let i = 0; i < 6; i++) {
     const a0 = (i / 6) * Math.PI * 2 + Math.PI / 6;
     const a1 = ((i + 1) / 6) * Math.PI * 2 + Math.PI / 6;
-    const aMid = (a0 + a1) * 0.5;
 
     const pBL = new THREE.Vector3(Math.cos(a0) * botR, glassBotY, Math.sin(a0) * botR);
     const pBR = new THREE.Vector3(Math.cos(a1) * botR, glassBotY, Math.sin(a1) * botR);
     const pTL = new THREE.Vector3(Math.cos(a0) * topR, glassTopY, Math.sin(a0) * topR);
     const pTR = new THREE.Vector3(Math.cos(a1) * topR, glassTopY, Math.sin(a1) * topR);
+    const pBM = pBL.clone().add(pBR).multiplyScalar(0.5);
+    const pTM = pTL.clone().add(pTR).multiplyScalar(0.5);
+    const pML = pBL.clone().add(pTL).multiplyScalar(0.5);
+    const pMR = pBR.clone().add(pTR).multiplyScalar(0.5);
 
-    // 2 crossed diagonal lattice bars per face
-    for (const [pa, pb] of [[pBL, pTR], [pBR, pTL]] as Array<[THREE.Vector3, THREE.Vector3]>) {
-      const center = pa.clone().add(pb).multiplyScalar(0.5);
-      const dir = pb.clone().sub(pa);
-      const len = dir.length();
-      dir.normalize();
-      _q.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
-      _s.set(len, 0.0065, 0.0065);
-      _m4.compose(center, _q, _s);
-      latticeTransforms.push(_m4.clone());
-    }
-
-    // Center horizontal filigree transom bar at mid-height + vertical finial pin
-    const midR = (botR + topR) * 0.5;
-    const faceW = 2 * midR * Math.sin(Math.PI / 6);
-    _v3.set(Math.cos(aMid) * midR * 0.88, midY, Math.sin(aMid) * midR * 0.88);
-    _q.setFromEuler(_e.set(0, -aMid + Math.PI * 0.5, 0));
-    _s.set(faceW, 0.007, 0.007);
-    _m4.compose(_v3, _q, _s);
-    latticeTransforms.push(_m4.clone());
-
-    _v3.set(Math.cos(aMid) * midR * 0.89, midY, Math.sin(aMid) * midR * 0.89);
-    _s.set(0.0065, faceHeight * 0.94, 0.0065);
-    _m4.compose(_v3, _q, _s);
-    latticeTransforms.push(_m4.clone());
+    // 2 crossed diagonals + exact slanted center vertical + mid transom + top & bottom face rails
+    pushLatticeSegment(pBL, pTR, 0.0062);
+    pushLatticeSegment(pBR, pTL, 0.0062);
+    pushLatticeSegment(pML, pMR, 0.0068);
+    pushLatticeSegment(pBM, pTM, 0.0062);
+    pushLatticeSegment(pBL, pBR, 0.0075);
+    pushLatticeSegment(pTL, pTR, 0.0075);
   }
   const latticeInst = new THREE.InstancedMesh(barUnitGeo, mats.darkMetalMat, latticeTransforms.length);
   latticeTransforms.forEach((m, idx) => latticeInst.setMatrixAt(idx, m));
@@ -396,36 +401,54 @@ export function buildDetailedSanctuaryWallLantern(mats: {
   latticeInst.computeBoundingSphere();
   cage.add(latticeInst);
 
-  // 6. Internal Diyo Oil Cup + Hurricane Glass Chimney + Flickering Sacred Flame
+  // 6. Complete Internal Brass Diyo Oil Burner + 6-Prong Gallery Crown + Full Tulip Chimney + Flame
   const diyoCupPts = [
     new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.034, 0.0),
-    new THREE.Vector2(0.022, 0.016),
-    new THREE.Vector2(0.048, 0.040),
-    new THREE.Vector2(0.044, 0.048),
-    new THREE.Vector2(0.0, 0.036),
+    new THREE.Vector2(0.040, 0.0),
+    new THREE.Vector2(0.026, 0.016),
+    new THREE.Vector2(0.050, 0.036),
+    new THREE.Vector2(0.048, 0.048),
+    new THREE.Vector2(0.038, 0.048),
+    new THREE.Vector2(0.030, 0.036),
+    new THREE.Vector2(0.0, 0.032),
   ];
   const diyoCup = new THREE.Mesh(new THREE.LatheGeometry(diyoCupPts, 16), mats.giltGoldMat);
-  diyoCup.position.y = -0.118;
-  const hurricane = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.038, 0.044, 0.145, 16, 1, true),
-    chimneyGlassMat,
-  );
-  hurricane.position.y = -0.025;
+  diyoCup.position.y = -0.122;
+
+  const burnerNozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.014, 0.024, 10), mats.warmBronzeMat);
+  burnerNozzle.position.y = -0.078;
+
+  // Complete contoured tulip glass chimney anchored from the brass cup up into the roof smoke collar
+  const chimneyPts = [
+    new THREE.Vector2(0.034, 0.0),
+    new THREE.Vector2(0.042, 0.018),
+    new THREE.Vector2(0.052, 0.065),
+    new THREE.Vector2(0.044, 0.118),
+    new THREE.Vector2(0.030, 0.165),
+    new THREE.Vector2(0.028, 0.214),
+  ];
+  const hurricane = new THREE.Mesh(new THREE.LatheGeometry(chimneyPts, 18), chimneyGlassMat);
+  hurricane.position.y = -0.088;
   hurricane.renderOrder = 3;
-  cage.add(diyoCup, hurricane);
+
+  // Upper brass chimney collar connecting the top of the glass chimney cleanly to the pagoda ceiling
+  const topSmokeBell = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.028, 0.026, 14), mats.warmBronzeMat);
+  topSmokeBell.position.y = 0.118;
+  cage.add(diyoCup, burnerNozzle, hurricane, topSmokeBell);
 
   const flameGroup = new THREE.Group();
-  flameGroup.position.set(0, -0.068, 0);
-  const flameOuter = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.068, 10), mats.flameGlowMat);
-  flameOuter.position.y = 0.034;
-  const flameCore = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), flameCoreMat);
-  flameCore.scale.set(0.85, 1.4, 0.85);
-  flameCore.position.y = 0.020;
+  flameGroup.position.set(0, -0.066, 0);
+  const flameOuter = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.064, 10), mats.flameGlowMat);
+  flameOuter.position.y = 0.032;
+  flameOuter.renderOrder = 4;
+  const flameCore = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 8), flameCoreMat);
+  flameCore.scale.set(0.85, 1.38, 0.85);
+  flameCore.position.y = 0.019;
+  flameCore.renderOrder = 4;
   flameGroup.add(flameOuter, flameCore);
   cage.add(flameGroup);
 
-  // 7. Tiered Flared Hexagonal Pagoda Canopy Roof + 6 Hanging Corner Bells + Gajur Suspension Ring
+  // 7. Tiered Flared Hexagonal Pagoda Canopy Roof + 6 Anchored Hanging Corner Bells + Gajur Suspension Ring
   const upperCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.144, 0.032, 6), mats.giltGoldMat);
   upperCollar.position.y = 0.132;
   const lowerEave = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.212, 0.068, 6), mats.warmBronzeMat);
@@ -443,20 +466,31 @@ export function buildDetailedSanctuaryWallLantern(mats: {
   topEye.position.y = 0.285;
   cage.add(upperCollar, lowerEave, pagodaCrown, kalashCap, topEye);
 
-  // 6 Miniature Hanging Temple Bells (Ghanti) suspended at eave corners
-  const bellGeo = new THREE.ConeGeometry(0.013, 0.028, 8);
+  // 6 Miniature Hanging Temple Bells (Ghanti) anchored cleanly to eave corners via brass suspension stems
+  const bellGeo = new THREE.ConeGeometry(0.013, 0.026, 8);
+  const bellStemGeo = new THREE.CylinderGeometry(0.0025, 0.0025, 0.022, 6);
   const bellInst = new THREE.InstancedMesh(bellGeo, mats.giltGoldMat, 6);
+  const bellStemInst = new THREE.InstancedMesh(bellStemGeo, mats.warmBronzeMat, 6);
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-    _v3.set(Math.cos(a) * 0.192, 0.122, Math.sin(a) * 0.192);
+    const bx = Math.cos(a) * 0.194;
+    const bz = Math.sin(a) * 0.194;
     _q.identity();
     _s.setScalar(1);
+
+    _v3.set(bx, 0.136, bz);
+    _m4.compose(_v3, _q, _s);
+    bellStemInst.setMatrixAt(i, _m4);
+
+    _v3.set(bx, 0.118, bz);
     _m4.compose(_v3, _q, _s);
     bellInst.setMatrixAt(i, _m4);
   }
+  bellStemInst.instanceMatrix.needsUpdate = true;
+  bellStemInst.computeBoundingSphere();
   bellInst.instanceMatrix.needsUpdate = true;
   bellInst.computeBoundingSphere();
-  cage.add(bellInst);
+  cage.add(bellStemInst, bellInst);
 
   root.add(cage);
 

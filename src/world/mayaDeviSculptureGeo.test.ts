@@ -196,3 +196,42 @@ test('REFLECTIVE_WATER_ENV_UNIFORMS exposes player proximity & speed wave unifor
   assert.equal(typeof REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value, 'number');
 });
 
+import { createDetailedBrassSukundaDiyo } from './janakiMandirCraft';
+import { buildDetailedNativitySteleEnsemble } from './mayaDeviSanctuaryCraft';
+
+test('createDetailedBrassSukundaDiyo exposes flameGroup child so brass lamp never scales with flame', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd4a342 });
+  const lamp = createDetailedBrassSukundaDiyo(mat, mat, mat, 0.68, true);
+  assert.equal(lamp.scale.y, 0.68);
+  const flame = lamp.userData.flameGroup as THREE.Object3D | undefined;
+  assert.ok(flame && flame !== lamp, 'Expected distinct flameGroup inside Sukunda Diyo');
+  assert.ok(lamp.children.includes(flame), 'flameGroup should be a child of the brass Sukunda Diyo');
+});
+
+test('buildDetailedNativitySteleEnsemble constructs high-detail 3-statue ensemble', () => {
+  const tex = createLumbiniTextures(8);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc29e74 });
+  const stele = buildDetailedNativitySteleEnsemble(tex, {
+    chunarStoneMat: mat,
+    giltGoldMat: mat,
+    warmBronzeMat: mat,
+    darkMetalMat: mat,
+    timberMat: mat,
+    brickMat: mat,
+    flameGlowMat: mat,
+  });
+  let meshCount = 0;
+  let totalVerts = 0;
+  stele.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      const pos = (obj as THREE.Mesh).geometry.getAttribute('position');
+      if (pos) totalVerts += pos.count;
+    }
+  });
+  assert.ok(meshCount >= 110, `Expected high-detail 3-statue ensemble (>=110 meshes), got ${meshCount}`);
+  assert.ok(totalVerts >= 35000, `Expected high-resolution statue geometry (>=35000 vertices), got ${totalVerts}`);
+  tex.dispose();
+});
+
+

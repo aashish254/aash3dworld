@@ -256,8 +256,8 @@ export function createTaperedLimbGeometry(
  * Faces +Z.
  */
 export function createAnatomicalHeadGeometry(isChild = false): THREE.BufferGeometry {
-  const latSegs = 38;
-  const lonSegs = 44;
+  const latSegs = 46;
+  const lonSegs = 52;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -277,14 +277,15 @@ export function createAnatomicalHeadGeometry(isChild = false): THREE.BufferGeome
       let rx: number;
       let rz: number;
       if (v < 0.14) {
-        // Neck column transitioning into jaw
+        // Neck column transitioning into jaw with subtle trivali ring contour
         const nt = v / 0.14;
-        rx = THREE.MathUtils.lerp(0.048, 0.062, nt);
-        rz = THREE.MathUtils.lerp(0.048, 0.066, nt);
+        const neckRing = Math.sin(nt * Math.PI * 2.0) * 0.0018;
+        rx = THREE.MathUtils.lerp(0.048, 0.062, nt) + neckRing;
+        rz = THREE.MathUtils.lerp(0.048, 0.066, nt) + neckRing;
       } else {
         const hv = (v - 0.14) / 0.86; // 0..1 head
         const oval = Math.sin(Math.pow(hv, 0.78) * Math.PI);
-        const jawTaper = hv < 0.36 ? THREE.MathUtils.lerp(0.58, 0.96, hv / 0.36) : 1.0;
+        const jawTaper = hv < 0.36 ? THREE.MathUtils.lerp(0.56, 0.96, hv / 0.36) : 1.0;
         rx = (isChild ? 0.118 : 0.106) * Math.pow(Math.max(0.0, oval), 0.72) * jawTaper + 0.008 * (1 - hv);
         rz = (isChild ? 0.122 : 0.115) * Math.pow(Math.max(0.0, oval), 0.72) * jawTaper + 0.008 * (1 - hv);
       }
@@ -294,63 +295,73 @@ export function createAnatomicalHeadGeometry(isChild = false): THREE.BufferGeome
 
       // Facial anatomical relief on front hemisphere (cosT > 0)
       if (cosT > 0.05 && v >= 0.14 && v <= 0.88) {
-        const frontMask = Math.pow(Math.max(0, cosT), 1.4);
+        const frontMask = Math.pow(Math.max(0, cosT), 1.35);
         const xAbs = Math.abs(sinT);
 
-        // Chin & jawline fullness
-        const chinWeight = Math.exp(-Math.pow((v - 0.23) / 0.062, 2)) * Math.exp(-Math.pow(xAbs / 0.26, 2));
-        z += chinWeight * 0.020 * frontMask;
+        // Defined chin & jawline fullness + subtle mentolabial groove under lower lip
+        const chinWeight = Math.exp(-Math.pow((v - 0.228) / 0.058, 2)) * Math.exp(-Math.pow(xAbs / 0.24, 2));
+        const chinCleft = Math.exp(-Math.pow((v - 0.278) / 0.016, 2)) * Math.exp(-Math.pow(xAbs / 0.16, 2));
+        z += chinWeight * 0.023 * frontMask - chinCleft * 0.007;
 
-        // Soft cheek / malar bone contour
+        // Sculpted malar cheek plane
         const cheekWeight =
-          Math.exp(-Math.pow((v - 0.44) / 0.11, 2)) *
-          Math.exp(-Math.pow((xAbs - 0.42) / 0.24, 2));
-        z += cheekWeight * (isChild ? 0.023 : 0.016);
-        x += Math.sign(sinT) * cheekWeight * (isChild ? 0.008 : 0.004);
+          Math.exp(-Math.pow((v - 0.445) / 0.10, 2)) *
+          Math.exp(-Math.pow((xAbs - 0.40) / 0.22, 2));
+        z += cheekWeight * (isChild ? 0.025 : 0.018);
+        x += Math.sign(sinT) * cheekWeight * (isChild ? 0.009 : 0.005);
 
-        // Defined orbital eye socket depressions
+        // Deep carved orbital eye socket depressions
         const socketWeight =
-          Math.exp(-Math.pow((v - 0.565) / 0.052, 2)) *
-          Math.exp(-Math.pow((xAbs - 0.30) / 0.14, 2));
-        z -= socketWeight * 0.012;
+          Math.exp(-Math.pow((v - 0.565) / 0.050, 2)) *
+          Math.exp(-Math.pow((xAbs - 0.30) / 0.135, 2));
+        z -= socketWeight * 0.0155;
 
-        // Convex serene closed/half-closed almond eyelids inside sockets
+        // Convex serene half-closed almond eyelids + engraved lower lid slit crease
         const lidWeight =
-          Math.exp(-Math.pow((v - 0.558) / 0.020, 2)) *
+          Math.exp(-Math.pow((v - 0.562) / 0.018, 2)) *
           Math.exp(-Math.pow((xAbs - 0.30) / 0.095, 2));
-        z += lidWeight * 0.0105;
+        const eyelidSlit =
+          Math.exp(-Math.pow((v - 0.543) / 0.007, 2)) *
+          Math.exp(-Math.pow((xAbs - 0.30) / 0.092, 2));
+        z += lidWeight * 0.0135 - eyelidSlit * 0.0065;
 
         // Crisp continuous arched Gupta brow ridge
-        const browY = 0.625 - 0.020 * Math.pow((xAbs - 0.30) / 0.24, 2);
+        const browY = 0.626 - 0.022 * Math.pow((xAbs - 0.29) / 0.24, 2);
         const browWeight =
-          Math.exp(-Math.pow((v - browY) / 0.018, 2)) *
-          Math.exp(-Math.pow((xAbs - 0.29) / 0.22, 2));
-        z += browWeight * 0.0105;
+          Math.exp(-Math.pow((v - browY) / 0.015, 2)) *
+          Math.exp(-Math.pow((xAbs - 0.285) / 0.21, 2));
+        z += browWeight * 0.014;
 
-        // Sculpted straight nose bridge, tip & nostrils
+        // Sculpted straight nose bridge, crisp tip, nostril wings & delicate philtrum
         const noseBridge =
           v >= 0.42 && v <= 0.635
-            ? Math.sin(((v - 0.42) / 0.215) * Math.PI * 0.85) * Math.exp(-Math.pow(xAbs / 0.082, 2))
+            ? Math.sin(((v - 0.42) / 0.215) * Math.PI * 0.85) * Math.exp(-Math.pow(xAbs / 0.074, 2))
             : 0;
         const noseTip =
-          Math.exp(-Math.pow((v - 0.435) / 0.034, 2)) * Math.exp(-Math.pow(xAbs / 0.10, 2));
+          Math.exp(-Math.pow((v - 0.435) / 0.032, 2)) * Math.exp(-Math.pow(xAbs / 0.092, 2));
         const nostrilFlare =
-          Math.exp(-Math.pow((v - 0.425) / 0.022, 2)) *
-          Math.exp(-Math.pow((xAbs - 0.112) / 0.052, 2));
-        z += noseBridge * 0.021 + noseTip * 0.020 + nostrilFlare * 0.0085;
+          Math.exp(-Math.pow((v - 0.424) / 0.020, 2)) *
+          Math.exp(-Math.pow((xAbs - 0.112) / 0.048, 2));
+        const philtrum =
+          Math.exp(-Math.pow((v - 0.388) / 0.018, 2)) * Math.exp(-Math.pow(xAbs / 0.038, 2));
+        z += noseBridge * 0.0245 + noseTip * 0.0235 + nostrilFlare * 0.0115 - philtrum * 0.0055;
 
-        // Sculpted cupid's bow upper lip, subtle parting shadow groove & lower lip
+        // Sculpted cupid's bow upper lip, serene smile parting groove & plump lower lip
+        const bowArch = 0.006 * Math.cos((xAbs / 0.14) * Math.PI);
         const upperLip =
-          Math.exp(-Math.pow((v - 0.355) / 0.016, 2)) * Math.exp(-Math.pow(xAbs / 0.175, 2));
+          Math.exp(-Math.pow((v - (0.355 + bowArch * 0.5)) / 0.015, 2)) *
+          Math.exp(-Math.pow(xAbs / 0.172, 2));
+        const smileCornerLift = 0.005 * Math.pow(Math.min(1, xAbs / 0.16), 2);
         const lipCrease =
-          Math.exp(-Math.pow((v - 0.335) / 0.007, 2)) * Math.exp(-Math.pow(xAbs / 0.155, 2));
+          Math.exp(-Math.pow((v - (0.335 + smileCornerLift)) / 0.0065, 2)) *
+          Math.exp(-Math.pow(xAbs / 0.158, 2));
         const lowerLip =
-          Math.exp(-Math.pow((v - 0.312) / 0.017, 2)) * Math.exp(-Math.pow(xAbs / 0.145, 2));
-        z += upperLip * 0.013 - lipCrease * 0.008 + lowerLip * 0.013;
+          Math.exp(-Math.pow((v - 0.310) / 0.016, 2)) * Math.exp(-Math.pow(xAbs / 0.142, 2));
+        z += upperLip * 0.016 - lipCrease * 0.0115 + lowerLip * 0.0165;
 
         // Forehead plane gently rounded
-        const foreheadWeight = Math.exp(-Math.pow((v - 0.73) / 0.11, 2)) * frontMask;
-        z += foreheadWeight * 0.009;
+        const foreheadWeight = Math.exp(-Math.pow((v - 0.735) / 0.105, 2)) * frontMask;
+        z += foreheadWeight * 0.010;
       }
 
       // Close pole at top of crown cleanly
@@ -511,8 +522,8 @@ export interface SculptedDhotiOptions {
  * a flowing central pleated lappet.
  */
 export function createSculptedDhotiGeometry(opts: SculptedDhotiOptions): THREE.BufferGeometry {
-  const ySegs = 36;
-  const radSegs = 48;
+  const ySegs = 44;
+  const radSegs = 56;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -544,26 +555,26 @@ export function createSculptedDhotiGeometry(opts: SculptedDhotiOptions): THREE.B
       const sinT = Math.sin(theta);
       const cosT = Math.cos(theta);
 
-      // Dual-lobe thigh & calf relief visible through clinging Gupta fabric
+      // Dual-lobe thigh, knee & calf relief visible through clinging Gupta fabric
       const legPresence = Math.sin(Math.min(1, v / 0.88) * Math.PI) * Math.abs(cosT);
-      const legSeparationDip = -Math.exp(-Math.pow(sinT / 0.16, 2)) * thighSep * 1.15 * legPresence;
+      const legSeparationDip = -Math.exp(-Math.pow(sinT / 0.15, 2)) * thighSep * 1.35 * legPresence;
       const thighSwell =
-        Math.exp(-Math.pow((Math.abs(sinT) - 0.50) / 0.28, 2)) * thighSep * 0.92 * legPresence;
+        Math.exp(-Math.pow((Math.abs(sinT) - 0.48) / 0.27, 2)) * thighSep * 1.12 * legPresence;
 
-      // Subtle low-frequency sculptural drape contour (avoids horizontal ring banding)
-      const drapeArch = Math.sin((v * 2.5 - 0.10 * Math.cos(sinT * Math.PI)) * Math.PI);
-      const waveFold = drapeArch * 0.0018 * Math.sin(v * Math.PI) * Math.max(0, cosT);
+      // Carved catenary Gupta drapery U-fold ribs sweeping across knees & thighs
+      const drapeArch = Math.sin((v * 4.5 - 0.28 * (1.0 - Math.abs(sinT))) * Math.PI);
+      const waveFold = drapeArch * 0.0044 * Math.sin(v * Math.PI) * Math.max(0, cosT);
 
-      // Vertical carved pleat ribs along central dhoti lappet and side gathers
-      const centerPleatMask = Math.exp(-Math.pow(sinT / 0.24, 2)) * Math.max(0, cosT) * (1 - v * 0.25);
-      const centerPleatRipples = Math.cos(sinT * Math.PI * pleatCount * 3.2) * 0.0075 * centerPleatMask;
+      // Deep vertical carved pleat flutes along central dhoti lappet and side gathers
+      const centerPleatMask = Math.exp(-Math.pow(sinT / 0.25, 2)) * Math.max(0, cosT) * (1 - v * 0.22);
+      const centerPleatRipples = Math.cos(sinT * Math.PI * pleatCount * 3.4) * 0.0115 * centerPleatMask;
       const sideGather =
-        Math.exp(-Math.pow((Math.abs(sinT) - 0.84) / 0.16, 2)) *
-        Math.cos(sinT * 18.0) *
-        0.003 *
-        (1 - v * 0.4);
+        Math.exp(-Math.pow((Math.abs(sinT) - 0.82) / 0.17, 2)) *
+        Math.cos(sinT * 20.0) *
+        0.0048 *
+        (1 - v * 0.35);
 
-      const x = centerX + sinT * (rx + thighSwell * 0.22);
+      const x = centerX + sinT * (rx + thighSwell * 0.24);
       const z =
         cosT * rz +
         Math.sign(cosT) * (legSeparationDip + thighSwell + waveFold + centerPleatRipples + sideGather);

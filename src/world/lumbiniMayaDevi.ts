@@ -188,21 +188,229 @@ export function buildMayaDeviTemple(
   // Upper lintel strip above doorway (y: doorH -> lowerH)
   addWall(0, (doorH + lowerH) * 0.5, D * 0.5 - wallT * 0.5, doorHalfW * 2, lowerH - doorH, wallT);
 
-  // Dark charcoal steel entrance door frame & folded-open gates (real-life single dark rectangle opening)
-  const frameDepth = wallT + 0.14;
+  // Carved Newari Sal-Wood & Gilded-Brass Sanctuary Portal (folded cleanly open inside reveals so doorway path stays 100% clear)
+  const salDoorMat = new THREE.MeshStandardMaterial({
+    map: lTex.cofferTimberMap,
+    normalMap: lTex.cofferTimberNormal,
+    normalScale: new THREE.Vector2(1.45, 1.45),
+    roughnessMap: lTex.cofferTimberRough,
+    color: 0x6c3e20,
+    roughness: 0.56,
+    metalness: 0.06,
+  });
+  const doorPortalGroup = new THREE.Group();
+  const portalCenterZ = D * 0.5 - wallT * 0.5;
+  const frameDepth = wallT + 0.18;
+
+  // Stepped Carved Sal-Wood Jambs (Sakha), Lotus Plinths, Brass Beaded Borders & Dwar-Torana Lintel
   for (const side of [-1, 1]) {
-    const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH, frameDepth), mats.darkMetalMat);
-    jamb.position.set(side * (doorHalfW - 0.05), doorH * 0.5, D * 0.5 - wallT * 0.5);
-    group.add(jamb);
-    // Open sliding grille/teak gate leaves tucked flush inside jambs (non-snagging)
-    const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.10, doorH - 0.18, 1.25), mats.darkMetalMat);
-    doorLeaf.position.set(side * (doorHalfW - 0.10), (doorH - 0.18) * 0.5 + 0.09, D * 0.5 - wallT - 0.68);
-    doorLeaf.userData.nonCollidable = true;
-    group.add(doorLeaf);
+    const jx = side * (doorHalfW - 0.04);
+    const outerJamb = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH, frameDepth), salDoorMat);
+    outerJamb.position.set(jx, doorH * 0.5, portalCenterZ);
+    outerJamb.castShadow = true;
+    outerJamb.receiveShadow = true;
+    doorPortalGroup.add(outerJamb);
+
+    const innerCasing = new THREE.Mesh(new THREE.BoxGeometry(0.08, doorH - 0.14, frameDepth + 0.04), mats.warmBronzeMat);
+    innerCasing.position.set(side * (doorHalfW - 0.12), (doorH - 0.14) * 0.5, portalCenterZ);
+    innerCasing.userData.nonCollidable = true;
+
+    const jambPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.34, frameDepth + 0.08), mats.chunarStoneMat);
+    jambPlinth.position.set(side * (doorHalfW - 0.02), 1.17, portalCenterZ);
+    jambPlinth.userData.nonCollidable = true;
+
+    // Twin exterior fluted Sal pilasters flanking doorway entrance
+    const extPilaster = new THREE.Mesh(new THREE.BoxGeometry(0.18, doorH - 1.18, 0.10), salDoorMat);
+    extPilaster.position.set(side * (doorHalfW + 0.06), 1.00 + (doorH - 1.18) * 0.5, D * 0.5 + 0.05);
+    extPilaster.userData.nonCollidable = true;
+    const extBrassTrim = new THREE.Mesh(new THREE.BoxGeometry(0.05, doorH - 1.24, 0.115), mats.giltGoldMat);
+    extBrassTrim.position.set(side * (doorHalfW - 0.03), 1.00 + (doorH - 1.24) * 0.5, D * 0.5 + 0.052);
+    extBrassTrim.userData.nonCollidable = true;
+    doorPortalGroup.add(innerCasing, jambPlinth, extPilaster, extBrassTrim);
   }
-  const headFrame = new THREE.Mesh(new THREE.BoxGeometry(doorHalfW * 2 + 0.18, 0.18, frameDepth), mats.darkMetalMat);
-  headFrame.position.set(0, doorH - 0.07, D * 0.5 - wallT * 0.5);
-  group.add(headFrame);
+
+  // Multi-tiered Carved Dwar-Torana Architrave Header with Golden Dharmachakra & Lotus Rosettes
+  const toranaLintel = new THREE.Mesh(new THREE.BoxGeometry(doorHalfW * 2 + 0.36, 0.24, frameDepth + 0.08), salDoorMat);
+  toranaLintel.position.set(0, doorH - 0.12, portalCenterZ);
+  toranaLintel.castShadow = true;
+  const toranaCorniceBrass = new THREE.Mesh(new THREE.BoxGeometry(doorHalfW * 2 + 0.44, 0.055, frameDepth + 0.12), mats.giltGoldMat);
+  toranaCorniceBrass.position.set(0, doorH - 0.23, portalCenterZ);
+  toranaCorniceBrass.userData.nonCollidable = true;
+  doorPortalGroup.add(toranaLintel, toranaCorniceBrass);
+
+  // Sculpted Torana Arch Crest on both Exterior (+Z) and Interior (-Z) lintel faces
+  for (const faceDir of [-1, 1]) {
+    const faceZ = portalCenterZ + faceDir * (frameDepth * 0.5 + 0.06);
+    const wheelRing = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.022, 8, 24), mats.giltGoldMat);
+    wheelRing.position.set(0, doorH - 0.02, faceZ);
+    wheelRing.userData.nonCollidable = true;
+    const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.04, 12), mats.giltGoldMat);
+    wheelHub.rotation.x = Math.PI * 0.5;
+    wheelHub.position.set(0, doorH - 0.02, faceZ);
+    wheelHub.userData.nonCollidable = true;
+    doorPortalGroup.add(wheelRing, wheelHub);
+    for (let sp = 0; sp < 4; sp++) {
+      const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.30, 6), mats.giltGoldMat);
+      spoke.rotation.z = (sp / 4) * Math.PI;
+      spoke.position.set(0, doorH - 0.02, faceZ);
+      spoke.userData.nonCollidable = true;
+      doorPortalGroup.add(spoke);
+    }
+    for (const side of [-1, 1]) {
+      for (const rx of [0.58, 1.18]) {
+        const rosette = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.035, 12), mats.giltGoldMat);
+        rosette.rotation.x = Math.PI * 0.5;
+        rosette.position.set(side * rx, doorH - 0.10, faceZ);
+        rosette.userData.nonCollidable = true;
+        const boss = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), mats.warmBronzeMat);
+        boss.position.set(side * rx, doorH - 0.10, faceZ + faceDir * 0.018);
+        boss.userData.nonCollidable = true;
+        doorPortalGroup.add(rosette, boss);
+      }
+    }
+  }
+
+  // Double Carved Temple Door Leaves (1.38m wide x 2.77m tall above 1.00m floor) folded neatly open along inner reveal
+  const leafW = 1.38;
+  const leafH = doorH - 1.08; // 2.77m (y: 1.00 .. 3.77)
+  const leafThick = 0.088;
+  const panelBeadGeo = createCarvedLotusPetalGeometry(0.032, 0.052, 0.010);
+
+  for (const side of [-1, 1]) {
+    const leafPivot = new THREE.Group();
+    // Hinged just inside the inner reveal and folded ~82 deg open so ornate coffered faces gleam clearly as you walk through!
+    leafPivot.position.set(side * (doorHalfW - 0.14), 1.01, portalCenterZ - wallT * 0.32);
+    leafPivot.rotation.y = side * -1.44;
+    leafPivot.userData.nonCollidable = true;
+
+    const leafBody = new THREE.Group();
+    // Shift so hinge edge sits at local x=0 and leaf spans inward toward center (+side * leafW) -> rotated into reveal
+    leafBody.position.set(-side * (leafW * 0.5), leafH * 0.5, 0);
+
+    // Solid carved Sal-wood door core + surrounding mitered brass perimeter frame
+    const core = new THREE.Mesh(new THREE.BoxGeometry(leafW, leafH, leafThick), salDoorMat);
+    core.castShadow = true;
+    core.receiveShadow = true;
+    core.userData.nonCollidable = true;
+    leafBody.add(core);
+
+    const outerBrassV = new THREE.BoxGeometry(0.052, leafH, leafThick + 0.014);
+    const outerBrassH = new THREE.BoxGeometry(leafW, 0.055, leafThick + 0.014);
+    for (const bx of [-leafW * 0.5 + 0.026, leafW * 0.5 - 0.026]) {
+      const m = new THREE.Mesh(outerBrassV, mats.warmBronzeMat);
+      m.position.x = bx;
+      m.userData.nonCollidable = true;
+      leafBody.add(m);
+    }
+    for (const by of [-leafH * 0.5 + 0.028, 0.34, leafH * 0.5 - 0.028]) {
+      const m = new THREE.Mesh(outerBrassH, mats.warmBronzeMat);
+      m.position.y = by;
+      m.userData.nonCollidable = true;
+      leafBody.add(m);
+    }
+
+    // 3x2 Recessed Carved Coffered Panels in Lower Two-Thirds (with beveled brass frames + 8-petal golden lotus medallions)
+    const rows = [-0.94, -0.34, 0.22];
+    const cols = [-0.30, 0.30];
+    for (const py of rows) {
+      for (const px of cols) {
+        const pw = 0.44;
+        const ph = 0.46;
+        // Raised brass coffer border
+        const topRim = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.032, leafThick + 0.024), mats.giltGoldMat);
+        topRim.position.set(px, py + ph * 0.5, 0);
+        const botRim = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.032, leafThick + 0.024), mats.giltGoldMat);
+        botRim.position.set(px, py - ph * 0.5, 0);
+        const leftRim = new THREE.Mesh(new THREE.BoxGeometry(0.032, ph, leafThick + 0.024), mats.giltGoldMat);
+        leftRim.position.set(px - pw * 0.5, py, 0);
+        const rightRim = new THREE.Mesh(new THREE.BoxGeometry(0.032, ph, leafThick + 0.024), mats.giltGoldMat);
+        rightRim.position.set(px + pw * 0.5, py, 0);
+        // Inner carved wood panel + center brass lotus medallion on BOTH faces
+        for (const fz of [-1, 1]) {
+          const medRing = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.012, 8, 20), mats.giltGoldMat);
+          medRing.position.set(px, py, fz * (leafThick * 0.5 + 0.008));
+          const medHub = new THREE.Mesh(new THREE.SphereGeometry(0.034, 10, 8), mats.giltGoldMat);
+          medHub.scale.set(1, 1, 0.55);
+          medHub.position.set(px, py, fz * (leafThick * 0.5 + 0.014));
+          medRing.userData.nonCollidable = true;
+          medHub.userData.nonCollidable = true;
+          leafBody.add(medRing, medHub);
+
+          for (let pet = 0; pet < 8; pet++) {
+            const ang = (pet / 8) * Math.PI * 2;
+            const pMesh = new THREE.Mesh(panelBeadGeo, mats.giltGoldMat);
+            pMesh.position.set(
+              px + Math.cos(ang) * 0.042,
+              py + Math.sin(ang) * 0.042,
+              fz * (leafThick * 0.5 + 0.010),
+            );
+            pMesh.rotation.set(fz > 0 ? 0.15 : -0.15, fz > 0 ? 0 : Math.PI, ang - Math.PI * 0.5);
+            pMesh.userData.nonCollidable = true;
+            leafBody.add(pMesh);
+          }
+        }
+        topRim.userData.nonCollidable = true;
+        botRim.userData.nonCollidable = true;
+        leftRim.userData.nonCollidable = true;
+        rightRim.userData.nonCollidable = true;
+        leafBody.add(topRim, botRim, leftRim, rightRim);
+      }
+    }
+
+    // Upper Carved Open-Work Brass Jali Lattice Grille Section (y_local: 0.55 .. 1.24)
+    const jaliY = 0.88;
+    const jaliH = 0.68;
+    const jaliW = leafW - 0.24;
+    const jaliBox = new THREE.Mesh(new THREE.BoxGeometry(jaliW, jaliH, leafThick * 0.35), mats.darkMetalMat);
+    jaliBox.position.set(0, jaliY, 0);
+    jaliBox.userData.nonCollidable = true;
+    leafBody.add(jaliBox);
+    for (let jx = -0.44; jx <= 0.441; jx += 0.11) {
+      const vBar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, jaliH, 6), mats.giltGoldMat);
+      vBar.position.set(jx, jaliY, 0);
+      vBar.userData.nonCollidable = true;
+      leafBody.add(vBar);
+    }
+    for (let jy = jaliY - 0.24; jy <= jaliY + 0.241; jy += 0.12) {
+      const hBar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, jaliW, 6), mats.giltGoldMat);
+      hBar.rotation.z = Math.PI * 0.5;
+      hBar.position.set(0, jy, 0);
+      hBar.userData.nonCollidable = true;
+      leafBody.add(hBar);
+    }
+
+    // 4 Forged Brass Strap Hinges + Rivet Studs (Kila) across center stile & rails
+    for (const hy of [-1.18, -0.64, 0.0, 0.52]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(leafW * 0.52, 0.044, leafThick + 0.028), mats.warmBronzeMat);
+      strap.position.set(side * (leafW * 0.23), hy, 0);
+      strap.userData.nonCollidable = true;
+      leafBody.add(strap);
+    }
+    for (const sy of [-1.22, -0.94, -0.64, -0.34, 0.0, 0.22, 0.50, 1.28]) {
+      for (const fz of [-1, 1]) {
+        const stud = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), mats.giltGoldMat);
+        stud.position.set(0, sy, fz * (leafThick * 0.5 + 0.016));
+        stud.userData.nonCollidable = true;
+        leafBody.add(stud);
+      }
+    }
+
+    // Sculpted Brass Door Knocker Escutcheon & Hanging Ring on both faces
+    for (const fz of [-1, 1]) {
+      const escutcheon = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.080, 0.022, 12), mats.giltGoldMat);
+      escutcheon.rotation.x = Math.PI * 0.5;
+      escutcheon.position.set(-side * 0.44, -0.10, fz * (leafThick * 0.5 + 0.014));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.012, 8, 18), mats.giltGoldMat);
+      ring.position.set(-side * 0.44, -0.17, fz * (leafThick * 0.5 + 0.028));
+      escutcheon.userData.nonCollidable = true;
+      ring.userData.nonCollidable = true;
+      leafBody.add(escutcheon, ring);
+    }
+
+    leafPivot.add(leafBody);
+    doorPortalGroup.add(leafPivot);
+  }
+  group.add(doorPortalGroup);
 
   // Upper solid header beam above clerestory band (y: 5.65 -> 6.45)
   const headerBotY = 5.65;
@@ -220,13 +428,13 @@ export function buildMayaDeviTemple(
   const winH = headerBotY - lowerH; // 1.40m
   const cornerW = 1.85;
 
-  // 4 solid white-brick corner piers spanning the clerestory band
+  // 4 solid white-brick corner piers spanning the clerestory band (aligned flush with outer wall thickness!)
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       addWall(
         sx * (W * 0.5 - cornerW * 0.5),
         winMidY,
-        sz * (D * 0.5 - cornerW * 0.5),
+        sz * (D * 0.5 - wallT * 0.5),
         cornerW,
         winH,
         wallT,
@@ -1479,14 +1687,14 @@ export function buildMayaDeviTemple(
   for (const [px, pz, pw, pd] of [
     [0, -barrierD * 0.5, barrierW, 0.022],
     [0, barrierD * 0.5, barrierW, 0.022],
-    [-barrierW * 0.5, 0, 0.022, barrierD],
-    [barrierW * 0.5, 0, 0.022, barrierD],
+    [-barrierW * 0.5, 0, 0.022, barrierD - 0.04],
+    [barrierW * 0.5, 0, 0.022, barrierD - 0.04],
   ] as Array<[number, number, number, number]>) {
     const pane = new THREE.Mesh(new THREE.BoxGeometry(pw, barrierH, pd), temperedGlassMat);
     pane.position.set(px, barrierY, pz);
     pane.userData.nonCollidable = true;
     const baseChannel = new THREE.Mesh(
-      new THREE.BoxGeometry(pw > pd ? pw + 0.02 : 0.046, 0.042, pd > pw ? pd + 0.02 : 0.046),
+      new THREE.BoxGeometry(pw > pd ? pw - 0.04 : 0.046, 0.042, pd > pw ? pd - 0.02 : 0.046),
       mats.warmBronzeMat,
     );
     baseChannel.position.set(px, 0.29, pz);
@@ -1547,18 +1755,19 @@ export function buildMayaDeviTemple(
       markerSanctum.add(pinSpot);
     }
   }
+  // Soft recessed warm-amber interior case cove strips tucked cleanly inward beneath bronze baffle (zero white line under glass)
   const caseDisplayLedMat = new THREE.MeshStandardMaterial({
-    color: 0xffe4ad,
-    emissive: 0xffb84d,
-    emissiveIntensity: 1.35,
-    roughness: 0.3,
+    color: 0xffa838,
+    emissive: 0xff8c1a,
+    emissiveIntensity: 0.72,
+    roughness: 0.35,
   });
   for (const [lx, lz, lsx, lsz] of [
-    [0, -barrierD * 0.5 + 0.045, barrierW - 0.16, 0.024],
-    [0, barrierD * 0.5 - 0.045, barrierW - 0.16, 0.024],
+    [0, -barrierD * 0.5 + 0.105, barrierW - 0.30, 0.020],
+    [0, barrierD * 0.5 - 0.105, barrierW - 0.30, 0.020],
   ] as Array<[number, number, number, number]>) {
-    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(lsx, 0.022, lsz), caseDisplayLedMat);
-    ledStrip.position.set(lx, 0.305, lz);
+    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(lsx, 0.014, lsz), caseDisplayLedMat);
+    ledStrip.position.set(lx, 0.276, lz);
     markerSanctum.add(ledStrip);
   }
   markerSanctum.add(
@@ -1676,37 +1885,63 @@ export function buildMayaDeviTemple(
   pilingFootInst.userData.nonCollidable = true;
   group.add(pilingInst, pilingFootInst);
 
-  // Beveled boardwalk edge trim + warm concealed under-rail LED accent strips illuminating the brick pit
+  // Beveled boardwalk edge bronze fascia + recessed under-slab cove LEDs (prevents white Z-fighting line under glass)
   const underRailLedMat = new THREE.MeshStandardMaterial({
-    color: 0xffe8bd,
-    emissive: 0xffb347,
-    emissiveIntensity: 1.55,
-    roughness: 0.35,
+    color: 0xffa63b,
+    emissive: 0xff8c1a,
+    emissiveIntensity: 0.45,
+    roughness: 0.42,
   });
   const railHeight = 0.90;
   for (const [cx, cz, sx, sz] of [
     [0, -pitHalfD, pitHalfW * 2, 0.12],
     [0, pitHalfD, pitHalfW * 2, 0.12],
-    [-pitHalfW, 0, 0.12, pitHalfD * 2 - 0.14],
-    [pitHalfW, 0, 0.12, pitHalfD * 2 - 0.14],
+    [-pitHalfW, 0, 0.12, pitHalfD * 2 - 0.16],
+    [pitHalfW, 0, 0.12, pitHalfD * 2 - 0.16],
   ] as Array<[number, number, number, number]>) {
+    const isNS = sx > sz;
+    const spanLen = isNS ? sx : sz;
     const topBar = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.075, sz), mats.warmBronzeMat);
     topBar.position.set(cx, walkY + railHeight, cz);
-    const botTrim = new THREE.Mesh(new THREE.BoxGeometry(sx + (sx > 0.5 ? 0.04 : 0), 0.07, sz + (sz > 0.5 ? 0.02 : 0.04)), salBeamMat);
+    const botTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(isNS ? spanLen - 0.04 : 0.14, 0.07, isNS ? 0.14 : spanLen - 0.04),
+      salBeamMat,
+    );
     botTrim.position.set(cx, walkY + 0.035, cz);
+
+    const glassH = railHeight - 0.11;
     const glassPanel = new THREE.Mesh(
-      new THREE.BoxGeometry(sx > 0.5 ? sx - 0.1 : 0.035, railHeight - 0.14, sz > 0.5 ? sz - 0.1 : 0.035),
+      new THREE.BoxGeometry(isNS ? spanLen - 0.16 : 0.032, glassH, isNS ? 0.032 : spanLen - 0.16),
       temperedGlassMat,
     );
-    glassPanel.position.set(cx, walkY + railHeight * 0.5, cz);
+    glassPanel.position.set(cx, walkY + 0.068 + glassH * 0.5, cz);
     glassPanel.userData.nonCollidable = true;
+
+    // Opaque bronze rim fascia cleanly capping the boardwalk slab edge (y: 0.818 .. 1.002)
+    const rimSign = isNS ? -Math.sign(cz) : -Math.sign(cx);
+    const fascia = new THREE.Mesh(
+      new THREE.BoxGeometry(isNS ? spanLen - 0.08 : 0.042, 0.184, isNS ? 0.042 : spanLen - 0.08),
+      mats.warmBronzeMat,
+    );
+    fascia.position.set(
+      isNS ? cx : cx - rimSign * 0.022,
+      walkY - 0.09,
+      isNS ? cz - rimSign * 0.022 : cz,
+    );
+    fascia.userData.nonCollidable = true;
+
+    // Warm downward-facing amber cove strip tucked cleanly underneath slab overhang (behind fascia edge)
     const ledUnder = new THREE.Mesh(
-      new THREE.BoxGeometry(sx > 0.5 ? sx - 0.25 : 0.06, 0.03, sz > 0.5 ? sz - 0.25 : 0.06),
+      new THREE.BoxGeometry(isNS ? spanLen - 0.44 : 0.034, 0.016, isNS ? 0.034 : spanLen - 0.44),
       underRailLedMat,
     );
-    ledUnder.position.set(cx, walkY - 0.14, cz);
+    ledUnder.position.set(
+      isNS ? cx : cx - rimSign * 0.045,
+      walkY - 0.195,
+      isNS ? cz - rimSign * 0.045 : cz,
+    );
     ledUnder.userData.nonCollidable = true;
-    group.add(topBar, botTrim, glassPanel, ledUnder);
+    group.add(topBar, botTrim, glassPanel, fascia, ledUnder);
   }
   // Railing brass stanchions
   for (const [px, pz] of [
@@ -1732,6 +1967,8 @@ export function buildMayaDeviTemple(
     roughness: 0.90,
     metalness: 0.01,
   });
+  const dadoH = 1.38;
+  const plasterH = lowerH - (walkY + dadoH); // 1.87m — stops cleanly at clerestory sill (lowerH = 4.25m)
   for (const [dx, dz, dsx, dsz] of [
     [0, -wallInnerZ + 0.04, innerSpanW, 0.08],
     [-(doorHalfW + (innerSpanW * 0.5 - doorHalfW) * 0.5), wallInnerZ - 0.04, innerSpanW * 0.5 - doorHalfW, 0.08],
@@ -1739,22 +1976,22 @@ export function buildMayaDeviTemple(
     [-wallInnerX + 0.04, 0, 0.08, innerSpanD],
     [wallInnerX - 0.04, 0, 0.08, innerSpanD],
   ] as Array<[number, number, number, number]>) {
-    const dado = new THREE.Mesh(new THREE.BoxGeometry(dsx, 1.38, dsz), salBeamMat);
-    dado.position.set(dx, walkY + 0.69, dz);
+    const dado = new THREE.Mesh(new THREE.BoxGeometry(dsx, dadoH, dsz), salBeamMat);
+    dado.position.set(dx, walkY + dadoH * 0.5, dz);
     dado.receiveShadow = true;
     dado.userData.nonCollidable = true;
 
     const plaster = new THREE.Mesh(
       new THREE.BoxGeometry(
         dsx > dsz ? dsx : 0.04,
-        2.72,
+        plasterH,
         dsz > dsx ? dsz : 0.04,
       ),
       warmPlasterMat,
     );
     plaster.position.set(
       dx === -wallInnerX + 0.04 ? dx - 0.015 : dx === wallInnerX - 0.04 ? dx + 0.015 : dx,
-      walkY + 1.38 + 1.36,
+      walkY + dadoH + plasterH * 0.5,
       dz === -wallInnerZ + 0.04 ? dz - 0.015 : dz === wallInnerZ - 0.04 ? dz + 0.015 : dz,
     );
     plaster.receiveShadow = true;
@@ -1762,15 +1999,16 @@ export function buildMayaDeviTemple(
     group.add(dado, plaster);
   }
   const wallLanternFlames: THREE.Object3D[] = [];
+  const pilH = lowerH - walkY - 0.12;
   for (const px of [-12.0, -6.0, 0, 6.0, 12.0]) {
-    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.36, 3.25, 0.16), mats.stuccoWhiteMat);
-    pil.position.set(px, walkY + 1.62, -wallInnerZ + 0.06);
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.36, pilH, 0.16), mats.stuccoWhiteMat);
+    pil.position.set(px, walkY + pilH * 0.5, -wallInnerZ + 0.06);
     pil.userData.nonCollidable = true;
     const pilBase = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.20, 0.22), mats.stuccoWhiteMat);
     pilBase.position.set(px, walkY + 0.10, -wallInnerZ + 0.08);
     pilBase.userData.nonCollidable = true;
-    const pilCap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.18, 0.24), mats.stuccoWhiteMat);
-    pilCap.position.set(px, walkY + 3.22, -wallInnerZ + 0.09);
+    const pilCap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.24), mats.stuccoWhiteMat);
+    pilCap.position.set(px, lowerH - 0.09, -wallInnerZ + 0.09);
     pilCap.userData.nonCollidable = true;
 
     const wallLantern = buildDetailedSanctuaryWallLantern({
@@ -1784,8 +2022,8 @@ export function buildMayaDeviTemple(
     group.add(pil, pilBase, pilCap, wallLantern.group);
   }
   for (const side of [-1, 1]) {
-    const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH - 0.2, 0.22), salBeamMat);
-    innerSalTrim.position.set(side * (doorHalfW + 0.06), (doorH - 0.2) * 0.5, D * 0.5 - wallT - 0.12);
+    const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.18, doorH - 1.08, 0.14), salDoorMat);
+    innerSalTrim.position.set(side * (doorHalfW + 0.06), 1.01 + (doorH - 1.08) * 0.5, D * 0.5 - wallT - 0.07);
     innerSalTrim.userData.nonCollidable = true;
     group.add(innerSalTrim);
   }
@@ -1844,6 +2082,13 @@ export function buildMayaDeviTemple(
   cornerLampRig.userData.noMerge = true;
   cornerLampRig.userData.nonCollidable = true;
   const cornerLamps: THREE.Object3D[] = [];
+  for (const diyo of [diyoL, diyoR]) {
+    const dFlame = diyo.userData.flameGroup as THREE.Object3D | undefined;
+    if (dFlame) {
+      dFlame.userData.baseScale = dFlame.scale.x || 1.0;
+      cornerLamps.push(dFlame);
+    }
+  }
   const cornerSpecs: Array<[number, number]> = [
     [-8.4, -4.9],
     [8.4, -4.9],
@@ -1857,7 +2102,11 @@ export function buildMayaDeviTemple(
     lamp.position.set(lx, walkY + 0.42, lz);
     lamp.userData.nonCollidable = true;
     cornerLampRig.add(ped, lamp);
-    cornerLamps.push(lamp);
+    const flame = lamp.userData.flameGroup as THREE.Object3D | undefined;
+    if (flame) {
+      flame.userData.baseScale = flame.scale.x || 1.0;
+      cornerLamps.push(flame);
+    }
 
     const lgt = new THREE.PointLight(0xffb454, 1.55, 13.0, 1.4);
     lgt.position.set(lx, walkY + 0.85, lz);
@@ -2100,9 +2349,11 @@ export function buildMayaDeviTemple(
 
   cornerLampRig.userData.onFlickerUpdate = (t: number) => {
     for (let i = 0; i < cornerLamps.length; i++) {
-      const base = i < 4 ? 0.68 : 0.94;
-      const s = base + Math.sin(t * 8.4 + i * 1.9) * (base * 0.048) + Math.sin(t * 14.3 + i) * (base * 0.02);
-      cornerLamps[i].scale.set(base, s, base);
+      const flame = cornerLamps[i];
+      const base = (flame.userData.baseScale as number) || 1.0;
+      const sy = base * (1.0 + Math.sin(t * 8.4 + i * 1.9) * 0.055 + Math.sin(t * 14.3 + i) * 0.025);
+      const sxz = base * (1.0 + Math.cos(t * 7.1 + i * 1.5) * 0.030);
+      flame.scale.set(sxz, sy, sxz);
     }
     for (let i = 0; i < wallLanternFlames.length; i++) {
       const sy = 1.0 + Math.sin(t * 9.6 + i * 2.1) * 0.09 + Math.sin(t * 15.8 + i) * 0.04;

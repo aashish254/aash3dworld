@@ -109,7 +109,7 @@ function buildFlatRibbonGeometry(
 function buildSculptedFigureHead(
   mainMat: THREE.Material,
   accentMat: THREE.Material,
-  _darkLineMat: THREE.Material,
+  darkLineMat: THREE.Material,
   scale = 1.0,
   isChild = false,
 ): THREE.Group {
@@ -120,7 +120,16 @@ function buildSculptedFigureHead(
   headMesh.receiveShadow = true;
   hg.add(headMesh);
 
-  // Sculpted helix ears + elongated earlobes + ornate Kundala ear pendants (carved in stone/gold, never dark ink bands)
+  // Subtle carved trivali auspicious neck crease lines around lower neck column
+  for (const ny of [-0.122, -0.138]) {
+    const trivali = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.0022, 6, 18), darkLineMat);
+    trivali.rotation.x = Math.PI * 0.5;
+    trivali.scale.set(0.96, 1.02, 1.0);
+    trivali.position.set(0, ny, 0.004);
+    hg.add(trivali);
+  }
+
+  // Sculpted helix ears + elongated earlobes + ornate double-ring Makara-Kundala ear pendants
   for (const side of [-1, 1]) {
     const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.013, 0.048, 6, 10), mainMat);
     ear.scale.set(0.75, 1.0, 1.15);
@@ -128,42 +137,54 @@ function buildSculptedFigureHead(
     ear.position.set(side * 0.106, -0.008, -0.004);
 
     const earLobe = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), mainMat);
-    earLobe.scale.set(0.8, 1.35, 0.85);
-    earLobe.position.set(side * 0.107, -0.042, -0.002);
+    earLobe.scale.set(0.8, 1.38, 0.85);
+    earLobe.position.set(side * 0.107, -0.044, -0.002);
 
-    const kundala = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0045, 8, 16), accentMat);
+    const kundala = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0048, 8, 16), accentMat);
     kundala.rotation.y = Math.PI * 0.5;
-    kundala.position.set(side * 0.112, -0.060, 0.004);
-    hg.add(ear, earLobe, kundala);
+    kundala.position.set(side * 0.112, -0.062, 0.004);
+
+    const kundalaDrop = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 8, 6), accentMat);
+    kundalaDrop.scale.set(0.9, 1.35, 0.9);
+    kundalaDrop.position.set(side * 0.113, -0.082, 0.004);
+    hg.add(ear, earLobe, kundala, kundalaDrop);
   }
 
-  // Subtle carved auspicious forehead Urna tilak
-  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 8, 8), accentMat);
-  urna.position.set(0, 0.048, 0.116);
+  // Carved auspicious forehead Urna tilak jewel
+  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.0048, 10, 8), accentMat);
+  urna.position.set(0, 0.050, 0.118);
   hg.add(urna);
 
   if (isChild) {
-    // Noble Child Buddha Ushnisha + 4 tiers of sculpted spiral curls (InstancedMesh)
-    const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.050, 16, 14), mainMat);
-    ushnisha.scale.set(1.0, 0.84, 1.0);
+    // Noble Child Buddha Ushnisha + 6 dense tiers of spiral snail-shell curls + Ketumala flame jewel
+    const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.052, 18, 16), mainMat);
+    ushnisha.scale.set(1.0, 0.86, 1.0);
     ushnisha.position.set(0, 0.168, -0.006);
-    const fillet = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.0055, 8, 22), accentMat);
+    const fillet = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.0055, 8, 24), accentMat);
     fillet.rotation.x = Math.PI * 0.5;
     fillet.position.set(0, 0.144, -0.005);
-    hg.add(ushnisha, fillet);
 
-    const curlGeo = new THREE.SphereGeometry(0.014, 7, 6);
+    const ketumalaBase = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.022, 0.014, 12), accentMat);
+    ketumalaBase.position.set(0, 0.214, -0.006);
+    const ketumalaFlame = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.044, 10), accentMat);
+    ketumalaFlame.position.set(0, 0.242, -0.006);
+    hg.add(ushnisha, fillet, ketumalaBase, ketumalaFlame);
+
+    const curlGeo = new THREE.SphereGeometry(0.0125, 8, 6);
     const curlPts: Array<[number, number, number]> = [];
     const curlRows: Array<[number, number, number]> = [
-      [18, 0.106, 0.095],
-      [15, 0.094, 0.122],
-      [12, 0.070, 0.148],
-      [8, 0.044, 0.182],
+      [22, 0.108, 0.086],
+      [20, 0.104, 0.106],
+      [18, 0.092, 0.125],
+      [14, 0.072, 0.145],
+      [10, 0.052, 0.168],
+      [7, 0.036, 0.190],
     ];
     curlRows.forEach(([cnt, rr, ry], rIdx) => {
       for (let i = 0; i < cnt; i++) {
-        const a = (i / cnt) * Math.PI * 2 + rIdx * 0.3;
-        if (rIdx === 0 && Math.cos(a) > 0.30) continue;
+        const a = (i / cnt) * Math.PI * 2 + rIdx * 0.28;
+        if (rIdx === 0 && Math.cos(a) > 0.28) continue;
+        if (rIdx === 1 && Math.cos(a) > 0.52) continue;
         curlPts.push([Math.sin(a) * rr * 0.94, ry, Math.cos(a) * rr * 0.96 - 0.006]);
       }
     });
@@ -179,38 +200,63 @@ function buildSculptedFigureHead(
     curlInst.computeBoundingSphere();
     hg.add(curlInst);
   } else {
-    // Sculpted wavy hair parting + braided Jatamukuta chignon + raised Gupta diadem cleanly at hairline
-    const hairCrown = new THREE.Mesh(new THREE.SphereGeometry(0.102, 20, 16), mainMat);
-    hairCrown.scale.set(0.96, 0.68, 1.0);
+    // Sculpted wavy hair parting + braided Jatamukuta chignon + 5-point Gupta Kirita-Mukuta diadem
+    const hairCrown = new THREE.Mesh(new THREE.SphereGeometry(0.104, 22, 18), mainMat);
+    hairCrown.scale.set(0.96, 0.70, 1.0);
     hairCrown.position.set(0, 0.108, -0.014);
 
-    const chignon = new THREE.Mesh(new THREE.SphereGeometry(0.076, 16, 14), mainMat);
-    chignon.scale.set(0.95, 0.88, 0.92);
-    chignon.position.set(0, 0.178, -0.024);
+    // Carved wavy temple hairlocks framing forehead
+    for (const side of [-1, 1]) {
+      const templeLock = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.068, 6, 8), darkLineMat);
+      templeLock.rotation.z = side * 0.42;
+      templeLock.rotation.x = 0.25;
+      templeLock.position.set(side * 0.074, 0.072, 0.052);
+      hg.add(templeLock);
+    }
 
-    const chignonBand = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.0075, 8, 22), accentMat);
+    const chignon = new THREE.Mesh(new THREE.SphereGeometry(0.078, 18, 16), mainMat);
+    chignon.scale.set(0.95, 0.92, 0.92);
+    chignon.position.set(0, 0.180, -0.024);
+
+    const chignonTopJewel = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.036, 10), accentMat);
+    chignonTopJewel.position.set(0, 0.256, -0.024);
+
+    const chignonBand = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.0075, 8, 24), accentMat);
     chignonBand.rotation.x = Math.PI * 0.5;
     chignonBand.position.set(0, 0.152, -0.020);
 
-    // Gupta jeweled diadem seated cleanly above the forehead hairline (never clipping eyes/brows)
-    const diadem = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.0095, 8, 28), accentMat);
+    // Double-tiered Gupta jeweled diadem + pearl festoon fillet along hairline
+    const diadem = new THREE.Mesh(new THREE.TorusGeometry(0.096, 0.0095, 8, 30), accentMat);
     diadem.rotation.x = Math.PI * 0.47;
     diadem.position.set(0, 0.114, -0.002);
 
-    const frontMedallion = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.030, 0.016, 12), accentMat);
-    frontMedallion.rotation.x = Math.PI * 0.44;
-    frontMedallion.position.set(0, 0.136, 0.090);
-    const crestTip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.044, 8), accentMat);
-    crestTip.position.set(0, 0.168, 0.082);
-    crestTip.rotation.x = 0.16;
-    hg.add(hairCrown, chignon, chignonBand, diadem, frontMedallion, crestTip);
+    const pearlBand = new THREE.Mesh(new THREE.TorusGeometry(0.098, 0.0045, 6, 28), accentMat);
+    pearlBand.rotation.x = Math.PI * 0.47;
+    pearlBand.position.set(0, 0.100, 0.004);
 
+    const frontMedallion = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.033, 0.016, 14), accentMat);
+    frontMedallion.rotation.x = Math.PI * 0.44;
+    frontMedallion.position.set(0, 0.138, 0.091);
+    const crestTip = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.052, 10), accentMat);
+    crestTip.position.set(0, 0.174, 0.082);
+    crestTip.rotation.x = 0.16;
+    hg.add(hairCrown, chignon, chignonTopJewel, chignonBand, diadem, pearlBand, frontMedallion, crestTip);
+
+    // Intermediate + ear-wing crown crests (forming full 5-crest Kirita-Mukuta)
     for (const side of [-1, 1]) {
-      const sideRosette = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.012, 10), accentMat);
-      sideRosette.rotation.z = side * -Math.PI * 0.42;
+      const sideRosette = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.020, 0.013, 12), accentMat);
+      sideRosette.rotation.z = side * -Math.PI * 0.38;
       sideRosette.rotation.y = side * 0.35;
-      sideRosette.position.set(side * 0.074, 0.124, 0.056);
-      hg.add(sideRosette);
+      sideRosette.position.set(side * 0.056, 0.128, 0.072);
+
+      const sidePlume = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.036, 8), accentMat);
+      sidePlume.rotation.z = side * -0.28;
+      sidePlume.position.set(side * 0.062, 0.155, 0.068);
+
+      const earWing = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.018, 0.012, 10), accentMat);
+      earWing.rotation.z = side * -Math.PI * 0.45;
+      earWing.position.set(side * 0.095, 0.118, 0.022);
+      hg.add(sideRosette, sidePlume, earWing);
     }
   }
 
@@ -548,31 +594,77 @@ export function buildDetailedNativitySteleEnsemble(
   archBossInst.computeBoundingSphere();
   toranaGroup.add(archBossInst);
 
-  // Flanking Carved Indra & Brahma Low-Relief Attendants inside lower corners of stele
+  // Flanking Carved Indra & Brahma Low-Relief Attendants with Arms, Halos & Offerings + Flying Gandharvas
   for (const side of [-1, 1]) {
     const att = new THREE.Group();
     att.position.set(side * 0.74, 0.04, 0.07);
-    const attBase = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.12, 0.07, 12), carvedStoneMat);
+    const attBase = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.07, 14), carvedStoneMat);
     attBase.position.y = 0.035;
-    const attBody = new THREE.Mesh(
-      createSculptedTorsoGeometry({
-        height: 0.34,
-        waistRadius: 0.050,
-        hipRadius: 0.066,
-        chestRadius: 0.068,
-        shoulderRadius: 0.076,
-        neckRadius: 0.024,
-        bustProjection: 0.008,
-        tribhangaSway: side * -0.012,
+    const attDhoti = new THREE.Mesh(
+      createSculptedDhotiGeometry({
+        height: 0.25,
+        ankleRadius: 0.056,
+        hipRadius: 0.074,
+        waistRadius: 0.052,
+        pleatCount: 4,
+        thighSeparation: 0.010,
       }),
       carvedStoneMat,
     );
-    attBody.position.y = 0.07;
+    attDhoti.position.y = 0.065;
+    const attBody = new THREE.Mesh(
+      createSculptedTorsoGeometry({
+        height: 0.24,
+        waistRadius: 0.048,
+        hipRadius: 0.054,
+        chestRadius: 0.066,
+        shoulderRadius: 0.074,
+        neckRadius: 0.022,
+        bustProjection: 0.008,
+        tribhangaSway: side * -0.010,
+      }),
+      carvedStoneMat,
+    );
+    attBody.position.y = 0.30;
+    const attBelt = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.006, 6, 16), giltStatueMat);
+    attBelt.rotation.x = Math.PI * 0.5;
+    attBelt.position.y = 0.31;
+    // Sculpted attendant arms folded inward in reverence (Anjali / offering pose)
+    for (const armSide of [-1, 1]) {
+      const attArmCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(armSide * 0.068, 0.48, 0.0),
+        new THREE.Vector3(armSide * 0.082, 0.40, 0.038),
+        new THREE.Vector3(armSide * 0.022, 0.42, 0.068),
+      ]);
+      const attArm = new THREE.Mesh(
+        createTaperedLimbGeometry(attArmCurve, (t) => THREE.MathUtils.lerp(0.019, 0.012, t), 10, 8),
+        carvedStoneMat,
+      );
+      att.add(attArm);
+    }
     const attHead = buildSculptedFigureHead(carvedStoneMat, giltStatueMat, darkStoneMat, 0.44, false);
-    attHead.position.set(0, 0.45, 0.01);
-    attHead.rotation.y = side * -0.45;
-    att.add(attBase, attBody, attHead);
+    attHead.position.set(0, 0.60, 0.01);
+    attHead.rotation.y = side * -0.42;
+    const attHalo = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.008, 6, 20), carvedStoneMat);
+    attHalo.position.set(0, 0.60, -0.045);
+    att.add(attBase, attDhoti, attBody, attBelt, attHead, attHalo);
     toranaGroup.add(att);
+
+    // Upper Torana spandrel flying Gandharva garland-bearers
+    const gandharva = new THREE.Group();
+    gandharva.position.set(side * 0.72, 2.24, 0.09);
+    gandharva.rotation.z = side * 0.24;
+    const gBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.038, 0.14, 6, 10), carvedStoneMat);
+    gBody.rotation.z = side * 0.85;
+    const gHead = new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 8), carvedStoneMat);
+    gHead.position.set(side * -0.09, 0.05, 0.015);
+    const gCrown = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.05, 8), giltStatueMat);
+    gCrown.position.set(side * -0.09, 0.10, 0.015);
+    const gGarland = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.012, 6, 14, Math.PI), giltStatueMat);
+    gGarland.rotation.z = Math.PI;
+    gGarland.position.set(side * -0.08, -0.04, 0.032);
+    gandharva.add(gBody, gHead, gCrown, gGarland);
+    toranaGroup.add(gandharva);
   }
 
   // Gilded Dharmachakra apex finial crowning the stele arch
@@ -586,7 +678,7 @@ export function buildDetailedNativitySteleEnsemble(
   toranaGroup.add(apexPlinth, apexChakra, apexHub);
   root.add(toranaGroup);
 
-  // C. Tapered Gnarled Sal Tree (Shorea robusta) + Sculpted Cupped Leaves & Blossoms
+  // C. Tapered Gnarled Sal Tree (Shorea robusta) + Sculpted Cupped Leaves & 5-Petal Sal Blossoms
   const treeOriginZ = steleZ + 0.15;
   const trunkCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-0.76, 0.88, treeOriginZ),
@@ -656,21 +748,35 @@ export function buildDetailedNativitySteleEnsemble(
   leafInst.computeBoundingSphere();
   root.add(leafInst);
 
-  const blossomGeo = new THREE.DodecahedronGeometry(0.020, 1);
-  const blossomInst = new THREE.InstancedMesh(blossomGeo, giltStatueMat, 14);
-  for (let i = 0; i < 14; i++) {
-    const t = i / 13;
+  const blossomPetalGeo = createCarvedLotusPetalGeometry(0.022, 0.036, 0.008);
+  const blossomCount = 14;
+  const blossomPetalInst = new THREE.InstancedMesh(blossomPetalGeo, giltStatueMat, blossomCount * 5);
+  const blossomCoreInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.010, 8, 6), mats.warmBronzeMat, blossomCount);
+  let bpIdx = 0;
+  for (let i = 0; i < blossomCount; i++) {
+    const t = i / (blossomCount - 1);
     const bx = THREE.MathUtils.lerp(-0.50, 0.58, t);
     const by = 2.48 + Math.sin(t * Math.PI) * 0.24 + (i % 2 === 0 ? 0.05 : -0.04);
-    _v3.set(bx, by, treeOriginZ + 0.14);
-    _q.setFromEuler(_e.set(i * 0.4, i * 0.7, 0));
-    _s.setScalar(0.95);
+    const bz = treeOriginZ + 0.14;
+    _v3.set(bx, by, bz);
+    _q.identity();
+    _s.setScalar(1.0);
     _m4.compose(_v3, _q, _s);
-    blossomInst.setMatrixAt(i, _m4);
+    blossomCoreInst.setMatrixAt(i, _m4);
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2 + i * 0.3;
+      _v3.set(bx + Math.cos(a) * 0.012, by + Math.sin(a) * 0.012, bz);
+      _q.setFromEuler(_e.set(0.25, 0, a - Math.PI * 0.5));
+      _s.setScalar(1.0);
+      _m4.compose(_v3, _q, _s);
+      blossomPetalInst.setMatrixAt(bpIdx++, _m4);
+    }
   }
-  blossomInst.instanceMatrix.needsUpdate = true;
-  blossomInst.computeBoundingSphere();
-  root.add(blossomInst);
+  blossomCoreInst.instanceMatrix.needsUpdate = true;
+  blossomPetalInst.instanceMatrix.needsUpdate = true;
+  blossomCoreInst.computeBoundingSphere();
+  blossomPetalInst.computeBoundingSphere();
+  root.add(blossomCoreInst, blossomPetalInst);
 
   // =========================================================================
   // D. SCULPTED 3D QUEEN MAYA DEVI IN CLASSICAL GUPTA TRIBHANGA POSTURE
@@ -697,7 +803,7 @@ export function buildDetailedNativitySteleEnsemble(
       ankleRadius: 0.132,
       hipRadius: 0.172,
       waistRadius: 0.118,
-      pleatCount: 5,
+      pleatCount: 6,
       hipShiftX: 0.026,
       thighSeparation: 0.024,
     }),
@@ -708,34 +814,63 @@ export function buildDetailedNativitySteleEnsemble(
   mayaDhoti.receiveShadow = true;
   maya.add(mayaDhoti);
 
-  // Flowing Central Carved Pleated Dhoti Sash & Side Drapery Tails
-  const centerSashCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.024, 0.86, 0.105),
-    new THREE.Vector3(0.020, 0.64, 0.125),
-    new THREE.Vector3(0.014, 0.42, 0.112),
-    new THREE.Vector3(0.008, 0.19, 0.105),
-  ]);
-  const centerSash = new THREE.Mesh(
-    createTaperedLimbGeometry(centerSashCurve, (t) => 0.022 * (0.85 + 0.45 * Math.sin(t * Math.PI)), 16, 8),
-    carvedStoneMat,
-  );
-  centerSash.scale.set(1.35, 1.0, 0.45);
-  maya.add(centerSash);
+  // Multi-tiered Fan-Pleated Central Patka Dhoti Sash & Side Hip Kachcha Drapery Folds
+  for (const [offsetX, width, zOff, curveBias] of [
+    [0.0, 0.072, 0.118, 0.0],
+    [-0.022, 0.044, 0.112, -0.012],
+    [0.022, 0.044, 0.112, 0.012],
+  ] as Array<[number, number, number, number]>) {
+    const patkaCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.022 + offsetX, 0.87, zOff),
+      new THREE.Vector3(0.020 + offsetX + curveBias * 0.6, 0.65, zOff + 0.018),
+      new THREE.Vector3(0.014 + offsetX + curveBias, 0.42, zOff + 0.010),
+      new THREE.Vector3(0.008 + offsetX * 1.15, 0.19, zOff - 0.002),
+    ]);
+    const patka = new THREE.Mesh(
+      buildFlatRibbonGeometry(patkaCurve, 18, width, 0.014, new THREE.Vector3(0, 0, 1)),
+      carvedStoneMat,
+    );
+    maya.add(patka);
+  }
+  for (const side of [-1, 1]) {
+    const sideFoldCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.022 + side * 0.115, 0.87, 0.02),
+      new THREE.Vector3(0.026 + side * 0.168, 0.68, 0.028),
+      new THREE.Vector3(0.018 + side * 0.162, 0.48, 0.012),
+      new THREE.Vector3(0.010 + side * 0.145, 0.30, 0.002),
+    ]);
+    const sideFold = new THREE.Mesh(
+      buildFlatRibbonGeometry(sideFoldCurve, 14, 0.056, 0.012, new THREE.Vector3(side, 0, 0.25).normalize()),
+      carvedStoneMat,
+    );
+    maya.add(sideFold);
+  }
 
-  // Ornate Mekhala Jeweled Waist Girdle hugging cleanly into the dhoti/torso junction
-  const mekhala = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.012, 10, 28), giltStatueMat);
-  mekhala.rotation.x = Math.PI * 0.5;
-  mekhala.scale.set(1.0, 0.74, 1);
-  mekhala.position.set(0.022, 0.885, 0);
-  const sashLoop = new THREE.Mesh(
-    new THREE.TorusGeometry(0.064, 0.0085, 8, 18, Math.PI),
-    giltStatueMat,
-  );
-  sashLoop.rotation.z = Math.PI;
-  sashLoop.position.set(0.022, 0.865, 0.088);
-  const waistClasp = new THREE.Mesh(new THREE.OctahedronGeometry(0.017, 1), giltStatueMat);
-  waistClasp.position.set(0.022, 0.885, 0.094);
-  maya.add(mekhala, sashLoop, waistClasp);
+  // Ornate 3-Tier Mekhala Jeweled Waist Girdle + Double Pearl Festoon Loops + Central Rosette Clasp
+  for (const [my, mr, mt] of [
+    [0.896, 0.118, 0.009],
+    [0.875, 0.122, 0.011],
+    [0.855, 0.125, 0.008],
+  ] as Array<[number, number, number]>) {
+    const mekhalaTier = new THREE.Mesh(new THREE.TorusGeometry(mr, mt, 8, 28), giltStatueMat);
+    mekhalaTier.rotation.x = Math.PI * 0.5;
+    mekhalaTier.scale.set(1.0, 0.74, 1);
+    mekhalaTier.position.set(0.022, my, 0);
+    maya.add(mekhalaTier);
+  }
+  for (const fx of [-0.048, 0.0, 0.048]) {
+    const festoon = new THREE.Mesh(
+      new THREE.TorusGeometry(fx === 0 ? 0.058 : 0.042, 0.0075, 8, 16, Math.PI),
+      giltStatueMat,
+    );
+    festoon.rotation.z = Math.PI;
+    festoon.position.set(0.022 + fx, 0.854, fx === 0 ? 0.092 : 0.080);
+    maya.add(festoon);
+  }
+  const waistClasp = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.018, 12), giltStatueMat);
+  waistClasp.rotation.x = Math.PI * 0.5;
+  waistClasp.position.set(0.022, 0.878, 0.096);
+  maya.add(waistClasp);
 
   // Sculpted Female Upper Torso in S-Curve Tribhanga + Bust + Diagonal Uttariya Sash
   const mayaTorso = new THREE.Mesh(
@@ -765,30 +900,52 @@ export function buildDetailedNativitySteleEnsemble(
     maya.add(deltoid);
   }
 
-  // Diagonal carved Uttariya scarf draped from left shoulder across waist
+  // Wide Flat Pleated Uttariya Scarf draped across left shoulder, torso, and trailing along left hip
   const uttariyaCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.088, 1.38, 0.035),
-    new THREE.Vector3(-0.025, 1.24, 0.098),
-    new THREE.Vector3(0.065, 1.05, 0.092),
-    new THREE.Vector3(0.118, 0.89, 0.030),
+    new THREE.Vector3(-0.096, 1.40, -0.038),
+    new THREE.Vector3(-0.088, 1.39, 0.044),
+    new THREE.Vector3(-0.022, 1.24, 0.114),
+    new THREE.Vector3(0.068, 1.05, 0.098),
+    new THREE.Vector3(0.122, 0.89, 0.026),
   ]);
   const uttariya = new THREE.Mesh(
-    createTaperedLimbGeometry(uttariyaCurve, () => 0.014, 16, 8),
+    buildFlatRibbonGeometry(uttariyaCurve, 22, 0.084, 0.015, new THREE.Vector3(0.15, 0.35, 0.92).normalize()),
     carvedStoneMat,
   );
-  uttariya.scale.set(1.0, 1.0, 0.55);
-  maya.add(uttariya);
+  const uttariyaBorder = new THREE.Mesh(
+    createTaperedLimbGeometry(uttariyaCurve, () => 0.0055, 22, 6),
+    giltStatueMat,
+  );
+  uttariyaBorder.position.z = 0.006;
+  maya.add(uttariya, uttariyaBorder);
 
-  // Multi-strand Beaded Hara Necklace + Chest Pendant
-  const hara = new THREE.Mesh(new THREE.TorusGeometry(0.084, 0.009, 8, 24, Math.PI * 1.12), giltStatueMat);
-  hara.rotation.x = Math.PI * 0.42;
-  hara.rotation.z = Math.PI;
-  hara.position.set(0.012, 1.33, 0.054);
-  const chestPendant = new THREE.Mesh(new THREE.OctahedronGeometry(0.017, 1), giltStatueMat);
-  chestPendant.position.set(0.014, 1.24, 0.104);
-  maya.add(hara, chestPendant);
+  // Multi-strand Beaded Ratnahara Necklace + Long Pearl Sthana-Hara Garland + Chest Medallion
+  for (const [hy, hr, ht] of [
+    [1.368, 0.066, 0.008],
+    [1.332, 0.086, 0.009],
+  ] as Array<[number, number, number]>) {
+    const hara = new THREE.Mesh(new THREE.TorusGeometry(hr, ht, 8, 24, Math.PI * 1.12), giltStatueMat);
+    hara.rotation.x = Math.PI * 0.42;
+    hara.rotation.z = Math.PI;
+    hara.position.set(0.012, hy, 0.046);
+    maya.add(hara);
+  }
+  const chestPendant = new THREE.Mesh(new THREE.OctahedronGeometry(0.018, 1), giltStatueMat);
+  chestPendant.position.set(0.014, 1.245, 0.108);
+  const longGarlandCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.042, 1.32, 0.072),
+    new THREE.Vector3(-0.030, 1.14, 0.116),
+    new THREE.Vector3(0.014, 1.01, 0.102),
+    new THREE.Vector3(0.056, 1.14, 0.114),
+    new THREE.Vector3(0.066, 1.32, 0.072),
+  ]);
+  const longGarland = new THREE.Mesh(
+    createTaperedLimbGeometry(longGarlandCurve, () => 0.0055, 18, 8),
+    giltStatueMat,
+  );
+  maya.add(chestPendant, longGarland);
 
-  // Tapered Anatomical Left Arm (Katyavalambita pose resting smoothly on hip)
+  // Tapered Anatomical Left Arm (Katyavalambita pose resting smoothly on hip) + Keyura Armlet + 4 Stacked Bangles
   const leftArmCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-0.122, 1.34, 0.0),
     new THREE.Vector3(-0.205, 1.18, 0.018),
@@ -813,15 +970,22 @@ export function buildDetailedNativitySteleEnsemble(
   leftArmlet.position.set(-0.185, 1.22, 0.015);
   leftArmlet.rotation.x = Math.PI * 0.45;
   leftArmlet.rotation.y = 0.25;
-  const leftBangle = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.006, 6, 14), giltStatueMat);
-  leftBangle.position.set(-0.160, 0.94, 0.060);
-  leftBangle.rotation.x = Math.PI * 0.42;
+  const leftArmletCrest = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.024, 6), giltStatueMat);
+  leftArmletCrest.position.set(-0.214, 1.23, 0.018);
+  leftArmletCrest.rotation.z = 1.25;
+  for (let b = 0; b < 4; b++) {
+    const bangle = new THREE.Mesh(new THREE.TorusGeometry(0.023 + b * 0.0008, 0.0042, 6, 14), giltStatueMat);
+    bangle.position.set(-0.152 - b * 0.008, 0.918 + b * 0.012, 0.064 - b * 0.003);
+    bangle.rotation.x = Math.PI * 0.42;
+    bangle.rotation.y = -0.35;
+    maya.add(bangle);
+  }
   const leftHand = buildHand(carvedStoneMat, -1, 'open');
   leftHand.position.set(-0.136, 0.885, 0.072);
   leftHand.rotation.z = 0.62;
-  maya.add(leftArm, leftArmlet, leftBangle, leftHand);
+  maya.add(leftArm, leftArmlet, leftArmletCrest, leftHand);
 
-  // Tapered Anatomical Right Arm reaching upward to grasp the Sal tree bough
+  // Tapered Anatomical Right Arm reaching upward to grasp the Sal tree bough + Keyura + 4 Stacked Bangles
   const rightArmCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0.125, 1.35, 0.0),
     new THREE.Vector3(0.228, 1.49, 0.028),
@@ -846,13 +1010,20 @@ export function buildDetailedNativitySteleEnsemble(
   rightArmlet.position.set(0.208, 1.46, 0.020);
   rightArmlet.rotation.x = Math.PI * 0.45;
   rightArmlet.rotation.y = -0.55;
-  const rightBangles = new THREE.Mesh(new THREE.TorusGeometry(0.023, 0.007, 8, 16), giltStatueMat);
-  rightBangles.position.set(0.326, 1.70, 0.008);
-  rightBangles.rotation.x = Math.PI * 0.42;
+  const rightArmletCrest = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.024, 6), giltStatueMat);
+  rightArmletCrest.position.set(0.232, 1.47, 0.024);
+  rightArmletCrest.rotation.z = -1.1;
+  for (let b = 0; b < 4; b++) {
+    const bangle = new THREE.Mesh(new THREE.TorusGeometry(0.022 + b * 0.0008, 0.0042, 6, 14), giltStatueMat);
+    bangle.position.set(0.322 + b * 0.004, 1.69 + b * 0.013, 0.011 - b * 0.004);
+    bangle.rotation.x = Math.PI * 0.42;
+    bangle.rotation.y = -0.2;
+    maya.add(bangle);
+  }
   const rightHand = buildHand(carvedStoneMat, 1, 'grasp');
   rightHand.position.set(0.344, 1.79, -0.015);
   rightHand.rotation.x = 0.40;
-  maya.add(rightArm, rightArmlet, rightBangles, rightHand);
+  maya.add(rightArm, rightArmlet, rightArmletCrest, rightHand);
 
   // Serene Anatomically Sculpted Queen Maya Devi Head + Crown
   const mayaHead = buildSculptedFigureHead(carvedStoneMat, giltStatueMat, darkStoneMat, 0.98, false);
@@ -860,20 +1031,22 @@ export function buildDetailedNativitySteleEnsemble(
   mayaHead.rotation.z = 0.04;
   maya.add(mayaHead);
 
-  // Carved Gupta Sandstone & Gilt Lotus Prabhamandala Halo behind Maya Devi
+  // Carved Gupta Sandstone & Gilt Lotus Prabhamandala Halo behind Maya Devi (24 petals + spoked rim)
   const haloCenterY = 1.57;
-  const haloZ = -0.085;
-  const haloRimOuter = new THREE.Mesh(new THREE.TorusGeometry(0.275, 0.015, 10, 36), giltStatueMat);
+  const haloZ = -0.088;
+  const haloRimOuter = new THREE.Mesh(new THREE.TorusGeometry(0.295, 0.016, 10, 40), giltStatueMat);
   haloRimOuter.position.set(0.012, haloCenterY, haloZ);
-  const haloRimInner = new THREE.Mesh(new THREE.TorusGeometry(0.195, 0.011, 8, 28), carvedStoneMat);
+  const haloRimInner = new THREE.Mesh(new THREE.TorusGeometry(0.205, 0.011, 8, 32), carvedStoneMat);
   haloRimInner.position.set(0.012, haloCenterY, haloZ + 0.005);
-  const haloPetalGeo = createCarvedLotusPetalGeometry(0.055, 0.088, 0.016);
-  const haloPetals = new THREE.InstancedMesh(haloPetalGeo, carvedStoneMat, 20);
-  for (let i = 0; i < 20; i++) {
-    const a = (i / 20) * Math.PI * 2;
+  const haloDisc = new THREE.Mesh(new THREE.CircleGeometry(0.20, 28), darkStoneMat);
+  haloDisc.position.set(0.012, haloCenterY, haloZ - 0.006);
+  const haloPetalGeo = createCarvedLotusPetalGeometry(0.052, 0.086, 0.016);
+  const haloPetals = new THREE.InstancedMesh(haloPetalGeo, carvedStoneMat, 24);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
     _v3.set(
-      0.012 + Math.cos(a) * 0.195,
-      haloCenterY + Math.sin(a) * 0.195,
+      0.012 + Math.cos(a) * 0.205,
+      haloCenterY + Math.sin(a) * 0.205,
       haloZ + 0.004,
     );
     _q.setFromEuler(_e.set(0, 0, a - Math.PI * 0.5));
@@ -883,7 +1056,7 @@ export function buildDetailedNativitySteleEnsemble(
   }
   haloPetals.instanceMatrix.needsUpdate = true;
   haloPetals.computeBoundingSphere();
-  maya.add(haloRimOuter, haloRimInner, haloPetals);
+  maya.add(haloDisc, haloRimOuter, haloRimInner, haloPetals);
   root.add(maya);
 
   // =========================================================================
@@ -892,7 +1065,7 @@ export function buildDetailedNativitySteleEnsemble(
   const gautami = new THREE.Group();
   gautami.position.set(-0.56, 0.87, -0.04);
 
-  const gLotus = buildCarvedLotusPedestal(carvedStoneMat, mats.warmBronzeMat, 0.175, 0.105, 12);
+  const gLotus = buildCarvedLotusPedestal(carvedStoneMat, mats.warmBronzeMat, 0.175, 0.105, 14);
   gautami.add(gLotus);
 
   for (const side of [-1, 1]) {
@@ -907,7 +1080,7 @@ export function buildDetailedNativitySteleEnsemble(
       ankleRadius: 0.096,
       hipRadius: 0.125,
       waistRadius: 0.086,
-      pleatCount: 4,
+      pleatCount: 5,
       hipShiftX: -0.012,
       thighSeparation: 0.016,
     }),
@@ -916,6 +1089,18 @@ export function buildDetailedNativitySteleEnsemble(
   gDhoti.position.set(0, 0.112, 0);
   gDhoti.castShadow = true;
   gDhoti.receiveShadow = true;
+
+  // Gautami central pleated Patka dhoti lappet
+  const gPatkaCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.0, 0.65, 0.086),
+    new THREE.Vector3(-0.006, 0.46, 0.100),
+    new THREE.Vector3(-0.008, 0.28, 0.090),
+    new THREE.Vector3(-0.006, 0.13, 0.084),
+  ]);
+  const gPatka = new THREE.Mesh(
+    buildFlatRibbonGeometry(gPatkaCurve, 14, 0.052, 0.011, new THREE.Vector3(0, 0, 1)),
+    carvedStoneMat,
+  );
 
   const gTorso = new THREE.Mesh(
     createSculptedTorsoGeometry({
@@ -933,10 +1118,24 @@ export function buildDetailedNativitySteleEnsemble(
   gTorso.position.set(0, 0.64, 0);
   gTorso.castShadow = true;
 
+  // Gautami pleated diagonal Uttariya shoulder shawl
+  const gUttariyaCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.068, 1.03, -0.028),
+    new THREE.Vector3(-0.062, 1.02, 0.034),
+    new THREE.Vector3(0.0, 0.89, 0.086),
+    new THREE.Vector3(0.068, 0.72, 0.062),
+  ]);
+  const gUttariya = new THREE.Mesh(
+    buildFlatRibbonGeometry(gUttariyaCurve, 14, 0.060, 0.011, new THREE.Vector3(0.2, 0.3, 0.93).normalize()),
+    carvedStoneMat,
+  );
+
   const gBelt = new THREE.Mesh(new THREE.TorusGeometry(0.096, 0.010, 8, 22), mats.warmBronzeMat);
   gBelt.rotation.x = Math.PI * 0.5;
   gBelt.scale.set(1.02, 0.76, 1);
   gBelt.position.set(0, 0.655, 0);
+  const gWaistClasp = new THREE.Mesh(new THREE.OctahedronGeometry(0.014, 1), giltStatueMat);
+  gWaistClasp.position.set(0, 0.655, 0.078);
 
   const gHara = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.008, 6, 18, Math.PI * 1.1), mats.warmBronzeMat);
   gHara.rotation.x = Math.PI * 0.42;
@@ -957,8 +1156,14 @@ export function buildDetailedNativitySteleEnsemble(
   gRightHand.scale.setScalar(0.76);
   gRightHand.position.set(0.295, 0.945, 0.045);
   gRightHand.rotation.z = -1.25;
+  for (let b = 0; b < 3; b++) {
+    const gb = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0036, 6, 12), mats.warmBronzeMat);
+    gb.rotation.y = Math.PI * 0.5;
+    gb.position.set(0.262 + b * 0.009, 0.935, 0.045);
+    gautami.add(gb);
+  }
 
-  // Left Arm gently curved along side holding ceremonial water vessel (Kamandalu)
+  // Left Arm gently curved along side holding sculpted LatheGeometry spouted Kamandalu water pitcher
   const gLeftArmCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-0.092, 0.98, 0.0),
     new THREE.Vector3(-0.135, 0.83, 0.02),
@@ -971,13 +1176,36 @@ export function buildDetailedNativitySteleEnsemble(
   const gLeftHand = buildHand(carvedStoneMat, -1, 'grasp');
   gLeftHand.scale.setScalar(0.75);
   gLeftHand.position.set(-0.110, 0.675, 0.056);
-  const kamandalu = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), mats.warmBronzeMat);
-  kamandalu.scale.set(1.0, 1.25, 1.0);
-  kamandalu.position.set(-0.115, 0.635, 0.068);
+
+  const kamPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.022, 0.0),
+    new THREE.Vector2(0.018, 0.010),
+    new THREE.Vector2(0.040, 0.036),
+    new THREE.Vector2(0.042, 0.060),
+    new THREE.Vector2(0.016, 0.084),
+    new THREE.Vector2(0.025, 0.100),
+    new THREE.Vector2(0.010, 0.105),
+    new THREE.Vector2(0.0, 0.114),
+  ];
+  const kamandalu = new THREE.Mesh(new THREE.LatheGeometry(kamPts, 16), mats.warmBronzeMat);
+  kamandalu.position.set(-0.114, 0.575, 0.064);
+  const kamSpoutCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.146, 0.625, 0.064),
+    new THREE.Vector3(-0.168, 0.648, 0.066),
+    new THREE.Vector3(-0.172, 0.672, 0.066),
+  ]);
+  const kamSpout = new THREE.Mesh(new THREE.TubeGeometry(kamSpoutCurve, 8, 0.006, 6, false), mats.warmBronzeMat);
 
   const gHead = buildSculptedFigureHead(carvedStoneMat, giltStatueMat, darkStoneMat, 0.72, false);
   gHead.position.set(0.015, 1.165, 0.01);
   gHead.rotation.y = 0.30;
+
+  // Carved Prabhamandala halo behind Sister Mahaprajapati Gautami
+  const gHaloRing = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.010, 8, 28), mats.warmBronzeMat);
+  gHaloRing.position.set(0.012, 1.175, -0.072);
+  const gHaloDisc = new THREE.Mesh(new THREE.CircleGeometry(0.175, 24), darkStoneMat);
+  gHaloDisc.position.set(0.012, 1.175, -0.078);
 
   // Deltoid shoulder joins for Sister Mahaprajapati
   for (const sx of [-0.092, 0.095]) {
@@ -986,18 +1214,47 @@ export function buildDetailedNativitySteleEnsemble(
     gautami.add(gShoulder);
   }
 
-  gautami.add(gDhoti, gTorso, gBelt, gHara, gRightArm, gRightHand, gLeftArm, gLeftHand, kamandalu, gHead);
+  gautami.add(
+    gDhoti,
+    gPatka,
+    gTorso,
+    gUttariya,
+    gBelt,
+    gWaistClasp,
+    gHara,
+    gRightArm,
+    gRightHand,
+    gLeftArm,
+    gLeftHand,
+    kamandalu,
+    kamSpout,
+    gHead,
+    gHaloRing,
+    gHaloDisc,
+  );
   root.add(gautami);
 
   // =========================================================================
-  // F. SCULPTED STANDING GOLDEN BABY PRINCE SIDDHARTHA ON DOUBLE-TIER LOTUS
+  // F. SCULPTED STANDING GOLDEN BABY PRINCE SIDDHARTHA ON 7-STEP LOTUS THRONE
   // =========================================================================
   const baby = new THREE.Group();
   baby.position.set(0.47, 0.87, 0.10);
 
-  // Ornate Double-Tier 16-Petal Padmasana Lotus Pedestal
+  // Ornate Double-Tier 16-Petal Padmasana Lotus Pedestal + 7 Sacred Ascending Birth-Step Lotuses
   const bLotus = buildCarvedLotusPedestal(giltStatueMat, mats.warmBronzeMat, 0.23, 0.21, 16);
   baby.add(bLotus);
+  for (let st = 0; st < 7; st++) {
+    const ang = -Math.PI * 0.42 + (st / 6) * Math.PI * 0.84;
+    const stepMedallion = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.036, 0.044, 0.018, 12),
+      st % 2 === 0 ? giltStatueMat : mats.warmBronzeMat,
+    );
+    stepMedallion.position.set(Math.sin(ang) * 0.245, 0.018 + st * 0.012, Math.cos(ang) * 0.245);
+    const stepBud = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), giltStatueMat);
+    stepBud.scale.set(1.0, 0.65, 1.0);
+    stepBud.position.set(Math.sin(ang) * 0.245, 0.030 + st * 0.012, Math.cos(ang) * 0.245);
+    baby.add(stepMedallion, stepBud);
+  }
 
   // Sculpted Bare Child Feet & Toes
   for (const side of [-1, 1]) {
@@ -1006,14 +1263,14 @@ export function buildDetailedNativitySteleEnsemble(
     baby.add(foot);
   }
 
-  // Sculpted Softly Pleated Child Dhoti + Gilded Waist Sash + Central Pleated Lappet
+  // Sculpted Softly Pleated Child Dhoti + Fan-Pleated Patka Lappet + Side Drapery Sashes
   const bDhoti = new THREE.Mesh(
     createSculptedDhotiGeometry({
       height: 0.32,
       ankleRadius: 0.076,
       hipRadius: 0.098,
       waistRadius: 0.082,
-      pleatCount: 4,
+      pleatCount: 5,
       hipShiftX: 0.0,
       thighSeparation: 0.016,
     }),
@@ -1022,12 +1279,25 @@ export function buildDetailedNativitySteleEnsemble(
   bDhoti.position.set(0, 0.218, 0);
   bDhoti.castShadow = true;
 
+  const bPatkaCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.525, 0.078),
+    new THREE.Vector3(0, 0.40, 0.092),
+    new THREE.Vector3(0, 0.25, 0.078),
+  ]);
+  const bPatka = new THREE.Mesh(
+    buildFlatRibbonGeometry(bPatkaCurve, 12, 0.052, 0.010, new THREE.Vector3(0, 0, 1)),
+    mats.warmBronzeMat,
+  );
+
   const bBelt = new THREE.Mesh(new THREE.TorusGeometry(0.086, 0.011, 8, 22), mats.warmBronzeMat);
   bBelt.rotation.x = Math.PI * 0.5;
   bBelt.scale.set(1.04, 0.80, 1);
   bBelt.position.y = 0.53;
+  const bWaistClasp = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.019, 0.014, 10), giltStatueMat);
+  bWaistClasp.rotation.x = Math.PI * 0.5;
+  bWaistClasp.position.set(0, 0.53, 0.072);
 
-  // Noble Child Upper Torso (rounded child belly + sculpted chest + Kanthi neck torque)
+  // Noble Child Upper Torso (rounded child belly + sculpted chest + Royal Channavira Crossed Harness)
   const bTorso = new THREE.Mesh(
     createSculptedTorsoGeometry({
       height: 0.34,
@@ -1044,6 +1314,24 @@ export function buildDetailedNativitySteleEnsemble(
   );
   bTorso.position.set(0, 0.52, 0);
   bTorso.castShadow = true;
+
+  // Crossed Royal Channavira Strap Harness + Central Lotus Chest Medallion
+  for (const side of [-1, 1]) {
+    const strapCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side * 0.068, 0.815, 0.025),
+      new THREE.Vector3(side * 0.035, 0.735, 0.078),
+      new THREE.Vector3(0, 0.690, 0.086),
+      new THREE.Vector3(-side * 0.052, 0.590, 0.074),
+    ]);
+    const strap = new THREE.Mesh(
+      buildFlatRibbonGeometry(strapCurve, 12, 0.018, 0.007, new THREE.Vector3(0, 0.2, 0.98).normalize()),
+      mats.warmBronzeMat,
+    );
+    baby.add(strap);
+  }
+  const bChestRosette = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.022, 0.012, 12), giltStatueMat);
+  bChestRosette.rotation.x = Math.PI * 0.5;
+  bChestRosette.position.set(0, 0.692, 0.089);
 
   const bKanthi = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.0085, 8, 20, Math.PI * 1.1), mats.warmBronzeMat);
   bKanthi.rotation.x = Math.PI * 0.42;
@@ -1062,6 +1350,9 @@ export function buildDetailedNativitySteleEnsemble(
     giltStatueMat,
   );
   bRArm.castShadow = true;
+  const bRArmlet = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.005, 6, 14), mats.warmBronzeMat);
+  bRArmlet.rotation.x = Math.PI * 0.45;
+  bRArmlet.position.set(0.134, 0.84, 0.018);
   const bRBangle = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.005, 6, 14), mats.warmBronzeMat);
   bRBangle.rotation.x = Math.PI * 0.5;
   bRBangle.position.set(0.118, 1.01, 0.022);
@@ -1080,26 +1371,32 @@ export function buildDetailedNativitySteleEnsemble(
     giltStatueMat,
   );
   bLArm.castShadow = true;
+  const bLArmlet = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.005, 6, 14), mats.warmBronzeMat);
+  bLArmlet.rotation.x = Math.PI * 0.48;
+  bLArmlet.position.set(-0.116, 0.68, 0.014);
+  const bLBangle = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0045, 6, 14), mats.warmBronzeMat);
+  bLBangle.rotation.x = Math.PI * 0.5;
+  bLBangle.position.set(-0.112, 0.525, 0.027);
   const bLHand = buildHand(giltStatueMat, -1, 'open');
   bLHand.scale.setScalar(0.74);
   bLHand.rotation.z = Math.PI;
   bLHand.position.set(-0.112, 0.485, 0.030);
 
-  // Serene Child Buddha Head with Spiral Ushnisha Curls
+  // Serene Child Buddha Head with Spiral Ushnisha Curls & Ketumala Flame
   const bHead = buildSculptedFigureHead(giltStatueMat, mats.warmBronzeMat, mats.warmBronzeMat, 0.76, true);
   bHead.position.set(0, 0.915, 0.01);
 
-  // Ornate Carved Prabhavali Lotus-and-Flame Aureole behind Prince Siddhartha
+  // Ornate Carved 24-Flame Prabhavali Lotus-and-Flame Aureole behind Prince Siddhartha
   const bHaloY = 0.80;
   const bHaloZ = -0.10;
-  const bHaloRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.014, 8, 32), giltStatueMat);
+  const bHaloRing = new THREE.Mesh(new THREE.TorusGeometry(0.285, 0.015, 10, 36), giltStatueMat);
   bHaloRing.position.set(0, bHaloY, bHaloZ);
-  const bHaloInner = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.009, 8, 24), mats.warmBronzeMat);
+  const bHaloInner = new THREE.Mesh(new THREE.TorusGeometry(0.205, 0.009, 8, 28), mats.warmBronzeMat);
   bHaloInner.position.set(0, bHaloY, bHaloZ + 0.004);
-  const bHaloSpokeGeo = new THREE.CylinderGeometry(0.0048, 0.0048, 0.54, 6);
-  const bHaloSpokes = new THREE.InstancedMesh(bHaloSpokeGeo, giltStatueMat, 8);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
+  const bHaloSpokeGeo = new THREE.CylinderGeometry(0.0048, 0.0048, 0.55, 6);
+  const bHaloSpokes = new THREE.InstancedMesh(bHaloSpokeGeo, giltStatueMat, 12);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
     _v3.set(0, bHaloY, bHaloZ);
     _q.setFromEuler(_e.set(0, 0, a));
     _s.setScalar(1);
@@ -1108,11 +1405,11 @@ export function buildDetailedNativitySteleEnsemble(
   }
   bHaloSpokes.instanceMatrix.needsUpdate = true;
   bHaloSpokes.computeBoundingSphere();
-  const bFlameGeo = createCarvedLotusPetalGeometry(0.052, 0.075, 0.015);
-  const bFlameRim = new THREE.InstancedMesh(bFlameGeo, giltStatueMat, 18);
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2;
-    _v3.set(Math.cos(a) * 0.28, bHaloY + Math.sin(a) * 0.28, bHaloZ);
+  const bFlameGeo = createCarvedLotusPetalGeometry(0.048, 0.078, 0.015);
+  const bFlameRim = new THREE.InstancedMesh(bFlameGeo, giltStatueMat, 24);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    _v3.set(Math.cos(a) * 0.285, bHaloY + Math.sin(a) * 0.285, bHaloZ);
     _q.setFromEuler(_e.set(0, 0, a - Math.PI * 0.5));
     _s.set(1, 1, 1);
     _m4.compose(_v3, _q, _s);
@@ -1123,13 +1420,19 @@ export function buildDetailedNativitySteleEnsemble(
 
   baby.add(
     bDhoti,
+    bPatka,
     bBelt,
+    bWaistClasp,
     bTorso,
+    bChestRosette,
     bKanthi,
     bRArm,
+    bRArmlet,
     bRBangle,
     bRHand,
     bLArm,
+    bLArmlet,
+    bLBangle,
     bLHand,
     bHead,
     bHaloRing,
@@ -1347,9 +1650,9 @@ export function buildMeditationGalleryEnsemble(
         table.add(leg, ferrule);
       }
     }
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(tableW * 0.82, 0.07, tableD * 0.82), crimsonSilkMat);
-    apron.position.y = tableH - 0.055;
-    const goldBorder = new THREE.Mesh(new THREE.BoxGeometry(tableW * 0.86, 0.018, tableD * 0.86), mats.giltGoldMat);
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(tableW * 0.72, 0.064, tableD * 0.72), crimsonSilkMat);
+    apron.position.y = tableH - 0.052;
+    const goldBorder = new THREE.Mesh(new THREE.BoxGeometry(tableW * 0.74, 0.016, tableD * 0.74), mats.giltGoldMat);
     goldBorder.position.y = tableH - 0.092;
     const topDeck = new THREE.Mesh(new THREE.BoxGeometry(tableW, 0.036, tableD), mats.timberMat);
     topDeck.position.y = tableH;
@@ -1665,9 +1968,9 @@ export function buildDetailedButterLampAltar(
     }
   }
 
-  // B. Pleated Crimson-and-Gold Tibetan Silk Brocade Skirt Valance
-  const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.70, 0.34, 0.58), brocadeSkirtMat);
-  skirt.position.y = 0.44;
+  // B. Pleated Crimson-and-Gold Tibetan Silk Brocade Skirt Valance (recessed cleanly inside corner legs & brackets to prevent corner Z-fighting)
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.30, 0.44), brocadeSkirtMat);
+  skirt.position.y = 0.436;
   skirt.castShadow = true;
   skirt.receiveShadow = true;
   root.add(skirt);
@@ -1735,6 +2038,7 @@ export function buildDetailedButterLampAltar(
     wickPin.position.set(lx, ly + 0.114 * scale, lz);
 
     const flame = createSacredFlameGroup(mats.flameGlowMat, 0.44 * scale);
+    flame.userData.baseScale = 0.44 * scale;
     flame.position.set(lx, ly + 0.128 * scale, lz);
     root.add(chalice, ghee, wickPin, flame);
     cornerLamps.push(flame);
