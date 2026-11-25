@@ -5,6 +5,18 @@ export interface LumbiniTextureSet {
   mauryaBrickNormal: THREE.CanvasTexture;
   mauryaBrickRough: THREE.CanvasTexture;
   mauryaBrickAo: THREE.CanvasTexture;
+  whiteBrickMap: THREE.CanvasTexture;
+  whiteBrickNormal: THREE.CanvasTexture;
+  whiteBrickRough: THREE.CanvasTexture;
+  whiteBrickAo: THREE.CanvasTexture;
+  terracottaPaverMap: THREE.CanvasTexture;
+  terracottaPaverNormal: THREE.CanvasTexture;
+  terracottaPaverRough: THREE.CanvasTexture;
+  gardenLawnMap: THREE.CanvasTexture;
+  gardenLawnNormal: THREE.CanvasTexture;
+  gardenLawnRough: THREE.CanvasTexture;
+  hedgeLeafMap: THREE.CanvasTexture;
+  hedgeLeafNormal: THREE.CanvasTexture;
   stuccoWhiteMap: THREE.CanvasTexture;
   stuccoWhiteNormal: THREE.CanvasTexture;
   stuccoWhiteRough: THREE.CanvasTexture;
@@ -20,6 +32,7 @@ export interface LumbiniTextureSet {
   brahmiEdictMap: THREE.CanvasTexture;
   brahmiEdictNormal: THREE.CanvasTexture;
   nativityReliefMap: THREE.CanvasTexture;
+  nativityReliefNormal: THREE.CanvasTexture;
   shilalekhSignMap: THREE.CanvasTexture;
   dispose: () => void;
 }
@@ -41,14 +54,17 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
       fillText: noop,
       beginPath: noop,
       arc: noop,
+      ellipse: noop,
       moveTo: noop,
       lineTo: noop,
       quadraticCurveTo: noop,
+      closePath: noop,
       fill: noop,
       stroke: noop,
       save: noop,
       restore: noop,
       translate: noop,
+      rotate: noop,
       createLinearGradient: () => fakeGrad,
       createRadialGradient: () => fakeGrad,
       getImageData: () => fakeData,
@@ -158,11 +174,11 @@ function toTex(
 }
 
 export function createLumbiniTextures(): LumbiniTextureSet {
-  // 1. Weathered Maurya Archaeological Terracotta Brick (base of Maya Devi Temple & Pushkarini Ghats)
+  // 1. Weathered Maurya Archaeological Terracotta Brick (Ruins, Foundation Plinths, Pushkarini Stepped Ghats)
   const [brickC, brickCtx] = makeCanvas(512, 512);
   const [brickH, brickHCtx] = makeCanvas(512, 512);
   const [brickR, brickRCtx] = makeCanvas(512, 512);
-  brickCtx.fillStyle = '#5a4337';
+  brickCtx.fillStyle = '#4e392e';
   brickCtx.fillRect(0, 0, 512, 512);
   brickHCtx.fillStyle = '#282828';
   brickHCtx.fillRect(0, 0, 512, 512);
@@ -180,16 +196,15 @@ export function createLumbiniTextures(): LumbiniTextureSet {
       const n2 = seededNoise(row, col, 93);
       const bx = col * bw + offset;
       const by = row * bh;
-      const r = Math.round(154 + n * 34 - n2 * 18);
-      const g = Math.round(78 + n * 22 - n2 * 12);
-      const b = Math.round(52 + n * 16 - n2 * 8);
+      const r = Math.round(148 + n * 38 - n2 * 22);
+      const g = Math.round(74 + n * 24 - n2 * 14);
+      const b = Math.round(48 + n * 16 - n2 * 10);
       brickCtx.fillStyle = `rgb(${r},${g},${b})`;
       brickCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
-      // Subtle lime weathering edge
-      brickCtx.fillStyle = `rgba(218, 202, 182, ${0.06 + n2 * 0.08})`;
+      brickCtx.fillStyle = `rgba(218, 202, 182, ${0.05 + n2 * 0.08})`;
       brickCtx.fillRect(bx + 3, by + 2, bw - 6, 4);
 
-      const hVal = Math.round(192 + n * 48);
+      const hVal = Math.round(190 + n * 52);
       brickHCtx.fillStyle = `rgb(${hVal},${hVal},${hVal})`;
       brickHCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
 
@@ -199,111 +214,261 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     }
   }
   const mauryaBrickMap = toTex(brickC, true, 3, 2);
-  const mauryaBrickNormal = toTex(heightCanvasToNormal(brickH, 2.3), false, 3, 2);
+  const mauryaBrickNormal = toTex(heightCanvasToNormal(brickH, 2.5), false, 3, 2);
   const mauryaBrickRough = toTex(brickR, false, 3, 2);
-  const mauryaBrickAo = toTex(heightCanvasToAo(brickH, 3, 1.75, 84), false, 3, 2);
+  const mauryaBrickAo = toTex(heightCanvasToAo(brickH, 3, 1.8, 82), false, 3, 2);
 
-  // 2. Whitewashed Sacred Lime Stucco (Maya Devi upper temple facade & stepped roof)
+  // 2. Crisp White-Painted Exposed Brick Masonry (Signature 2003 Maya Devi Temple Exterior)
+  const [wbC, wbCtx] = makeCanvas(512, 512);
+  const [wbH, wbHCtx] = makeCanvas(512, 512);
+  const [wbR, wbRCtx] = makeCanvas(512, 512);
+  wbCtx.fillStyle = '#dad8d2';
+  wbCtx.fillRect(0, 0, 512, 512);
+  wbHCtx.fillStyle = '#626262';
+  wbHCtx.fillRect(0, 0, 512, 512);
+  wbRCtx.fillStyle = '#dadada';
+  wbRCtx.fillRect(0, 0, 512, 512);
+
+  const wbRows = 20;
+  const wbCols = 9;
+  const wbw = 512 / wbCols;
+  const wbh = 512 / wbRows;
+  for (let row = 0; row < wbRows; row++) {
+    const offset = (row % 2) * (wbw * 0.5);
+    for (let col = -1; col <= wbCols; col++) {
+      const n = seededNoise(col + row * 17, row, 19);
+      const n2 = seededNoise(row, col, 61);
+      const bx = col * wbw + offset;
+      const by = row * wbh;
+      const base = Math.round(238 + n * 14 - n2 * 10);
+      wbCtx.fillStyle = `rgb(${base},${base - 1},${base - 3})`;
+      wbCtx.fillRect(bx + 1.5, by + 1.5, wbw - 3, wbh - 3);
+      // Subtle top edge highlight & bottom joint shadow for tactile painted brick relief
+      wbCtx.fillStyle = 'rgba(255,255,255,0.45)';
+      wbCtx.fillRect(bx + 2, by + 1.5, wbw - 4, 2);
+      wbCtx.fillStyle = `rgba(145, 142, 136, ${0.14 + n2 * 0.12})`;
+      wbCtx.fillRect(bx + 2, by + wbh - 3.5, wbw - 4, 2);
+
+      const hv = Math.round(188 + n * 48);
+      wbHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
+      wbHCtx.fillRect(bx + 1.5, by + 1.5, wbw - 3, wbh - 3);
+
+      const rv = Math.round(176 + n2 * 44);
+      wbRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
+      wbRCtx.fillRect(bx + 1.5, by + 1.5, wbw - 3, wbh - 3);
+    }
+  }
+  // Faint monsoon weathering stipple near mortar lines
+  for (let i = 0; i < 1200; i++) {
+    const x = seededNoise(i, 3, 55) * 512;
+    const y = seededNoise(i, 7, 73) * 512;
+    const r = 1.5 + seededNoise(i, 9, 89) * 5;
+    wbCtx.fillStyle = `rgba(162, 158, 150, ${0.03 + seededNoise(i, 11, 97) * 0.05})`;
+    wbCtx.beginPath();
+    wbCtx.arc(x, y, r, 0, Math.PI * 2);
+    wbCtx.fill();
+  }
+  const whiteBrickMap = toTex(wbC, true, 5, 2.2);
+  const whiteBrickNormal = toTex(heightCanvasToNormal(wbH, 2.1), false, 5, 2.2);
+  const whiteBrickRough = toTex(wbR, false, 5, 2.2);
+  const whiteBrickAo = toTex(heightCanvasToAo(wbH, 2, 1.45, 118), false, 5, 2.2);
+
+  // 3. Terracotta Red-Brick Garden Pavers & Pushkarini Ghat Coping
+  const [tpC, tpCtx] = makeCanvas(512, 512);
+  const [tpH, tpHCtx] = makeCanvas(512, 512);
+  const [tpR, tpRCtx] = makeCanvas(512, 512);
+  tpCtx.fillStyle = '#733829';
+  tpCtx.fillRect(0, 0, 512, 512);
+  tpHCtx.fillStyle = '#525252';
+  tpHCtx.fillRect(0, 0, 512, 512);
+  tpRCtx.fillStyle = '#cccccc';
+  tpRCtx.fillRect(0, 0, 512, 512);
+
+  const tpRows = 12;
+  const tpCols = 8;
+  const tpw = 512 / tpCols;
+  const tph = 512 / tpRows;
+  for (let row = 0; row < tpRows; row++) {
+    const off = (row % 2) * (tpw * 0.5);
+    for (let col = -1; col <= tpCols; col++) {
+      const n = seededNoise(col * 7 + row, row * 3, 29);
+      const n2 = seededNoise(row, col * 11, 53);
+      const bx = col * tpw + off;
+      const by = row * tph;
+      const r = Math.round(174 + n * 28 - n2 * 16);
+      const g = Math.round(82 + n * 18 - n2 * 12);
+      const b = Math.round(64 + n * 14 - n2 * 10);
+      tpCtx.fillStyle = `rgb(${r},${g},${b})`;
+      tpCtx.fillRect(bx + 2, by + 2, tpw - 4, tph - 4);
+      tpCtx.fillStyle = 'rgba(255, 210, 188, 0.09)';
+      tpCtx.fillRect(bx + 3, by + 2, tpw - 6, 3);
+      const hv = Math.round(196 + n * 38);
+      tpHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
+      tpHCtx.fillRect(bx + 2, by + 2, tpw - 4, tph - 4);
+      const rv = Math.round(170 + n2 * 52);
+      tpRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
+      tpRCtx.fillRect(bx + 2, by + 2, tpw - 4, tph - 4);
+    }
+  }
+  const terracottaPaverMap = toTex(tpC, true, 4, 4);
+  const terracottaPaverNormal = toTex(heightCanvasToNormal(tpH, 1.9), false, 4, 4);
+  const terracottaPaverRough = toTex(tpR, false, 4, 4);
+
+  // 4. Manicured Lumbini Sacred Garden Green Lawn (with subtle mow bands)
+  const [lnC, lnCtx] = makeCanvas(512, 512);
+  const [lnH, lnHCtx] = makeCanvas(512, 512);
+  const [lnR, lnRCtx] = makeCanvas(512, 512);
+  lnCtx.fillStyle = '#538e34';
+  lnCtx.fillRect(0, 0, 512, 512);
+  lnHCtx.fillStyle = '#909090';
+  lnHCtx.fillRect(0, 0, 512, 512);
+  lnRCtx.fillStyle = '#dcdcdc';
+  lnRCtx.fillRect(0, 0, 512, 512);
+  // Crisp lawn mowing bands
+  for (let s = 0; s < 8; s++) {
+    lnCtx.fillStyle = s % 2 === 0 ? 'rgba(132, 198, 72, 0.14)' : 'rgba(54, 102, 28, 0.12)';
+    lnCtx.fillRect(s * 64, 0, 64, 512);
+  }
+  for (let i = 0; i < 4200; i++) {
+    const x = seededNoise(i, 1, 31) * 512;
+    const y = seededNoise(i, 2, 43) * 512;
+    const n = seededNoise(i, 3, 67);
+    const len = 3 + n * 5;
+    lnCtx.fillStyle = n > 0.5 ? 'rgba(145, 206, 78, 0.24)' : 'rgba(46, 94, 24, 0.22)';
+    lnCtx.fillRect(x, y, 2, len);
+    const hv = Math.round(130 + n * 95);
+    lnHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
+    lnHCtx.fillRect(x, y, 2, len);
+    const rv = Math.round(195 + (1 - n) * 45);
+    lnRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
+    lnRCtx.fillRect(x, y, 2, len);
+  }
+  const gardenLawnMap = toTex(lnC, true, 6, 6);
+  const gardenLawnNormal = toTex(heightCanvasToNormal(lnH, 1.4), false, 6, 6);
+  const gardenLawnRough = toTex(lnR, false, 6, 6);
+
+  // 5. Trimmed Boxwood / Duranta Hedge Foliage Texture (bordering red-brick paths)
+  const [hgC, hgCtx] = makeCanvas(256, 256);
+  const [hgH, hgHCtx] = makeCanvas(256, 256);
+  hgCtx.fillStyle = '#3d7424';
+  hgCtx.fillRect(0, 0, 256, 256);
+  hgHCtx.fillStyle = '#707070';
+  hgHCtx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2200; i++) {
+    const x = seededNoise(i, 4, 13) * 256;
+    const y = seededNoise(i, 8, 29) * 256;
+    const rad = 2 + seededNoise(i, 12, 37) * 4.5;
+    const t = seededNoise(i, 16, 41);
+    const r = Math.round(52 + t * 88);
+    const g = Math.round(108 + t * 92);
+    const b = Math.round(24 + t * 32);
+    hgCtx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+    hgCtx.beginPath();
+    hgCtx.arc(x, y, rad, 0, Math.PI * 2);
+    hgCtx.fill();
+    const hv = Math.round(115 + t * 125);
+    hgHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.85)`;
+    hgHCtx.beginPath();
+    hgHCtx.arc(x, y, rad, 0, Math.PI * 2);
+    hgHCtx.fill();
+  }
+  const hedgeLeafMap = toTex(hgC, true, 4, 1);
+  const hedgeLeafNormal = toTex(heightCanvasToNormal(hgH, 2.2), false, 4, 1);
+
+  // 6. Whitewashed Sacred Lime Stucco (Rooftop Pavilion, Stupa Domes, Thai Pavilion)
   const [stuccoC, stuccoCtx] = makeCanvas(512, 512);
   const [stuccoH, stuccoHCtx] = makeCanvas(512, 512);
   const [stuccoR, stuccoRCtx] = makeCanvas(512, 512);
-  stuccoCtx.fillStyle = '#f2ede4';
+  stuccoCtx.fillStyle = '#f4f1ea';
   stuccoCtx.fillRect(0, 0, 512, 512);
   stuccoHCtx.fillStyle = '#d4d4d4';
   stuccoHCtx.fillRect(0, 0, 512, 512);
   stuccoRCtx.fillStyle = '#cfcfcf';
   stuccoRCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 2400; i++) {
+  for (let i = 0; i < 2000; i++) {
     const x = seededNoise(i, 1, 7) * 512;
     const y = seededNoise(i, 2, 13) * 512;
     const rad = 2 + seededNoise(i, 3, 19) * 14;
-    const shade = 232 + Math.round((seededNoise(i, 4, 23) - 0.5) * 18);
-    stuccoCtx.fillStyle = `rgba(${shade}, ${shade - 4}, ${shade - 12}, 0.18)`;
+    const shade = 236 + Math.round((seededNoise(i, 4, 23) - 0.5) * 16);
+    stuccoCtx.fillStyle = `rgba(${shade}, ${shade - 2}, ${shade - 8}, 0.16)`;
     stuccoCtx.beginPath();
     stuccoCtx.arc(x, y, rad, 0, Math.PI * 2);
     stuccoCtx.fill();
 
-    const hv = 198 + Math.round((seededNoise(i, 5, 31) - 0.5) * 34);
+    const hv = 198 + Math.round((seededNoise(i, 5, 31) - 0.5) * 32);
     stuccoHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.22)`;
     stuccoHCtx.beginPath();
     stuccoHCtx.arc(x, y, rad * 0.85, 0, Math.PI * 2);
     stuccoHCtx.fill();
 
-    const rv = 175 + Math.round(seededNoise(i, 6, 47) * 60);
+    const rv = 172 + Math.round(seededNoise(i, 6, 47) * 58);
     stuccoRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.25)`;
     stuccoRCtx.beginPath();
     stuccoRCtx.arc(x, y, rad, 0, Math.PI * 2);
     stuccoRCtx.fill();
   }
-  // Subtle horizontal ashlar plaster scoring lines
-  for (let y = 0; y < 512; y += 64) {
-    stuccoCtx.fillStyle = 'rgba(155, 146, 134, 0.22)';
-    stuccoCtx.fillRect(0, y, 512, 2);
-    stuccoHCtx.fillStyle = '#8e8e8e';
-    stuccoHCtx.fillRect(0, y, 512, 2);
-  }
   const stuccoWhiteMap = toTex(stuccoC, true, 2, 2);
-  const stuccoWhiteNormal = toTex(heightCanvasToNormal(stuccoH, 1.35), false, 2, 2);
+  const stuccoWhiteNormal = toTex(heightCanvasToNormal(stuccoH, 1.25), false, 2, 2);
   const stuccoWhiteRough = toTex(stuccoR, false, 2, 2);
-  const stuccoWhiteAo = toTex(heightCanvasToAo(stuccoH, 2, 1.25, 118), false, 2, 2);
+  const stuccoWhiteAo = toTex(heightCanvasToAo(stuccoH, 2, 1.2, 122), false, 2, 2);
 
-  // 3. Polished Buff Chunar Sandstone (Ashoka Pillar, Dharma Wheel Capital, Plinths & Torana)
+  // 7. Weathered Pink-Buff Chunar Sandstone (Ashoka Pillar, Marker Stone, Toranas & Peace Flame)
   const [chuC, chuCtx] = makeCanvas(512, 512);
   const [chuH, chuHCtx] = makeCanvas(512, 512);
   const [chuR, chuRCtx] = makeCanvas(512, 512);
   const chuGrad = chuCtx.createLinearGradient(0, 0, 512, 512);
-  chuGrad.addColorStop(0, '#d6b992');
-  chuGrad.addColorStop(0.5, '#cbb089');
-  chuGrad.addColorStop(1, '#dfc5a1');
+  chuGrad.addColorStop(0, '#c8a987');
+  chuGrad.addColorStop(0.5, '#ba9c7a');
+  chuGrad.addColorStop(1, '#d2b492');
   chuCtx.fillStyle = chuGrad;
   chuCtx.fillRect(0, 0, 512, 512);
-  chuHCtx.fillStyle = '#cccccc';
+  chuHCtx.fillStyle = '#c8c8c8';
   chuHCtx.fillRect(0, 0, 512, 512);
-  chuRCtx.fillStyle = '#9c9c9c';
+  chuRCtx.fillStyle = '#a8a8a8';
   chuRCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 1800; i++) {
+  for (let i = 0; i < 1900; i++) {
     const x = seededNoise(i, 11, 5) * 512;
     const y = seededNoise(i, 22, 9) * 512;
-    const w = 12 + seededNoise(i, 33, 15) * 44;
+    const w = 10 + seededNoise(i, 33, 15) * 42;
     const h = 1.5 + seededNoise(i, 44, 21) * 4;
     const tone = seededNoise(i, 55, 29);
-    chuCtx.fillStyle = tone > 0.5 ? 'rgba(246, 229, 202, 0.14)' : 'rgba(138, 108, 76, 0.12)';
+    chuCtx.fillStyle = tone > 0.5 ? 'rgba(244, 224, 198, 0.14)' : 'rgba(116, 88, 60, 0.14)';
     chuCtx.fillRect(x, y, w, h);
-    const hv = Math.round(182 + tone * 52);
+    const hv = Math.round(176 + tone * 56);
     chuHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.22)`;
     chuHCtx.fillRect(x, y, w, h);
-    const rv = Math.round(130 + (1 - tone) * 68);
+    const rv = Math.round(135 + (1 - tone) * 72);
     chuRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.26)`;
     chuRCtx.fillRect(x, y, w, h);
   }
   const chunarStoneMap = toTex(chuC, true, 1, 2);
-  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.45), false, 1, 2);
+  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.55), false, 1, 2);
   const chunarStoneRough = toTex(chuR, false, 1, 2);
-  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.3, 125), false, 1, 2);
+  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.35, 120), false, 1, 2);
 
-  // 4. Antique Gilded Bronze Patina (Hero Buddha, Gajur Spire, Lotus Petals)
+  // 8. Antique Gilded Bronze Patina (Statues, Golden Gajur Spire, Myanmar Stupa, Baby Buddha)
   const [giltC, giltCtx] = makeCanvas(512, 512);
   const [giltH, giltHCtx] = makeCanvas(512, 512);
   const [giltR, giltRCtx] = makeCanvas(512, 512);
   const giltGrad = giltCtx.createLinearGradient(0, 0, 512, 512);
-  giltGrad.addColorStop(0, '#efc55e');
-  giltGrad.addColorStop(0.5, '#d69e35');
-  giltGrad.addColorStop(1, '#f3ce6c');
+  giltGrad.addColorStop(0, '#f2ca63');
+  giltGrad.addColorStop(0.5, '#d9a134');
+  giltGrad.addColorStop(1, '#f6d272');
   giltCtx.fillStyle = giltGrad;
   giltCtx.fillRect(0, 0, 512, 512);
   giltHCtx.fillStyle = '#c8c8c8';
   giltHCtx.fillRect(0, 0, 512, 512);
-  giltRCtx.fillStyle = '#585858';
+  giltRCtx.fillStyle = '#525252';
   giltRCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 1600; i++) {
+  for (let i = 0; i < 1500; i++) {
     const x = seededNoise(i, 7, 11) * 512;
     const y = seededNoise(i, 9, 17) * 512;
     const rad = 2 + seededNoise(i, 13, 31) * 10;
     const tone = seededNoise(i, 17, 43);
-    giltCtx.fillStyle = tone > 0.45 ? 'rgba(255, 232, 152, 0.14)' : 'rgba(130, 86, 22, 0.15)';
+    giltCtx.fillStyle = tone > 0.45 ? 'rgba(255, 236, 162, 0.14)' : 'rgba(130, 86, 22, 0.14)';
     giltCtx.beginPath();
     giltCtx.arc(x, y, rad, 0, Math.PI * 2);
     giltCtx.fill();
@@ -312,7 +477,7 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     giltHCtx.beginPath();
     giltHCtx.arc(x, y, rad * 0.7, 0, Math.PI * 2);
     giltHCtx.fill();
-    const rv = Math.round(62 + (1 - tone) * 65);
+    const rv = Math.round(58 + (1 - tone) * 62);
     giltRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.25)`;
     giltRCtx.beginPath();
     giltRCtx.arc(x, y, rad, 0, Math.PI * 2);
@@ -322,7 +487,7 @@ export function createLumbiniTextures(): LumbiniTextureSet {
   const giltBronzeNormal = toTex(heightCanvasToNormal(giltH, 1.25), false, 2, 2);
   const giltBronzeRough = toTex(giltR, false, 2, 2);
 
-  // 5. All-Seeing Buddha Wisdom Eyes Harmika Texture (Maya Devi Spire Harmika Box)
+  // 9. Buddha Wisdom Eyes Texture (for Votive Stupa Harmikas)
   const [eyesC, eyesCtx] = makeCanvas(512, 256);
   const eyesGrad = eyesCtx.createLinearGradient(0, 0, 0, 256);
   eyesGrad.addColorStop(0, '#fff9ec');
@@ -332,16 +497,6 @@ export function createLumbiniTextures(): LumbiniTextureSet {
   eyesCtx.strokeStyle = '#c48f29';
   eyesCtx.lineWidth = 10;
   eyesCtx.strokeRect(10, 10, 492, 236);
-  // Decorative red-gold upper lotus band
-  eyesCtx.fillStyle = '#9c2c24';
-  eyesCtx.fillRect(15, 15, 482, 26);
-  eyesCtx.fillStyle = '#d9a43b';
-  for (let x = 32; x < 492; x += 28) {
-    eyesCtx.beginPath();
-    eyesCtx.arc(x, 28, 7, 0, Math.PI * 2);
-    eyesCtx.fill();
-  }
-  // Wisdom eyes
   const drawEye = (cx: number) => {
     eyesCtx.save();
     eyesCtx.translate(cx, 126);
@@ -354,65 +509,35 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     eyesCtx.strokeStyle = '#182442';
     eyesCtx.lineWidth = 7;
     eyesCtx.stroke();
-    // Iris
     eyesCtx.fillStyle = '#183059';
     eyesCtx.beginPath();
     eyesCtx.arc(0, -2, 19, 0, Math.PI * 2);
     eyesCtx.fill();
-    eyesCtx.fillStyle = '#0c1528';
-    eyesCtx.beginPath();
-    eyesCtx.arc(0, -2, 9, 0, Math.PI * 2);
-    eyesCtx.fill();
-    // Brow
-    eyesCtx.strokeStyle = '#182442';
-    eyesCtx.lineWidth = 8;
-    eyesCtx.beginPath();
-    eyesCtx.moveTo(-70, -26);
-    eyesCtx.quadraticCurveTo(0, -64, 72, -22);
-    eyesCtx.stroke();
     eyesCtx.restore();
   };
   drawEye(152);
   drawEye(360);
-  // Urna (third eye)
-  eyesCtx.fillStyle = '#b91c1c';
-  eyesCtx.beginPath();
-  eyesCtx.arc(256, 86, 13, 0, Math.PI * 2);
-  eyesCtx.fill();
-  eyesCtx.strokeStyle = '#d49a2a';
-  eyesCtx.lineWidth = 3;
-  eyesCtx.stroke();
-  // Nepali question-mark Ek (nose / unity symbol)
-  eyesCtx.strokeStyle = '#182442';
-  eyesCtx.lineWidth = 8;
-  eyesCtx.lineCap = 'round';
-  eyesCtx.beginPath();
-  eyesCtx.arc(256, 152, 16, Math.PI * 1.1, Math.PI * 0.35, false);
-  eyesCtx.quadraticCurveTo(270, 184, 248, 206);
-  eyesCtx.quadraticCurveTo(234, 222, 260, 224);
-  eyesCtx.stroke();
   const harmikaEyesMap = toTex(eyesC, true, 1, 1, true);
 
-  // 6. Ashoka Pillar Brahmi Edict Inscription Plaque
+  // 10. Ashoka Pillar Brahmi Edict Inscription Plaque
   const [brC, brCtx] = makeCanvas(512, 512);
   const [brH, brHCtx] = makeCanvas(512, 512);
-  brCtx.fillStyle = '#cdb28c';
+  brCtx.fillStyle = '#c6a882';
   brCtx.fillRect(0, 0, 512, 512);
   brHCtx.fillStyle = '#d0d0d0';
   brHCtx.fillRect(0, 0, 512, 512);
-  brCtx.strokeStyle = '#7e6344';
+  brCtx.strokeStyle = '#755b3e';
   brCtx.lineWidth = 10;
   brCtx.strokeRect(20, 20, 472, 472);
   brHCtx.strokeStyle = '#606060';
   brHCtx.lineWidth = 10;
   brHCtx.strokeRect(20, 20, 472, 472);
-  // Carved ancient Brahmi-style geometric glyph lines
-  brCtx.strokeStyle = '#5c462e';
-  brHCtx.strokeStyle = '#383838';
+  brCtx.strokeStyle = '#4e3b26';
+  brHCtx.strokeStyle = '#303030';
   brCtx.lineWidth = 5;
   brHCtx.lineWidth = 5;
-  for (let row = 0; row < 6; row++) {
-    const y = 78 + row * 68;
+  for (let row = 0; row < 5; row++) {
+    const y = 94 + row * 78;
     for (let col = 0; col < 10; col++) {
       const x = 58 + col * 41;
       const g = Math.floor(seededNoise(col, row, 107) * 5);
@@ -447,64 +572,94 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     }
   }
   const brahmiEdictMap = toTex(brC, true, 1, 1, true);
-  const brahmiEdictNormal = toTex(heightCanvasToNormal(brH, 2.0), false, 1, 1, true);
+  const brahmiEdictNormal = toTex(heightCanvasToNormal(brH, 2.2), false, 1, 1, true);
 
-  // 7. Maya Devi Nativity Bas-Relief Mural (Inner Sanctum Altar Backdrop)
-  const [natC, natCtx] = makeCanvas(512, 512);
-  const natGrad = natCtx.createLinearGradient(0, 0, 0, 512);
-  natGrad.addColorStop(0, '#8d5b21');
-  natGrad.addColorStop(0.5, '#d69d38');
-  natGrad.addColorStop(1, '#7c4c19');
+  // 11. Carved 4th-century CE Gupta Sandstone Nativity Bas-Relief (Maya Devi grasping Sal tree branch)
+  const [natC, natCtx] = makeCanvas(512, 640);
+  const [natH, natHCtx] = makeCanvas(512, 640);
+  const natGrad = natCtx.createLinearGradient(0, 0, 0, 640);
+  natGrad.addColorStop(0, '#b59268');
+  natGrad.addColorStop(0.5, '#c7a479');
+  natGrad.addColorStop(1, '#9c7b54');
   natCtx.fillStyle = natGrad;
-  natCtx.fillRect(0, 0, 512, 512);
-  // Radiant Dharma aura halo
-  const haloGrad = natCtx.createRadialGradient(256, 236, 20, 256, 236, 210);
-  haloGrad.addColorStop(0, '#fff2b2');
-  haloGrad.addColorStop(0.45, '#e8b349');
-  haloGrad.addColorStop(1, 'rgba(130, 82, 22, 0)');
-  natCtx.fillStyle = haloGrad;
-  natCtx.fillRect(0, 0, 512, 512);
-  // Stylized Sal tree arch framing Queen Maya Devi & lotus
-  natCtx.strokeStyle = '#5a3610';
-  natCtx.lineWidth = 10;
-  natCtx.strokeRect(18, 18, 476, 476);
-  natCtx.strokeStyle = '#f9dc81';
-  natCtx.lineWidth = 4;
-  natCtx.beginPath();
-  natCtx.arc(256, 232, 168, Math.PI * 0.9, Math.PI * 2.1);
-  natCtx.stroke();
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    natCtx.beginPath();
-    natCtx.moveTo(256 + Math.cos(a) * 44, 232 + Math.sin(a) * 44);
-    natCtx.lineTo(256 + Math.cos(a) * 165, 232 + Math.sin(a) * 165);
-    natCtx.stroke();
+  natCtx.fillRect(0, 0, 512, 640);
+  natHCtx.fillStyle = '#606060';
+  natHCtx.fillRect(0, 0, 512, 640);
+
+  // Recessed stone stele frame & carved Sal-leaf arch
+  natCtx.strokeStyle = '#6f5333';
+  natCtx.lineWidth = 18;
+  natCtx.strokeRect(20, 20, 472, 600);
+  natHCtx.strokeStyle = '#c8c8c8';
+  natHCtx.lineWidth = 18;
+  natHCtx.strokeRect(20, 20, 472, 600);
+
+  for (const [ctx, fillMain, fillAccent] of [
+    [natCtx, '#d8b78b', '#e7cb9f'],
+    [natHCtx, '#c4c4c4', '#ececec'],
+  ] as Array<[CanvasRenderingContext2D, string, string]>) {
+    // Sal tree bough arching across top
+    ctx.strokeStyle = fillMain;
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    ctx.moveTo(76, 220);
+    ctx.quadraticCurveTo(256, 70, 434, 154);
+    ctx.stroke();
+    // Carved lotus pedestal
+    ctx.fillStyle = fillMain;
+    ctx.fillRect(108, 522, 296, 36);
+    // Queen Maya Devi sculpted relief silhouette (head, torso, hip sway, raised right arm grasping branch)
+    ctx.beginPath();
+    ctx.arc(248, 224, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(252, 346, 52, 86, 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(216, 405, 72, 118);
+    // Raised right arm to Sal bough
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    ctx.moveTo(286, 280);
+    ctx.lineTo(328, 174);
+    ctx.stroke();
+    // Halo behind Maya Devi & newborn Prince Siddhartha beside her
+    ctx.strokeStyle = fillAccent;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(248, 224, 58, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = fillAccent;
+    ctx.beginPath();
+    ctx.arc(348, 444, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(334, 462, 28, 58);
   }
   const nativityReliefMap = toTex(natC, true, 1, 1, true);
+  const nativityReliefNormal = toTex(heightCanvasToNormal(natH, 2.4), false, 1, 1, true);
 
-  // 8. Shilalekh Monument Plaque (LUMBINI · MAYA DEVI TEMPLE)
+  // 12. Heritage Shilalekh Monument Plaque (LUMBINI · MAYA DEVI TEMPLE · UNESCO WORLD HERITAGE)
   const [sgC, sgCtx] = makeCanvas(1024, 512);
   const sgBg = sgCtx.createLinearGradient(0, 0, 0, 512);
-  sgBg.addColorStop(0, '#16202a');
-  sgBg.addColorStop(1, '#0f171f');
+  sgBg.addColorStop(0, '#131d26');
+  sgBg.addColorStop(1, '#0b1218');
   sgCtx.fillStyle = sgBg;
   sgCtx.fillRect(0, 0, 1024, 512);
   sgCtx.strokeStyle = '#d4a342';
   sgCtx.lineWidth = 14;
   sgCtx.strokeRect(20, 20, 984, 472);
-  sgCtx.strokeStyle = '#10b981';
+  sgCtx.strokeStyle = '#b93c2d';
   sgCtx.lineWidth = 4;
   sgCtx.strokeRect(38, 38, 948, 436);
-  sgCtx.fillStyle = '#f6dca0';
-  sgCtx.font = 'bold 64px Georgia, serif';
+  sgCtx.fillStyle = '#f8dfa6';
+  sgCtx.font = 'bold 58px Georgia, serif';
   sgCtx.textAlign = 'center';
-  sgCtx.fillText('LUMBINI · MAYA DEVI', 512, 205);
+  sgCtx.fillText('LUMBINI · MAYA DEVI TEMPLE', 512, 194);
   sgCtx.fillStyle = '#d1fae5';
-  sgCtx.font = '34px Georgia, serif';
-  sgCtx.fillText('Birthplace of Gautama Buddha · Sacred Garden', 512, 290);
+  sgCtx.font = '32px Georgia, serif';
+  sgCtx.fillText('Birthplace of Lord Gautama Buddha · UNESCO World Heritage', 512, 282);
   sgCtx.fillStyle = '#e5b95c';
-  sgCtx.font = '26px Georgia, serif';
-  sgCtx.fillText('Ashoka Pillar · Pushkarini Pond · Peace Sanctuary', 512, 365);
+  sgCtx.font = '25px Georgia, serif';
+  sgCtx.fillText('Marker Stone · Ashoka Pillar (249 BCE) · Pushkarini Sacred Pond', 512, 358);
   const shilalekhSignMap = toTex(sgC, true, 1, 1, true);
 
   const allTex = [
@@ -512,6 +667,18 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     mauryaBrickNormal,
     mauryaBrickRough,
     mauryaBrickAo,
+    whiteBrickMap,
+    whiteBrickNormal,
+    whiteBrickRough,
+    whiteBrickAo,
+    terracottaPaverMap,
+    terracottaPaverNormal,
+    terracottaPaverRough,
+    gardenLawnMap,
+    gardenLawnNormal,
+    gardenLawnRough,
+    hedgeLeafMap,
+    hedgeLeafNormal,
     stuccoWhiteMap,
     stuccoWhiteNormal,
     stuccoWhiteRough,
@@ -527,6 +694,7 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     brahmiEdictMap,
     brahmiEdictNormal,
     nativityReliefMap,
+    nativityReliefNormal,
     shilalekhSignMap,
   ];
 
@@ -535,6 +703,18 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     mauryaBrickNormal,
     mauryaBrickRough,
     mauryaBrickAo,
+    whiteBrickMap,
+    whiteBrickNormal,
+    whiteBrickRough,
+    whiteBrickAo,
+    terracottaPaverMap,
+    terracottaPaverNormal,
+    terracottaPaverRough,
+    gardenLawnMap,
+    gardenLawnNormal,
+    gardenLawnRough,
+    hedgeLeafMap,
+    hedgeLeafNormal,
     stuccoWhiteMap,
     stuccoWhiteNormal,
     stuccoWhiteRough,
@@ -550,6 +730,7 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     brahmiEdictMap,
     brahmiEdictNormal,
     nativityReliefMap,
+    nativityReliefNormal,
     shilalekhSignMap,
     dispose: () => {
       for (const t of allTex) t.dispose();

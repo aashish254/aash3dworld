@@ -9,6 +9,8 @@ import {
   CustomWaypoint,
   FootstepSurfaceKind,
   GLACIAL_LAKE,
+  LUMBINI_PEACE_CANAL,
+  LumbiniAmbiencePreset,
   OUTER_TEMPLE_ARTIFACT_SPOTS,
   OuterTempleArtifactSpot,
   SPAWN_POSITION,
@@ -19,6 +21,8 @@ import {
   WeatherKind,
   clampToWalkable,
   computeAtmosphereParticleProfile,
+  computeEffectiveLightingState,
+  computeLumbiniAudioProfile,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
   findNearestLandmark,
@@ -30,6 +34,7 @@ import {
   getWorldTreeSpots,
   groundHeightAt,
   isOnBridgeDeck,
+  isOnLumbiniCanalBridge,
 } from './worldLogic';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
 import {
@@ -46,6 +51,7 @@ import {
   createHimalayanGompaAndLodge,
   createInstancedFoliage,
   createInstancedGrassField,
+  createLumbiniPeaceParkland,
   createMountainClouds,
   createSculptedHimalayas,
   sampleTerrainMeshHeight,
@@ -150,6 +156,7 @@ export class WorldEngine {
   private sunLight!: THREE.DirectionalLight;
   private hemiLight!: THREE.HemisphereLight;
   private skyDomeMat!: THREE.ShaderMaterial;
+  private skyDomeMesh!: THREE.Mesh;
   private starsPoints!: THREE.Points;
   private milkyWayPoints!: THREE.Points;
   private atmospherePoints!: THREE.Points;
@@ -157,6 +164,7 @@ export class WorldEngine {
   private sakuraPetalsMat: THREE.ShaderMaterial | null = null;
   private riverController!: AnimatedWaterController;
   private glacialLakeController!: AnimatedWaterController;
+  private peaceParklandController?: AnimatedWaterController;
   private grassController!: AnimatedGrassController;
   private foliageController!: AnimatedFoliageController;
   private cloudController!: MountainCloudController;
@@ -261,6 +269,7 @@ export class WorldEngine {
   private gameState: WorldGameState = 'title';
   private timePreset: TimePreset = 'live';
   private weather: WeatherKind = 'clear';
+  private lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto';
   private placementMode = false;
   private focusedLandmark: LandmarkData | null = null;
 
@@ -384,6 +393,9 @@ export class WorldEngine {
 
   private renderScene(): void {
     if (this.disposed) return;
+    if (this.skyDomeMesh) {
+      this.skyDomeMesh.position.copy(this.camera.position);
+    }
     if (!this.isSoftwareGl && this.composer) {
       this.composer.render();
     } else {
@@ -521,6 +533,7 @@ export class WorldEngine {
     this.skyDomeMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
+      depthTest: false,
       uniforms: {
         topColor: { value: new THREE.Color('#2c6eb8') },
         horizonColor: { value: new THREE.Color('#c9dfef') },
@@ -530,8 +543,8 @@ export class WorldEngine {
       vertexShader: `
         varying vec3 vWorldPos;
         void main() {
+          vWorldPos = position;
           vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWorldPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }
       `,
@@ -557,9 +570,11 @@ export class WorldEngine {
         }
       `,
     });
-    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(820, 32, 20), this.skyDomeMat);
-    skyDome.userData.nonCollidable = true;
-    this.scene.add(skyDome);
+    this.skyDomeMesh = new THREE.Mesh(new THREE.SphereGeometry(210, 32, 20), this.skyDomeMat);
+    this.skyDomeMesh.renderOrder = -100;
+    this.skyDomeMesh.frustumCulled = false;
+    this.skyDomeMesh.userData.nonCollidable = true;
+    this.scene.add(this.skyDomeMesh);
 
     // Rich Himalayan Starry Sky + Sweeping Milky Way Galactic Core Band (image_a52de83d)
     const starCount = 720;
@@ -655,6 +670,11 @@ export class WorldEngine {
 
     this.glacialLakeController = createGlacialLakeAndWaterfall(this.textures);
     this.scene.add(this.glacialLakeController.group);
+
+    const peaceParkland = createLumbiniPeaceParkland(this.textures);
+    this.peaceParklandController = peaceParkland;
+    this.scene.add(peaceParkland.group);
+    this.beaconLights.push(...peaceParkland.beaconLights);
 
     const roadsResult = createCurbedRoads(this.textures, this.terrainMesh);
     this.scene.add(roadsResult.group);
@@ -1941,6 +1961,34 @@ export class WorldEngine {
         flowZ: 0,
       };
     }
+    const ldx = x + 210;
+    const ldz = z - 96;
+    if (ldx >= -1.0 && ldx <= 21.0 && ldz >= 9.8 && ldz <= 23.2) {
+      return {
+        inWater: true,
+        surfaceY: 0.21,
+        bedY: groundHeightAt(x, z),
+        flowX: 0,
+        flowZ: 0,
+      };
+    }
+    if (isOnLumbiniCanalBridge(x, z)) {
+      return { inWater: false, surfaceY: -999, bedY: 0, flowX: 0, flowZ: 0 };
+    }
+    if (
+      x >= LUMBINI_PEACE_CANAL.minX &&
+      x <= LUMBINI_PEACE_CANAL.maxX &&
+      z >= LUMBINI_PEACE_CANAL.minZ &&
+      z <= LUMBINI_PEACE_CANAL.maxZ
+    ) {
+      return {
+        inWater: true,
+        surfaceY: LUMBINI_PEACE_CANAL.waterLevel,
+        bedY: groundHeightAt(x, z),
+        flowX: 0,
+        flowZ: 0.35,
+      };
+    }
     return { inWater: false, surfaceY: -999, bedY: 0, flowX: 0, flowZ: 0 };
   }
 
@@ -2571,6 +2619,13 @@ export class WorldEngine {
     this.scheduleImmediateRender();
   }
 
+  public setLumbiniPreset(preset: LumbiniAmbiencePreset): void {
+    this.lumbiniPreset = preset;
+    this.syncLighting((performance.now() - this.startTimeMs) / 1000);
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
   public setPlacementMode(active: boolean): void {
     this.placementMode = active;
     this.renderer.domElement.style.cursor = active ? 'crosshair' : 'grab';
@@ -2592,7 +2647,7 @@ export class WorldEngine {
     const lookYOffset = isJanaki
       ? 8.4
       : isLumbini
-        ? 4.8
+        ? 8.2
         : isTallTower
           ? 5.0
           : isBoudha
@@ -2605,7 +2660,7 @@ export class WorldEngine {
     const focusDist = isJanaki
       ? 60
       : isLumbini
-        ? 38.5
+        ? 68.0
         : isTallTower
           ? 16.5
           : isBoudha
@@ -2618,14 +2673,14 @@ export class WorldEngine {
     const camYOffset = isJanaki
       ? 8.5
       : isLumbini
-        ? 7.4
+        ? 10.5
         : isTallTower
           ? 5.2
           : isBoudha || isPumdikot
             ? 4.8
             : 4.5;
     const azimuthOffset = isJanaki ? 0.2 : isLumbini ? 0.34 : 0.32;
-    lookOut.set(lm.position.x + (isLumbini ? 2.8 : 0), ly + lookYOffset, lm.position.z);
+    lookOut.set(lm.position.x, ly + lookYOffset, lm.position.z);
     camOut.set(
       lookOut.x + Math.sin(this.cameraYaw + azimuthOffset) * focusDist,
       lookOut.y + camYOffset,
@@ -2705,10 +2760,11 @@ export class WorldEngine {
     if (Math.hypot(safe.x - prevX, safe.z - prevZ) > 8) {
       this.justTeleported = true;
       const inCourtyard =
-        Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6;
+        (Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6) ||
+        (Math.abs(safe.x + 210) <= 17.2 && safe.z >= 62.8 && safe.z <= 85.2);
       this.currentLookAt.set(safe.x, this.playerPos.y + (inCourtyard ? 1.5 : 1.8), safe.z);
       if (inCourtyard) {
-        this.currentCamPos.set(safe.x, this.playerPos.y + 4.9, safe.z + 7.3);
+        this.currentCamPos.set(safe.x, this.playerPos.y + 4.4, safe.z + 6.5);
       } else {
         this.currentCamPos.set(safe.x + 7.5, this.playerPos.y + 9.2, safe.z + 20.5);
       }
@@ -2745,7 +2801,15 @@ export class WorldEngine {
 
   private syncLighting(elapsed: number): void {
     const hour = getPresetHour(this.timePreset);
-    const state = computeTimeLightingState(hour, this.weather);
+    const lightingAnchor = this.gameState === 'title' ? this.currentLookAt : this.playerPos;
+    const { lighting: state, lumbiniBlend } = computeEffectiveLightingState(
+      hour,
+      this.weather,
+      lightingAnchor.x,
+      lightingAnchor.z,
+      this.lumbiniPreset,
+      this.focusedLandmark?.id,
+    );
 
     this.sunLight.color.set(state.sunColor);
     this.sunLight.intensity = state.sunIntensity;
@@ -2890,6 +2954,8 @@ export class WorldEngine {
     const canvas = this.renderer?.domElement;
     if (canvas) {
       canvas.dataset.weather = this.weather;
+      canvas.dataset.lumbiniPreset = this.lumbiniPreset;
+      canvas.dataset.lumbiniBlend = lumbiniBlend.toFixed(2);
       canvas.dataset.particleIntensity = profile.activeRatio.toFixed(2);
       canvas.dataset.cameraFar = String(Math.round(this.camera.far));
       canvas.dataset.bloomStrength = state.bloomStrength.toFixed(2);
@@ -2993,6 +3059,7 @@ export class WorldEngine {
     this.syncLighting(elapsed);
     this.riverController.update(elapsed);
     this.glacialLakeController?.update(elapsed);
+    this.peaceParklandController?.update(elapsed);
     this.treeBumpStrength *= Math.exp(-5.5 * dt);
     this.foliageController.update(elapsed, this.treeBumpPos, this.treeBumpStrength);
 
@@ -3049,13 +3116,17 @@ export class WorldEngine {
       this.playerPos.z,
       this.playerPos.y,
     );
-    soundEngine.updateAmbience(ambienceMix, dt);
+    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather);
+    const lumbiniAudio = computeLumbiniAudioProfile(ambienceMix, this.lumbiniPreset, this.weather);
     const surfaceKind = getFootstepSurfaceKind(this.playerPos.x, this.playerPos.z);
     if (this.renderer?.domElement) {
       this.renderer.domElement.dataset.ambienceZone = ambienceMix.activeZone;
       this.renderer.domElement.dataset.surfaceKind = surfaceKind;
       this.renderer.domElement.dataset.forestLevel = ambienceMix.forestLevel.toFixed(2);
       this.renderer.domElement.dataset.rustleLevel = ambienceMix.rustleLevel.toFixed(2);
+      this.renderer.domElement.dataset.chimeActivity = lumbiniAudio.chimeActivity.toFixed(2);
+      this.renderer.domElement.dataset.bowlActivity = lumbiniAudio.bowlActivity.toFixed(2);
+      this.renderer.domElement.dataset.flagFlutter = lumbiniAudio.flagFlutterLevel.toFixed(2);
       this.renderer.domElement.dataset.inMeadow = meadowInfo.inMeadow ? 'true' : 'false';
       this.renderer.domElement.dataset.meadowZone = meadowInfo.zoneId ?? 'none';
       this.renderer.domElement.dataset.meadowDisp = this.meadowDisplacementStrength.toFixed(2);
@@ -3063,7 +3134,11 @@ export class WorldEngine {
 
     for (let i = 0; i < this.animatedLandmarkNodes.length; i++) {
       const node = this.animatedLandmarkNodes[i];
-      if (typeof node.userData.onFlickerUpdate !== 'function') {
+      if (
+        typeof node.userData.onFlickerUpdate !== 'function' &&
+        typeof node.userData.onEnvironmentUpdate !== 'function' &&
+        !node.userData.noSpin
+      ) {
         node.rotation.y += dt * (0.7 + (i % 3) * 0.2);
       }
     }
@@ -3098,7 +3173,9 @@ export class WorldEngine {
     }
     for (let i = 0; i < this.prayerFlags.length; i++) {
       const f = this.prayerFlags[i];
-      f.rotation.x = Math.sin(elapsed * 3.1 + i * 0.7) * 0.22;
+      if (typeof f.userData.prayerFlagMode !== 'string') {
+        f.rotation.x = Math.sin(elapsed * 3.1 + i * 0.7) * 0.22;
+      }
     }
 
     this.character.companionLantern.position.set(
@@ -3676,11 +3753,19 @@ export class WorldEngine {
     if (this.focusedLandmark) {
       this.computeFocusedCameraTargets(this.focusedLandmark, _camLookTarget, _camTargetPos);
     } else {
-      const inCourtyard =
+      const inJanakiCourtyard =
         Math.abs(this.playerPos.x + 92) <= 13.8 &&
         this.playerPos.z >= 79.0 &&
         this.playerPos.z <= 102.6;
-      const activeCamDist = inCourtyard ? Math.min(this.cameraDistance, 8.2) : this.cameraDistance;
+      const inMayaDeviInterior =
+        Math.abs(this.playerPos.x + 210) <= 17.2 &&
+        this.playerPos.z >= 62.8 &&
+        this.playerPos.z <= 85.2;
+      const activeCamDist = inMayaDeviInterior
+        ? Math.min(this.cameraDistance, 6.2)
+        : inJanakiCourtyard
+          ? Math.min(this.cameraDistance, 8.2)
+          : this.cameraDistance;
       const horiz = Math.cos(this.cameraPitch) * activeCamDist;
       const vert = Math.sin(this.cameraPitch) * activeCamDist;
       _camTargetPos.set(
@@ -3721,14 +3806,20 @@ export class WorldEngine {
         ? 'Vellore Foothills'
         : 'Kathmandu Valley';
 
+    const effectiveLighting = computeEffectiveLightingState(
+      getPresetHour(this.timePreset),
+      this.weather,
+      this.playerPos.x,
+      this.playerPos.z,
+      this.lumbiniPreset,
+      this.focusedLandmark?.id,
+    );
+
     this.callbacks.onHudUpdate({
       zoneName,
       nearestLandmark: nearest?.landmark ?? null,
       distanceWalked: this.distanceWalked,
-      timeState: computeTimeLightingState(
-        getPresetHour(this.timePreset),
-        this.weather,
-      ),
+      timeState: effectiveLighting.lighting,
       coords: {
         x: Math.round(this.playerPos.x),
         z: Math.round(this.playerPos.z),

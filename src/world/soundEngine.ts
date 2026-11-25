@@ -1,11 +1,17 @@
-import type { FootstepSurfaceKind, SpatialAmbienceMix } from './worldLogic';
+import {
+  type FootstepSurfaceKind,
+  type LumbiniAmbiencePreset,
+  type SpatialAmbienceMix,
+  type WeatherKind,
+  computeLumbiniAudioProfile,
+} from './worldLogic';
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private enabled = false;
   private lastStepTime = 0;
 
-  // Continuous Himalayan wind, foliage rustle, stream murmur, bird bus & ambient nature pad graph
+  // Continuous Himalayan wind, foliage rustle, prayer-flag flutter, stream murmur, bird bus & ambient nature pad graph
   private windStarted = false;
   private windNoiseSrc: AudioBufferSourceNode | null = null;
   private windGain: GainNode | null = null;
@@ -17,6 +23,9 @@ class SoundEngine {
   private rustleFilter2: BiquadFilterNode | null = null;
   private rustleGain: GainNode | null = null;
   private rustleLfo: OscillatorNode | null = null;
+  private flagFlutterFilter: BiquadFilterNode | null = null;
+  private flagFlutterGain: GainNode | null = null;
+  private flagFlutterLfo: OscillatorNode | null = null;
   private streamGain: GainNode | null = null;
   private birdBusGain: GainNode | null = null;
   private ambientPadGain: GainNode | null = null;
@@ -24,8 +33,10 @@ class SoundEngine {
   private ambientPadOsc2: OscillatorNode | null = null;
   private ambientPadLfo: OscillatorNode | null = null;
 
-  // Ambient birdsong scheduling
+  // Ambient birdsong, temple wind-chimes & singing bowl scheduling
   private nextBirdAtSec = 0;
+  private nextChimeAtSec = 0;
+  private nextBowlAtSec = 0;
   private currentZone: SpatialAmbienceMix['activeZone'] = 'open-valley';
 
   public isEnabled(): boolean {
@@ -39,6 +50,8 @@ class SoundEngine {
       if (ctx) {
         this.ensureWindGraph(ctx);
         this.nextBirdAtSec = ctx.currentTime + 0.35;
+        this.nextChimeAtSec = ctx.currentTime + 0.55;
+        this.nextBowlAtSec = ctx.currentTime + 1.4;
       }
       this.playTone(528, 0.14, 'sine', 0.07);
     } else if (this.ctx) {
@@ -47,6 +60,7 @@ class SoundEngine {
         this.windGain,
         this.windHowlGain,
         this.rustleGain,
+        this.flagFlutterGain,
         this.streamGain,
         this.birdBusGain,
         this.ambientPadGain,
@@ -103,7 +117,6 @@ class SoundEngine {
       data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.08;
       b6 = white * 0.115926;
     }
-    // Crossfade buffer loop edges for seamless playback
     const fadeSamples = Math.min(2048, Math.floor(len * 0.05));
     for (let i = 0; i < fadeSamples; i++) {
       const w = i / fadeSamples;
@@ -144,7 +157,7 @@ class SoundEngine {
     const streamGain = ctx.createGain();
     streamGain.gain.value = 0;
 
-    // Dual-band procedural wind-rustling foliage leaves chain modulated by swaying gust LFO
+    // Dual-band wind-rustling leaves modulated by breeze gust LFO
     const rustleFilter1 = ctx.createBiquadFilter();
     rustleFilter1.type = 'bandpass';
     rustleFilter1.frequency.value = 1650;
@@ -175,6 +188,32 @@ class SoundEngine {
     rustleAmpDepth.gain.value = 0.26;
     rustleLfo.connect(rustleAmpDepth);
     rustleAmpDepth.connect(rustleSwellGain.gain);
+
+    // Gentle fabric flutter chain for waving prayer flags in breeze
+    const flagFlutterFilter = ctx.createBiquadFilter();
+    flagFlutterFilter.type = 'bandpass';
+    flagFlutterFilter.frequency.value = 780;
+    flagFlutterFilter.Q.value = 0.95;
+
+    const flagFlutterSwellGain = ctx.createGain();
+    flagFlutterSwellGain.gain.value = 0.68;
+
+    const flagFlutterGain = ctx.createGain();
+    flagFlutterGain.gain.value = 0;
+
+    const flagFlutterLfo = ctx.createOscillator();
+    flagFlutterLfo.type = 'sine';
+    flagFlutterLfo.frequency.value = 0.64;
+
+    const flagFlutterFreqDepth = ctx.createGain();
+    flagFlutterFreqDepth.gain.value = 180;
+    flagFlutterLfo.connect(flagFlutterFreqDepth);
+    flagFlutterFreqDepth.connect(flagFlutterFilter.frequency);
+
+    const flagFlutterAmpDepth = ctx.createGain();
+    flagFlutterAmpDepth.gain.value = 0.28;
+    flagFlutterLfo.connect(flagFlutterAmpDepth);
+    flagFlutterAmpDepth.connect(flagFlutterSwellGain.gain);
 
     // Master birdsong bus so volume adapts smoothly in real time with forest proximity
     const birdBusGain = ctx.createGain();
@@ -210,6 +249,11 @@ class SoundEngine {
     rustleSwellGain.connect(rustleGain);
     rustleGain.connect(ctx.destination);
 
+    src.connect(flagFlutterFilter);
+    flagFlutterFilter.connect(flagFlutterSwellGain);
+    flagFlutterSwellGain.connect(flagFlutterGain);
+    flagFlutterGain.connect(ctx.destination);
+
     // Subtle open-fifth ambient nature harmonic pad (132Hz + 198Hz)
     const padFilter = ctx.createBiquadFilter();
     padFilter.type = 'lowpass';
@@ -239,6 +283,7 @@ class SoundEngine {
     src.start();
     lfo.start();
     rustleLfo.start();
+    flagFlutterLfo.start();
     padOsc1.start();
     padOsc2.start();
     padLfo.start();
@@ -253,6 +298,9 @@ class SoundEngine {
     this.rustleFilter2 = rustleFilter2;
     this.rustleGain = rustleGain;
     this.rustleLfo = rustleLfo;
+    this.flagFlutterFilter = flagFlutterFilter;
+    this.flagFlutterGain = flagFlutterGain;
+    this.flagFlutterLfo = flagFlutterLfo;
     this.streamGain = streamGain;
     this.birdBusGain = birdBusGain;
     this.ambientPadGain = padGain;
@@ -262,10 +310,15 @@ class SoundEngine {
   }
 
   /**
-   * Continuously updates spatial Himalayan wind, wind-rustling foliage, mountain stream,
-   * nature harmonic pad & forest-proximity birdsong.
+   * Continuously updates spatial Himalayan wind, wind-rustling foliage, prayer-flag flutter,
+   * canal/stream murmur, nature harmonic pad, birdsong, and Lumbini chimes/singing bowls.
    */
-  public updateAmbience(mix: SpatialAmbienceMix, _dt: number): void {
+  public updateAmbience(
+    mix: SpatialAmbienceMix,
+    _dt: number,
+    lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto',
+    weather: WeatherKind = 'clear',
+  ): void {
     this.currentZone = mix.activeZone;
     if (!this.enabled) return;
     const ctx = this.ensureContext();
@@ -275,6 +328,7 @@ class SoundEngine {
     const t = ctx.currentTime;
     const forestLevel = Math.max(0, Math.min(1, mix.forestLevel ?? 0));
     const rustleLevel = Math.max(0, Math.min(1, mix.rustleLevel ?? forestLevel * mix.windLevel));
+    const lumbiniProfile = computeLumbiniAudioProfile(mix, lumbiniPreset, weather);
 
     if (this.windGain && this.windHowlGain && this.windFilterLow && this.windFilterHowl) {
       const baseVol = Math.pow(mix.windLevel, 1.25) * 0.068;
@@ -292,30 +346,147 @@ class SoundEngine {
       this.rustleFilter2.frequency.setTargetAtTime(2650 + rustleLevel * 850, t, 0.45);
     }
 
+    if (this.flagFlutterGain && this.flagFlutterFilter) {
+      const flutterVol = Math.pow(lumbiniProfile.flagFlutterLevel, 1.15) * 0.038;
+      this.flagFlutterGain.gain.setTargetAtTime(flutterVol, t, 0.38);
+      this.flagFlutterFilter.frequency.setTargetAtTime(
+        680 + lumbiniProfile.flagFlutterLevel * 320,
+        t,
+        0.45,
+      );
+    }
+
     if (this.streamGain) {
       const streamVol = Math.pow(Math.max(0, mix.streamLevel ?? 0), 1.15) * 0.048;
       this.streamGain.gain.setTargetAtTime(streamVol, t, 0.45);
     }
 
     if (this.birdBusGain) {
-      const birdBusVol = Math.max(0.18, Math.min(1.25, 0.25 + mix.birdLevel * 0.65 + forestLevel * 0.35));
+      const birdBusVol = Math.max(
+        0.18,
+        Math.min(1.25, 0.25 + mix.birdLevel * 0.65 + forestLevel * 0.35),
+      );
       this.birdBusGain.gain.setTargetAtTime(birdBusVol, t, 0.32);
     }
 
     if (this.ambientPadGain) {
-      const padVol = mix.activeZone === 'temple-courtyard' ? 0.019 : 0.015;
+      const padVol =
+        mix.activeZone === 'peace-garden'
+          ? 0.014 + lumbiniProfile.padWarmth * 0.013
+          : mix.activeZone === 'temple-courtyard'
+            ? 0.019
+            : 0.015;
       this.ambientPadGain.gain.setTargetAtTime(padVol, t, 0.8);
+      if (this.ambientPadOsc1 && this.ambientPadOsc2) {
+        const isLumbini = mix.activeZone === 'peace-garden';
+        this.ambientPadOsc1.frequency.setTargetAtTime(isLumbini ? 130.81 : 132.0, t, 1.0);
+        this.ambientPadOsc2.frequency.setTargetAtTime(isLumbini ? 196.0 : 198.0, t, 1.0);
+      }
     }
 
     const effectiveBirdActivity = Math.max(mix.birdLevel, forestLevel * 0.85);
     if (effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
-      if (mix.activeZone === 'temple-courtyard' && Math.random() < 0.55) {
+      if (
+        (mix.activeZone === 'temple-courtyard' || mix.activeZone === 'peace-garden') &&
+        Math.random() < 0.58
+      ) {
         this.triggerDoveCoo(ctx, mix.birdLevel);
       } else {
         this.triggerSongbirdChirp(ctx, mix.birdLevel, forestLevel);
       }
       const interval = Math.max(0.85, 3.4 - effectiveBirdActivity * 2.25 + Math.random() * 1.9);
       this.nextBirdAtSec = t + interval;
+    }
+
+    if (lumbiniProfile.chimeActivity > 0.12 && t >= this.nextChimeAtSec) {
+      this.triggerSoftTempleChimes(ctx, lumbiniProfile.chimeActivity, lumbiniPreset);
+      const span = Math.max(0.5, lumbiniProfile.chimeIntervalMaxSec - lumbiniProfile.chimeIntervalMinSec);
+      this.nextChimeAtSec = t + lumbiniProfile.chimeIntervalMinSec + Math.random() * span;
+    }
+
+    if (lumbiniProfile.bowlActivity > 0.2 && t >= this.nextBowlAtSec) {
+      this.triggerTibetanSingingBowl(ctx, lumbiniProfile.bowlActivity * 0.72);
+      this.nextBowlAtSec = t + lumbiniProfile.bowlIntervalSec * (0.85 + Math.random() * 0.35);
+    }
+  }
+
+  private triggerSoftTempleChimes(
+    ctx: AudioContext,
+    level: number,
+    preset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  ): void {
+    const t = ctx.currentTime;
+    const pentatonic =
+      preset === 'moonlight-vigil' || preset === 'butter-lamp-dusk'
+        ? [523.25, 587.33, 659.25, 783.99, 880.0]
+        : [523.25, 659.25, 783.99, 880.0, 1046.5, 1174.66];
+    const chimeCount = 2 + (Math.random() < 0.5 ? 1 : 0) + (level > 0.78 && Math.random() < 0.4 ? 1 : 0);
+
+    for (let i = 0; i < chimeCount; i++) {
+      const start = t + i * (0.16 + Math.random() * 0.24);
+      const freq = pentatonic[Math.floor(Math.random() * pentatonic.length)];
+      const panner = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = (Math.random() - 0.5) * 1.25;
+        panner.connect(ctx.destination);
+      }
+      const out: AudioNode = panner ?? ctx.destination;
+
+      const vol = (0.012 + level * 0.015) * (0.8 + Math.random() * 0.35);
+      const decay = 1.65 + Math.random() * 0.65;
+
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(freq, start);
+      gain1.gain.setValueAtTime(0.0004, start);
+      gain1.gain.linearRampToValueAtTime(vol, start + 0.014);
+      gain1.gain.exponentialRampToValueAtTime(0.0003, start + decay);
+      osc1.connect(gain1);
+      gain1.connect(out);
+      osc1.start(start);
+      osc1.stop(start + decay + 0.05);
+
+      // Delicate tubular chime shimmer partial
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(freq * 2.756, start);
+      gain2.gain.setValueAtTime(0.0003, start);
+      gain2.gain.linearRampToValueAtTime(vol * 0.28, start + 0.01);
+      gain2.gain.exponentialRampToValueAtTime(0.0002, start + decay * 0.48);
+      osc2.connect(gain2);
+      gain2.connect(out);
+      osc2.start(start);
+      osc2.stop(start + decay * 0.52);
+    }
+  }
+
+  private triggerTibetanSingingBowl(ctx: AudioContext, level: number): void {
+    const t = ctx.currentTime;
+    const fundamentals = [196.0, 220.0, 261.63];
+    const f0 = fundamentals[Math.floor(Math.random() * fundamentals.length)];
+    const vol = 0.018 + Math.min(1, level) * 0.016;
+
+    const partials = [
+      { ratio: 1.0, detune: 0, amp: vol, decay: 3.6 },
+      { ratio: 1.0, detune: 1.15, amp: vol * 0.55, decay: 3.5 },
+      { ratio: 2.76, detune: -0.6, amp: vol * 0.24, decay: 2.2 },
+      { ratio: 5.4, detune: 0.9, amp: vol * 0.08, decay: 1.3 },
+    ];
+
+    for (const p of partials) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f0 * p.ratio + p.detune, t);
+      gain.gain.setValueAtTime(0.0004, t);
+      gain.gain.linearRampToValueAtTime(p.amp, t + 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.0003, t + p.decay);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + p.decay + 0.08);
     }
   }
 
@@ -399,7 +570,6 @@ class SoundEngine {
 
     const t = ctx.currentTime;
     if (surface === 'grass') {
-      // Soft grass swish + muted earth thud
       const buf = this.createPinkNoiseBuffer(ctx, 0.09);
       const src = ctx.createBufferSource();
       src.buffer = buf;
@@ -455,14 +625,12 @@ class SoundEngine {
     const volScale = Math.max(0.15, Math.min(1.2, gainScale));
     const f0 = 330 * pitchScale;
 
-    // Warm bronze lowpass to mellow sharp upper overtones
     const masterFilter = ctx.createBiquadFilter();
     masterFilter.type = 'lowpass';
     masterFilter.frequency.setValueAtTime(4200, t);
     masterFilter.frequency.exponentialRampToValueAtTime(1400, t + 2.4);
     masterFilter.connect(ctx.destination);
 
-    // 1. Clapper strike metallic transient (short bright burst)
     const strikeOsc = ctx.createOscillator();
     const strikeGain = ctx.createGain();
     strikeOsc.type = 'triangle';
@@ -475,7 +643,6 @@ class SoundEngine {
     strikeOsc.start(t);
     strikeOsc.stop(t + 0.07);
 
-    // 2. Classic cast-bronze bell partial series (hum, prime, tierce, quint, nominal, superquint)
     const partials: Array<{ ratio: number; amp: number; decay: number; detune: number }> = [
       { ratio: 0.5, amp: 0.052, decay: 3.9, detune: 0.0 },
       { ratio: 1.0, amp: 0.088, decay: 3.2, detune: -0.9 },
@@ -503,13 +670,17 @@ class SoundEngine {
   }
 
   public playBellChime(): void {
-    // Gentle temple/singing-bowl chime when discovering landmarks
+    const ctx = this.ensureContext();
+    if (!ctx) return;
     if (this.currentZone === 'temple-courtyard') {
       this.playTempleBell(0.75, 1.15);
       return;
     }
-    const ctx = this.ensureContext();
-    if (!ctx) return;
+    if (this.currentZone === 'peace-garden') {
+      this.triggerTibetanSingingBowl(ctx, 0.95);
+      this.triggerSoftTempleChimes(ctx, 0.85, 'bodhi-zen');
+      return;
+    }
     this.playTone(528, 0.75, 'sine', 0.065);
     this.playTone(792, 0.58, 'sine', 0.035);
     this.playTone(1056, 0.42, 'sine', 0.018);
@@ -622,6 +793,7 @@ class SoundEngine {
       this.windNoiseSrc,
       this.windLfo,
       this.rustleLfo,
+      this.flagFlutterLfo,
       this.ambientPadOsc1,
       this.ambientPadOsc2,
       this.ambientPadLfo,

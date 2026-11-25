@@ -322,33 +322,37 @@ export function createMonumentalSeatedBuddha(
     pose?: 'bhumisparsha' | 'dhyana';
     withNagaCanopy?: boolean;
     withOfferingLamps?: boolean;
+    withAlmsBowl?: boolean;
+    crimsonThrone?: boolean;
   } = {},
 ): THREE.Group {
   const scale = options.scale ?? 1.38;
   const pose = options.pose ?? 'bhumisparsha';
   const withNaga = options.withNagaCanopy ?? false;
   const withLamps = options.withOfferingLamps ?? true;
+  const withAlmsBowl = options.withAlmsBowl ?? false;
+  const thronePlinthMat = options.crimsonThrone ? mats.crimsonLacquerMat : mats.stonePlinthMat;
 
   const root = new THREE.Group();
   const monument = new THREE.Group();
 
-  // A. Carved Octagonal Vajrasana Sandstone & Bronze Plinth (y: 0 -> 1.38)
-  const plinth1 = new THREE.Mesh(new THREE.CylinderGeometry(2.68, 2.86, 0.34, 8), mats.stonePlinthMat);
+  // A. Carved Octagonal Vajrasana / Tibetan Lion-Throne Plinth (y: 0 -> 1.38)
+  const plinth1 = new THREE.Mesh(new THREE.CylinderGeometry(2.68, 2.86, 0.34, 8), thronePlinthMat);
   plinth1.position.y = 0.17;
   plinth1.castShadow = true;
   plinth1.receiveShadow = true;
 
-  const plinth2 = new THREE.Mesh(new THREE.CylinderGeometry(2.38, 2.52, 0.24, 8), mats.stonePlinthMat);
+  const plinth2 = new THREE.Mesh(new THREE.CylinderGeometry(2.38, 2.52, 0.24, 8), thronePlinthMat);
   plinth2.position.y = 0.46;
   plinth2.castShadow = true;
   plinth2.receiveShadow = true;
 
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(2.08, 2.16, 0.56, 8), mats.stonePlinthMat);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(2.08, 2.16, 0.56, 8), thronePlinthMat);
   drum.position.y = 0.86;
   drum.castShadow = true;
   drum.receiveShadow = true;
 
-  const cornice = new THREE.Mesh(new THREE.CylinderGeometry(2.38, 2.16, 0.22, 8), mats.stonePlinthMat);
+  const cornice = new THREE.Mesh(new THREE.CylinderGeometry(2.38, 2.16, 0.22, 8), mats.goldMat);
   cornice.position.y = 1.25;
   cornice.castShadow = true;
   cornice.receiveShadow = true;
@@ -362,7 +366,7 @@ export function createMonumentalSeatedBuddha(
   // Corner pilasters & golden Dharma medallions around octagonal drum
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.56, 0.24), mats.stonePlinthMat);
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.56, 0.24), mats.goldMat);
     pil.position.set(Math.sin(a) * 2.08, 0.86, Math.cos(a) * 2.08);
     pil.rotation.y = a;
     monument.add(pil);
@@ -615,6 +619,32 @@ export function createMonumentalSeatedBuddha(
     buddha.add(rightArm, rightHand);
   }
 
+  // Dark lacquered begging / alms bowl resting gently in Dhyana cupped palms (matching Great Buddha throne)
+  if (withAlmsBowl) {
+    const bowlMat = new THREE.MeshStandardMaterial({
+      color: 0x262930,
+      roughness: 0.28,
+      metalness: 0.42,
+    });
+    const bowlPts = [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.18, 0.02),
+      new THREE.Vector2(0.32, 0.12),
+      new THREE.Vector2(0.35, 0.24),
+      new THREE.Vector2(0.28, 0.30),
+      new THREE.Vector2(0.25, 0.29),
+      new THREE.Vector2(0.30, 0.22),
+      new THREE.Vector2(0.0, 0.08),
+    ];
+    const bowl = new THREE.Mesh(new THREE.LatheGeometry(bowlPts, 24), bowlMat);
+    bowl.position.set(0, 0.63, 0.58);
+    bowl.castShadow = true;
+    const bowlRim = new THREE.Mesh(new THREE.TorusGeometry(0.265, 0.016, 8, 24), mats.goldMat);
+    bowlRim.rotation.x = Math.PI / 2;
+    bowlRim.position.set(0, 0.92, 0.58);
+    buddha.add(bowl, bowlRim);
+  }
+
   // Head mounted firmly onto top of neck
   const head = buildSculptedBuddhaHead(mats, 1.0);
   head.position.set(0, 2.74, 0.02);
@@ -843,4 +873,272 @@ export function createNativitySiddharthaStatue(
 
   g.add(torso, dhoti, head, topknot, rArm, lArm, aureole);
   return g;
+}
+
+/**
+ * 4. Monumental Golden Baby Buddha (Prince Siddhartha standing barefoot on double golden lotus
+ *    pedestal inside a wide dark basalt lotus-petal basin carpeted with orange marigold garlands,
+ *    right index finger pointing skyward and left arm lowered).
+ */
+export function createMonumentalBabyBuddhaMonument(
+  mats: BuddhaMaterials,
+  hedgeMat: THREE.Material,
+): THREE.Group {
+  const root = new THREE.Group();
+
+  const darkStoneMat = new THREE.MeshStandardMaterial({
+    color: 0x26292e,
+    roughness: 0.68,
+    metalness: 0.14,
+  });
+  const slateDeckMat = new THREE.MeshStandardMaterial({
+    color: 0x454952,
+    roughness: 0.52,
+    metalness: 0.12,
+  });
+  const marigoldMat = new THREE.MeshStandardMaterial({
+    color: 0xf46e16,
+    roughness: 0.72,
+    emissive: 0x4a1600,
+    emissiveIntensity: 0.16,
+  });
+
+  // A. Wide Circular Dark-Basalt Lotus Basin & Green Perimeter Ring (radius 3.1m)
+  const basinBase = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.20, 0.34, 36), darkStoneMat);
+  basinBase.position.y = 0.17;
+  basinBase.castShadow = true;
+  basinBase.receiveShadow = true;
+
+  const basinTopDeck = new THREE.Mesh(new THREE.CylinderGeometry(2.86, 2.94, 0.10, 36), slateDeckMat);
+  basinTopDeck.position.y = 0.38;
+  basinTopDeck.receiveShadow = true;
+  root.add(basinBase, basinTopDeck);
+
+  // Carved dark basalt lotus petals ringing outer rim
+  const outerPetalShape = new THREE.Shape();
+  outerPetalShape.moveTo(0, 0);
+  outerPetalShape.bezierCurveTo(0.24, 0.10, 0.26, 0.34, 0, 0.50);
+  outerPetalShape.bezierCurveTo(-0.26, 0.34, -0.24, 0.10, 0, 0);
+  const outerPetalGeo = new THREE.ExtrudeGeometry(outerPetalShape, {
+    depth: 0.08,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.02,
+    bevelSegments: 2,
+    curveSegments: 6,
+  });
+  outerPetalGeo.center();
+  const basaltPetals = new THREE.InstancedMesh(outerPetalGeo, darkStoneMat, 32);
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2;
+    _v3.set(Math.sin(a) * 2.98, 0.32, Math.cos(a) * 2.98);
+    _q.setFromEuler(_e.set(0.32, a, 0));
+    _s.set(1.05, 1.0, 1.0);
+    _m4.compose(_v3, _q, _s);
+    basaltPetals.setMatrixAt(i, _m4);
+  }
+  basaltPetals.instanceMatrix.needsUpdate = true;
+  basaltPetals.computeBoundingSphere();
+  root.add(basaltPetals);
+
+  // Low clipped green hedge border around outer stone footing
+  const hedgeRing = new THREE.Mesh(new THREE.TorusGeometry(3.26, 0.22, 8, 36), hedgeMat);
+  hedgeRing.rotation.x = Math.PI / 2;
+  hedgeRing.position.y = 0.24;
+  hedgeRing.castShadow = true;
+  hedgeRing.receiveShadow = true;
+  root.add(hedgeRing);
+
+  // Dense orange marigold garlands laid radially and along the lotus basin rim (InstancedMesh)
+  const bloomGeo = new THREE.DodecahedronGeometry(0.068, 0);
+  const bloomCoords: Array<[number, number, number, number]> = [];
+  for (const ringR of [2.72, 2.15, 1.62]) {
+    const count = Math.round(ringR * 26);
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      bloomCoords.push([Math.sin(a) * ringR, 0.46, Math.cos(a) * ringR, 0.85 + (i % 3) * 0.14]);
+    }
+  }
+  // 12 radial marigold spokes across the dark stone deck
+  for (let spoke = 0; spoke < 12; spoke++) {
+    const a = (spoke / 12) * Math.PI * 2;
+    for (let r = 1.48; r <= 2.72; r += 0.11) {
+      bloomCoords.push([Math.sin(a) * r, 0.455, Math.cos(a) * r, 0.92]);
+    }
+  }
+  const marigoldInst = new THREE.InstancedMesh(bloomGeo, marigoldMat, bloomCoords.length);
+  bloomCoords.forEach(([bx, by, bz, bs], idx) => {
+    _v3.set(bx, by, bz);
+    _q.setFromEuler(_e.set(idx * 0.4, idx * 0.7, 0));
+    _s.setScalar(bs);
+    _m4.compose(_v3, _q, _s);
+    marigoldInst.setMatrixAt(idx, _m4);
+  });
+  marigoldInst.instanceMatrix.needsUpdate = true;
+  marigoldInst.computeBoundingSphere();
+  root.add(marigoldInst);
+
+  // B. Double-Tier Sculpted Golden Lotus Pedestal (y: 0.42 -> 1.42)
+  const lotusCorePts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(1.36, 0.0),
+    new THREE.Vector2(1.18, 0.24),
+    new THREE.Vector2(0.96, 0.48),
+    new THREE.Vector2(1.24, 0.82),
+    new THREE.Vector2(1.16, 0.98),
+    new THREE.Vector2(0.0, 0.98),
+  ];
+  const lotusCore = new THREE.Mesh(new THREE.LatheGeometry(lotusCorePts, 28), mats.goldMat);
+  lotusCore.position.y = 0.42;
+  lotusCore.castShadow = true;
+  lotusCore.receiveShadow = true;
+  root.add(lotusCore);
+
+  const goldPetals = new THREE.InstancedMesh(outerPetalGeo, mats.goldMat, 36);
+  goldPetals.castShadow = true;
+  let gpIdx = 0;
+  for (let tier = 0; tier < 2; tier++) {
+    const count = 18;
+    const rad = tier === 0 ? 1.24 : 1.18;
+    const py = tier === 0 ? 0.64 : 1.06;
+    const tilt = tier === 0 ? 0.95 : 0.34;
+    for (let i = 0; i < count; i++) {
+      const a = ((i + tier * 0.5) / count) * Math.PI * 2;
+      _v3.set(Math.sin(a) * rad, py, Math.cos(a) * rad);
+      _q.setFromEuler(_e.set(0, a, 0));
+      const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0));
+      _q.multiply(tq);
+      _s.set(1.12, 1.16, 1.05);
+      _m4.compose(_v3, _q, _s);
+      goldPetals.setMatrixAt(gpIdx++, _m4);
+    }
+  }
+  goldPetals.instanceMatrix.needsUpdate = true;
+  goldPetals.computeBoundingSphere();
+  root.add(goldPetals);
+
+  const topLotusRim = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.055, 10, 32), mats.goldMat);
+  topLotusRim.rotation.x = Math.PI / 2;
+  topLotusRim.position.y = 1.40;
+  root.add(topLotusRim);
+
+  // C. Standing Golden Baby Siddhartha Figure (local y = 1.40 -> ~4.45m total monument height)
+  const fig = new THREE.Group();
+  fig.position.y = 1.40;
+
+  // Bare feet & ankles planted firmly atop lotus pedestal
+  for (const side of [-1, 1]) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.11, 0.36), mats.goldMat);
+    foot.position.set(side * 0.18, 0.055, 0.06);
+    foot.castShadow = true;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.105, 0.65, 14), mats.goldMat);
+    leg.position.set(side * 0.18, 0.38, 0.02);
+    leg.castShadow = true;
+    fig.add(foot, leg);
+  }
+
+  // Folded pleated Dhoti wrap around hips & calves with scalloped lower hem + front knot tail
+  const dhotiPts = [
+    new THREE.Vector2(0.36, 0.22),
+    new THREE.Vector2(0.42, 0.42),
+    new THREE.Vector2(0.39, 0.88),
+    new THREE.Vector2(0.37, 1.12),
+    new THREE.Vector2(0.0, 1.12),
+  ];
+  const dhoti = new THREE.Mesh(new THREE.LatheGeometry(dhotiPts, 24), mats.goldMat);
+  dhoti.scale.set(1.06, 1.0, 0.84);
+  dhoti.castShadow = true;
+  const waistBand = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.045, 8, 24), mats.goldMat);
+  waistBand.rotation.x = Math.PI / 2;
+  waistBand.scale.set(1.06, 0.84, 1);
+  waistBand.position.y = 1.09;
+  const frontDrape = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.72, 0.12), mats.goldMat);
+  frontDrape.position.set(0, 0.72, 0.32);
+  fig.add(dhoti, waistBand, frontDrape);
+
+  // Rounded child torso & gentle belly + chest
+  const torsoPts = [
+    new THREE.Vector2(0.0, 1.08),
+    new THREE.Vector2(0.37, 1.08),
+    new THREE.Vector2(0.41, 1.32),
+    new THREE.Vector2(0.39, 1.62),
+    new THREE.Vector2(0.42, 1.88),
+    new THREE.Vector2(0.24, 2.02),
+    new THREE.Vector2(0.16, 2.12),
+  ];
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 24), mats.goldMat);
+  torso.scale.set(1.08, 1.0, 0.82);
+  torso.castShadow = true;
+  fig.add(torso);
+
+  // Diagonal sacred shoulder sash draped over left shoulder
+  const sashCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.28, 2.00, -0.18),
+    new THREE.Vector3(-0.32, 1.98, 0.18),
+    new THREE.Vector3(-0.02, 1.56, 0.34),
+    new THREE.Vector3(0.32, 1.24, 0.24),
+  ]);
+  const sash = new THREE.Mesh(new THREE.TubeGeometry(sashCurve, 18, 0.065, 8, false), mats.goldMat);
+  sash.scale.set(1.1, 1.0, 0.55);
+  fig.add(sash);
+
+  // Cherubic Baby Siddhartha Head + curls + topknot
+  const babyHead = new THREE.Group();
+  babyHead.position.set(0, 2.40, 0.02);
+  const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.34, 22, 18), mats.goldMat);
+  cranium.scale.set(0.98, 1.04, 0.96);
+  cranium.castShadow = true;
+  const topknot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 14, 12), mats.goldMat);
+  topknot.position.set(0, 0.34, -0.02);
+  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), mats.goldMat);
+  urna.position.set(0, 0.06, 0.325);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 8), mats.goldMat);
+  nose.scale.set(1.1, 0.9, 1.15);
+  nose.position.set(0, -0.04, 0.33);
+  babyHead.add(cranium, topknot, urna, nose);
+  for (const side of [-1, 1]) {
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mats.goldMat);
+    cheek.position.set(side * 0.14, -0.09, 0.24);
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.10), mats.goldMat);
+    ear.position.set(side * 0.33, -0.04, -0.01);
+    const eyeLine = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.075, 4, 8), mats.bronzeMat);
+    eyeLine.rotation.z = Math.PI / 2;
+    eyeLine.position.set(side * 0.11, 0.02, 0.305);
+    babyHead.add(cheek, ear, eyeLine);
+  }
+  fig.add(babyHead);
+
+  // Right arm raised skyward with upright index finger ("Earth and Heaven witness")
+  const rightArmCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.40, 1.88, 0.0),
+    new THREE.Vector3(0.56, 2.02, 0.06),
+    new THREE.Vector3(0.54, 2.40, 0.10),
+    new THREE.Vector3(0.48, 2.66, 0.08),
+  ]);
+  const rightArm = new THREE.Mesh(new THREE.TubeGeometry(rightArmCurve, 18, 0.092, 12, false), mats.goldMat);
+  rightArm.castShadow = true;
+  const rShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), mats.goldMat);
+  rShoulder.position.set(0.40, 1.88, 0.0);
+  const rPalm = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), mats.goldMat);
+  rPalm.position.set(0.48, 2.70, 0.08);
+  const pointingFinger = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.14, 6, 8), mats.goldMat);
+  pointingFinger.position.set(0.47, 2.83, 0.08);
+  fig.add(rightArm, rShoulder, rPalm, pointingFinger);
+
+  // Left arm hanging gracefully downward
+  const leftArmCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.40, 1.88, 0.0),
+    new THREE.Vector3(-0.54, 1.54, 0.04),
+    new THREE.Vector3(-0.56, 1.18, 0.06),
+  ]);
+  const leftArm = new THREE.Mesh(new THREE.TubeGeometry(leftArmCurve, 16, 0.092, 12, false), mats.goldMat);
+  leftArm.castShadow = true;
+  const lShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), mats.goldMat);
+  lShoulder.position.set(-0.40, 1.88, 0.0);
+  const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.09), mats.goldMat);
+  lHand.position.set(-0.56, 1.08, 0.06);
+  fig.add(leftArm, lShoulder, lHand);
+
+  root.add(fig);
+  return root;
 }

@@ -2,6 +2,52 @@ import { LANDMARKS } from '../data/portfolioData';
 
 export type WeatherKind = 'clear' | 'mist' | 'foggy' | 'rain' | 'snow';
 export type TimePreset = 'live' | 'dawn' | 'noon' | 'dusk' | 'night';
+export type LumbiniAmbiencePreset =
+  | 'sanctuary-auto'
+  | 'lotus-dawn'
+  | 'bodhi-zen'
+  | 'butter-lamp-dusk'
+  | 'moonlight-vigil';
+
+export interface LumbiniPresetMeta {
+  id: LumbiniAmbiencePreset;
+  label: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const LUMBINI_PRESET_OPTIONS: LumbiniPresetMeta[] = [
+  {
+    id: 'sanctuary-auto',
+    label: 'Sanctuary Auto',
+    shortLabel: 'Auto',
+    description: 'Blends natural valley sky with soft sanctuary lantern warmth and gentle wind chimes',
+  },
+  {
+    id: 'lotus-dawn',
+    label: 'Lotus Dawn',
+    shortLabel: 'Lotus Dawn',
+    description: 'Rose-gold early morning mist over Pushkarini Pond with crisp morning temple chimes',
+  },
+  {
+    id: 'bodhi-zen',
+    label: 'Bodhi Zen',
+    shortLabel: 'Bodhi Zen',
+    description: 'Tranquil luminous sanctuary daylight with balanced prayer-flag breeze and singing bowls',
+  },
+  {
+    id: 'butter-lamp-dusk',
+    label: 'Butter-Lamp Dusk',
+    shortLabel: 'Lamp Dusk',
+    description: 'Saffron twilight glow illuminating Maya Devi, Peace Flame, and Peace Canal lanterns',
+  },
+  {
+    id: 'moonlight-vigil',
+    label: 'Moonlight Vigil',
+    shortLabel: 'Peace Vigil',
+    description: 'Deep starlit meditation vigil with warm butter-lamp pools and resonant temple bowls',
+  },
+];
 
 export interface CustomWaypoint {
   id: string;
@@ -69,7 +115,7 @@ export interface ContactValidationResult {
   errors: Partial<Record<keyof ContactPayload, string>>;
 }
 
-export const WORLD_RADIUS = 220;
+export const WORLD_RADIUS = 410;
 export const SPAWN_POSITION = { x: 0, z: 6 };
 
 export const BRIDGE_BOUNDS = {
@@ -88,6 +134,22 @@ export const GLACIAL_LAKE = {
   waterLevel: -0.25,
 };
 
+export const LUMBINI_PEACE_CANAL = {
+  centerX: -272,
+  minX: -278,
+  maxX: -266,
+  minZ: 34,
+  maxZ: 162,
+  waterLevel: -0.26,
+  bridgeMinX: -280.2,
+  bridgeMaxX: -263.8,
+  bridgeCenterZ: 100.0,
+  bridgeHalfWidth: 2.6,
+  stupaCenterX: -304,
+  stupaCenterZ: 100,
+  stupaPlazaRadius: 9.6,
+};
+
 export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[0, 6], [-24, -10], [-48, -24]],
   [[-48, -24], [-78, -10], [-108, 4]],
@@ -100,9 +162,16 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
-  [[0, 6], [-4, 62], [-6.5, 86], [-8, 104]],
-  // Smooth Lumbini boulevard departing straight from South Torana Gate toward Janaki Chowk South Gate (-92, 149.5)
-  [[-8, 140], [-8, 145], [-8, 149.5], [-16, 158], [-32, 163], [-56, 164], [-82, 164], [-92, 160], [-92, 154.5], [-92, 149.5]],
+  // Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Torana Gate (-210, 148.0)
+  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 163.5], [-155, 163.5], [-190, 162.5], [-210, 159.0], [-210, 154.0], [-210, 148.0]],
+  // Park Corridor spur from South Boulevard -> Lumbini East Cross Gate (-166.0, 100.0)
+  [[-156.5, 163.5], [-157.5, 134.0], [-157.5, 106.0], [-161.5, 100.0], [-166.0, 100.0]],
+  // Boudhanath Stupa (-108, 4) -> Lumbini North Torana Gate (-210, 52.0)
+  [[-108, 4], [-136, 14], [-172, 26], [-204, 38], [-210, 45.0], [-210, 52.0]],
+  // Expanded Lumbini Western Sacred Parkland & Peace Canal South Promenade
+  [[-210, 159.0], [-240, 166.0], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
+  // Expanded Lumbini Western Sacred Parkland & Peace Canal North Promenade
+  [[-210, 43.0], [-240, 31.0], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -123,8 +192,24 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-48.5, 124.8],
   [-88.2, 154.5],
   [-95.8, 154.5],
-  [-4, 62],
-  [-42, 148],
+  [-206.2, 151.0],
+  [-213.8, 151.0],
+  [-206.2, 48.0],
+  [-213.8, 48.0],
+  [-162.5, 96.4],
+  [-162.5, 103.6],
+  [-155.0, 160.0],
+  [-182.0, 160.0],
+  [-172.0, 30.0],
+  // Expanded Lumbini Peace Canal & Western Peace Stupa lanterns
+  [-260.2, 96.4],
+  [-260.2, 103.6],
+  [-283.6, 96.4],
+  [-283.6, 103.6],
+  [-285.5, 163.0],
+  [-299.5, 132.0],
+  [-299.5, 68.0],
+  [-272.0, 26.2],
 ];
 
 export const PRAYER_FLAG_POLES: Array<[number, number]> = [
@@ -193,11 +278,15 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
   { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
   { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
-  // Lumbini Peace Garden outer grounds (-8, 120) flanking the 36m x 36m Maya Devi precinct
-  { x: -29.0, z: 106.0, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
-  { x: 13.0, z: 106.0, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
-  { x: -29.0, z: 136.0, kind: 'prayer-flags', rotY: 0.6, scale: 1.0 },
-  { x: 13.0, z: 136.0, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
+  // Lumbini Peace Garden outer grounds (-210, 96) & Expanded Peace Canal Parkland
+  { x: -258.0, z: 76.0, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
+  { x: -161.2, z: 76.0, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -258.0, z: 126.0, kind: 'prayer-flags', rotY: 0.6, scale: 1.05 },
+  { x: -198.0, z: 48.0, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
+  { x: -285.5, z: 76.0, kind: 'prayer-flags', rotY: 0.15, scale: 1.1 },
+  { x: -285.5, z: 124.0, kind: 'prayer-flags', rotY: -0.15, scale: 1.1 },
+  { x: -295.0, z: 112.0, kind: 'offering-bowl', rotY: 0.4, scale: 1.05 },
+  { x: -295.0, z: 88.0, kind: 'incense-stand', rotY: -0.4, scale: 1.05 },
 ];
 
 function catmullRomValue(p0: number, p1: number, p2: number, p3: number, t: number): number {
@@ -260,10 +349,10 @@ export function getWorldTreeSpots(): TreeSpot[] {
   const goldenAngle = 2.39996323;
   const treeSpots: TreeSpot[] = [];
 
-  for (let i = 0; i < 2400 && treeSpots.length < 400; i++) {
+  for (let i = 0; i < 4200 && treeSpots.length < 660; i++) {
     const angle = i * goldenAngle;
-    const t = (i + 0.5) / 2400;
-    const radius = 14.5 + Math.sqrt(t) * 190;
+    const t = (i + 0.5) / 4200;
+    const radius = 14.5 + Math.sqrt(t) * 340;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
 
@@ -274,7 +363,7 @@ export function getWorldTreeSpots(): TreeSpot[] {
         return dx > -64 && dx < 46 && dz > -42 && dz < 78;
       }
       if (lm.id === 'lumbini-buddha') {
-        return dx > -22.5 && dx < 22.5 && dz > -20.5 && dz < 25.5;
+        return dx > -51 && dx < 51 && dz > -50 && dz < 58;
       }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
@@ -284,17 +373,39 @@ export function getWorldTreeSpots(): TreeSpot[] {
     const riverCenterX = getRiverCenterX(z);
     const nearRiver = Math.abs(x - riverCenterX) < 10.2;
     const nearLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 4.2;
+    const nearPeaceCanal =
+      x >= LUMBINI_PEACE_CANAL.minX - 6.5 &&
+      x <= LUMBINI_PEACE_CANAL.maxX + 6.5 &&
+      z >= LUMBINI_PEACE_CANAL.minZ - 5.0 &&
+      z <= LUMBINI_PEACE_CANAL.maxZ + 5.0;
+    const nearWestPeaceStupa =
+      Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <
+        LUMBINI_PEACE_CANAL.stupaPlazaRadius + 4.5 ||
+      (x >= -296 && x <= -252 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) < 6.2);
     const nearRoad = minDistToRoadSamples(x, z, roadSamples) < 4.6;
     const nearArtifact = OUTER_TEMPLE_ARTIFACT_SPOTS.some((a) => Math.hypot(x - a.x, z - a.z) < 3.0);
 
-    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearRoad || nearArtifact) {
+    if (
+      nearLandmark ||
+      nearSpawn ||
+      nearRiver ||
+      nearLake ||
+      nearPeaceCanal ||
+      nearWestPeaceStupa ||
+      nearRoad ||
+      nearArtifact
+    ) {
       continue;
     }
 
     const nearWater =
       Math.abs(x - riverCenterX) < 22 ||
-      Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 18;
-    const nearPeaceGarden = Math.hypot(x + 8, z - 120) < 42;
+      Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 18 ||
+      (x >= LUMBINI_PEACE_CANAL.minX - 18 &&
+        x <= LUMBINI_PEACE_CANAL.maxX + 18 &&
+        z >= LUMBINI_PEACE_CANAL.minZ - 14 &&
+        z <= LUMBINI_PEACE_CANAL.maxZ + 14);
+    const nearPeaceGarden = Math.hypot(x + 240, z - 96) < 105;
     const isEastBank = x > riverCenterX + 10;
     const isHighNorth = z < -48;
 
@@ -343,24 +454,25 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
   const roadSamples = getCoarseRoadSamples();
   const goldenAngle = 2.39996323;
   const rockSpots: BoulderSpot[] = [];
-  for (let i = 0; i < 420 && rockSpots.length < 96; i++) {
+  for (let i = 0; i < 520 && rockSpots.length < 116; i++) {
     const a = i * goldenAngle + 0.4;
-    const r = 18 + Math.sqrt((i + 1) / 420) * 185;
+    const r = 18 + Math.sqrt((i + 1) / 520) * 330;
     const rx = Math.cos(a) * r;
     const rz = Math.sin(a) * r;
     const nearLandmark = LANDMARKS.some((lm) =>
       lm.id === 'janaki-mandir'
         ? rx - lm.position.x > -64 && rx - lm.position.x < 46 && rz - lm.position.z > -42 && rz - lm.position.z < 75
         : lm.id === 'lumbini-buddha'
-          ? rx - lm.position.x > -22 && rx - lm.position.x < 22 && rz - lm.position.z > -20 && rz - lm.position.z < 25
+          ? rx - lm.position.x > -51 && rx - lm.position.x < 51 && rz - lm.position.z > -50 && rz - lm.position.z < 58
           : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
     const riverCenterX = getRiverCenterX(rz);
     const nearRiver = Math.abs(rx - riverCenterX) < 8.5;
     const nearLake = Math.hypot(rx - GLACIAL_LAKE.x, rz - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 2.5;
+    const nearPeaceParkland = rx > -324 && rx < -252 && rz > 24 && rz < 172;
     const nearRoad = minDistToRoadSamples(rx, rz, roadSamples) < 4.5;
-    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearRoad) continue;
+    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearPeaceParkland || nearRoad) continue;
     rockSpots.push({ x: rx, z: rz, idx: i });
   }
   cachedBoulderSpots = rockSpots;
@@ -386,9 +498,18 @@ export function isOnBridgeDeck(x: number, z: number): boolean {
   );
 }
 
+export function isOnLumbiniCanalBridge(x: number, z: number): boolean {
+  return (
+    x >= LUMBINI_PEACE_CANAL.bridgeMinX &&
+    x <= LUMBINI_PEACE_CANAL.bridgeMaxX &&
+    Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= LUMBINI_PEACE_CANAL.bridgeHalfWidth
+  );
+}
+
 /**
  * Computes terrain elevation at (x, z).
  * Ensures flat plazas around spawn and all 10 landmarks, a monumental plinth & stair ramp at Janaki Mandir,
+ * wide flat UNESCO Lumbini Terai parkland with Peace Canal & Western Peace Stupa left of Janaki Mandir,
  * sweeping open-world Himalayan valley hills, and a clear river channel separating Nepal from Vellore.
  */
 export function groundHeightAt(x: number, z: number): number {
@@ -398,15 +519,23 @@ export function groundHeightAt(x: number, z: number): number {
     return BRIDGE_BOUNDS.deckY + arch;
   }
 
+  if (isOnLumbiniCanalBridge(x, z)) {
+    const t =
+      (x - LUMBINI_PEACE_CANAL.bridgeMinX) /
+      (LUMBINI_PEACE_CANAL.bridgeMaxX - LUMBINI_PEACE_CANAL.bridgeMinX);
+    const arch = Math.sin(t * Math.PI) * 0.62;
+    return 0.36 + arch;
+  }
+
   // Sweeping open-world Himalayan valley undulation
   let h =
     Math.sin(x * 0.032) * Math.cos(z * 0.028) * 1.35 +
     Math.sin(x * 0.08 + z * 0.05) * 0.38;
 
-  // Foothill rim around outer valley basin; keep North floor sloping smoothly under Himalayan massif
+  // Foothill rim around outer valley basin pushed generously outward to preserve open western Lumbini plains
   const radial = Math.hypot(x, z);
-  if (radial > 165 && z > -135) {
-    const outerT = Math.min(1, (radial - 165) / 110);
+  if (radial > 345 && z > -135) {
+    const outerT = Math.min(1, (radial - 345) / 110);
     const northFade = smoothstep(-135, -60, z);
     h += outerT * outerT * 6.5 * northFade;
   }
@@ -421,7 +550,7 @@ export function groundHeightAt(x: number, z: number): number {
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      radius: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 32 : 18,
+      radius: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 68 : 18,
       targetY:
         lm.id === 'pumdikot-shiva'
           ? 1.45
@@ -441,34 +570,51 @@ export function groundHeightAt(x: number, z: number): number {
     }
   }
 
-  // Level Lumbini 36m x 36m Maya Devi precinct, carve Pushkarini sacred pool basin & front temple stairs
+  // Level Lumbini 88m x 96m Sacred Garden AND expanded Western Peace Canal Parkland (-326.. -165, z: 26..170)
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbini) {
     const ldx = x - lumbini.position.x;
     const ldz = z - lumbini.position.z;
-    const outX = Math.max(0, Math.abs(ldx) - 21.5);
-    const outZ = ldz < -19.5 ? -19.5 - ldz : ldz > 23.5 ? ldz - 23.5 : 0;
-    const outDist = Math.hypot(outX, outZ);
-    if (outDist < 12) {
-      const lBlend = 1 - smoothstep(0, 12, outDist);
-      h = lerp(h, 0.25, lBlend);
+    const parkOutX = ldx < -114.0 ? -114.0 - ldx : ldx > 45.0 ? ldx - 45.0 : 0;
+    const parkOutZ = ldz < -70.0 ? -70.0 - ldz : ldz > 74.0 ? ldz - 74.0 : 0;
+    const parkDist = Math.hypot(parkOutX, parkOutZ);
+    if (parkDist < 28) {
+      const pBlend = 1 - smoothstep(0, 28, parkDist);
+      h = lerp(h, 0.25, pBlend);
     }
 
-    // Carve stepped Pushkarini sacred bathing pool on East grounds (local +11.6, -4.6)
-    if (ldx >= 6.8 && ldx <= 16.4 && ldz >= -10.0 && ldz <= 0.8) {
-      const px = Math.max(0, Math.abs(ldx - 11.6) - 3.6);
-      const pz = Math.max(0, Math.abs(ldz + 4.6) - 4.2);
+    // Carve Lumbini Central Reflection Peace Canal running North-South west of Maya Devi Gate
+    if (
+      x >= LUMBINI_PEACE_CANAL.minX - 2.2 &&
+      x <= LUMBINI_PEACE_CANAL.maxX + 2.2 &&
+      z >= LUMBINI_PEACE_CANAL.minZ - 2.2 &&
+      z <= LUMBINI_PEACE_CANAL.maxZ + 2.2
+    ) {
+      const cx = Math.max(0, Math.abs(x - LUMBINI_PEACE_CANAL.centerX) - 5.2);
+      const cz = Math.max(0, Math.abs(z - 98.0) - 63.2);
+      const canalEdge = Math.hypot(cx, cz);
+      const canalCarve = 1 - smoothstep(0, 1.8, canalEdge);
+      h = lerp(h, -1.15, canalCarve);
+    }
+
+    // Carve stepped Pushkarini Sacred Pond basin centered at local (+10.0, +16.5)
+    if (ldx >= -3.2 && ldx <= 23.2 && ldz >= 7.5 && ldz <= 25.5) {
+      const px = Math.max(0, Math.abs(ldx - 10.0) - 11.2);
+      const pz = Math.max(0, Math.abs(ldz - 16.5) - 6.9);
       const pondDist = Math.hypot(px, pz);
-      const pondCarve = 1 - smoothstep(0, 1.2, pondDist);
-      h = lerp(h, -0.35, pondCarve);
+      const pondCarve = 1 - smoothstep(0, 1.4, pondDist);
+      h = lerp(h, -0.82, pondCarve);
     }
 
-    // Maya Devi Temple terraced sanctuary & South ceremonial stairs (local z: -10.2 -> +1.4)
-    if (Math.abs(ldx) <= 6.6 && ldz >= -10.2 && ldz <= -1.0) {
-      h = 1.35;
-    } else if (Math.abs(ldx) <= 2.4 && ldz > -1.0 && ldz <= 1.45) {
-      const stairT = 1 - (ldz + 1.0) / 2.45;
-      h = lerp(0.25, 1.35, stairT);
+    // Maya Devi Temple (center 0, -22.0, 36m x 24m): sloped South ramp, walkable interior boardwalk (1.25m), sunken pit (-0.10m)
+    const inPit = Math.abs(ldx) <= 9.0 && ldz >= -27.6 && ldz <= -16.4;
+    if (inPit) {
+      h = -0.10;
+    } else if (Math.abs(ldx) <= 17.2 && ldz >= -33.2 && ldz <= -10.8) {
+      h = 1.25;
+    } else if (Math.abs(ldx) <= 1.95 && ldz > -10.8 && ldz <= -2.0) {
+      const rampT = Math.min(1, Math.max(0, 1 - (ldz + 10.0) / 8.0));
+      h = lerp(0.35, 1.25, rampT);
     }
   }
 
@@ -573,7 +719,7 @@ function getRoadDeckSamples(): Array<{ x: number; z: number; deckY: number }> {
  */
 export function getSurfaceHeightAt(x: number, z: number): number {
   const base = groundHeightAt(x, z);
-  if (isOnBridgeDeck(x, z)) {
+  if (isOnBridgeDeck(x, z) || isOnLumbiniCanalBridge(x, z)) {
     return base + 0.02;
   }
 
@@ -591,24 +737,58 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     }
   }
 
-  // Lumbini 36m x 36m brick courtyard & raised veined-marble axial walks
+  // Lumbini 88m x 96m Sacred Garden lawns, red-brick paths, Maya Devi South ramp & interior boardwalk
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbini) {
     const ldx = x - lumbini.position.x;
     const ldz = z - lumbini.position.z;
-    const inPushkarini = ldx >= 7.1 && ldx <= 16.1 && ldz >= -9.7 && ldz <= 0.5;
-    if (!inPushkarini && Math.abs(ldx) <= 18.0 && ldz >= -16.0 && ldz <= 20.0) {
-      surfaceY = Math.max(surfaceY, 0.35);
-      if (Math.abs(ldx) <= 3.1 && (ldz >= 0.4 || ldz <= -10.8)) {
-        surfaceY = Math.max(surfaceY, 0.385);
+    const inPit = Math.abs(ldx) <= 9.0 && ldz >= -27.6 && ldz <= -16.4;
+    const inPushkariniBasin = ldx >= -3.2 && ldx <= 23.2 && ldz >= 7.5 && ldz <= 25.5;
+    if (!inPit && !inPushkariniBasin && ldx >= -44.2 && ldx <= 44.2 && ldz >= -44.2 && ldz <= 52.2) {
+      if (Math.abs(ldx) <= 17.2 && ldz >= -33.2 && ldz <= -10.8) {
+        surfaceY = Math.max(surfaceY, 1.25);
+      } else if (Math.abs(ldx) <= 1.95 && ldz > -10.8 && ldz <= -2.0) {
+        const rampT = Math.min(1, Math.max(0, 1 - (ldz + 10.0) / 8.0));
+        surfaceY = Math.max(surfaceY, lerp(0.35, 1.25, rampT));
+      } else {
+        const onBrickWalk =
+          (Math.abs(ldx) <= 8.5 && ldz >= 28.0 && ldz <= 52.4) ||
+          (ldz >= 2.0 && ldz <= 6.0) ||
+          (Math.abs(ldx) <= 3.4 && ldz >= -2.5 && ldz <= 2.0) ||
+          (ldx >= -22.4 && ldx <= -19.2 && ldz >= -42.5 && ldz <= 30.8) ||
+          (ldx >= 24.2 && ldx <= 27.2 && ldz >= -42.5 && ldz <= 30.8) ||
+          (ldx >= -19.2 && ldx <= 27.2 && ldz >= 27.2 && ldz <= 30.8) ||
+          (ldx >= -22.4 && ldx <= 27.2 && ldz >= -42.5 && ldz <= -38.5) ||
+          (Math.abs(ldx) <= 3.4 && ldz >= -44.4 && ldz <= -42.5) ||
+          (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
+          (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2);
+        surfaceY = Math.max(surfaceY, onBrickWalk ? 0.35 : 0.28);
       }
     }
   }
 
-  // Raised level cobblestone road decks outside Janaki Chowk & Lumbini Sacred Garden
+  // Expanded Western Peace Parkland: West-Gate-to-Canal Promenade, Canal-side boardwalks & White Peace Stupa Overlook
+  const onWestCanalAxisWalk =
+    x >= -295.0 &&
+    x <= -254.0 &&
+    Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 2.6;
+  const onCanalEdgePromenade =
+    z >= LUMBINI_PEACE_CANAL.minZ &&
+    z <= LUMBINI_PEACE_CANAL.maxZ &&
+    ((x >= -265.2 && x <= -261.2) || (x >= -282.8 && x <= -278.8));
+  const onWestStupaPlaza =
+    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
+    LUMBINI_PEACE_CANAL.stupaPlazaRadius;
+  if (onWestStupaPlaza || onWestCanalAxisWalk) {
+    surfaceY = Math.max(surfaceY, 0.35);
+  } else if (onCanalEdgePromenade) {
+    surfaceY = Math.max(surfaceY, 0.32);
+  }
+
+  // Raised level cobblestone road decks outside Janaki Chowk, Lumbini Precinct & Western Peace Plaza
   const inJanakiChowk = x >= -131.0 && x <= -53.5 && z >= 70.0 && z <= 150.2;
-  const inLumbiniPrecinct = x >= -26.5 && x <= 10.5 && z >= 103.5 && z <= 140.5;
-  if (!inJanakiChowk && !inLumbiniPrecinct) {
+  const inLumbiniPrecinct = x >= -255.0 && x <= -165.0 && z >= 51.0 && z <= 149.0;
+  if (!inJanakiChowk && !inLumbiniPrecinct && !onWestStupaPlaza) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
     let bestDeckY = surfaceY;
@@ -629,7 +809,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
 }
 
 /**
- * Checks whether (x, z) is walkable without stepping into deep river/lake water,
+ * Checks whether (x, z) is walkable without stepping into deep river/lake/canal water,
  * solid palace masonry walls, or outside the open-world boundary.
  */
 export function isWalkablePosition(x: number, z: number): boolean {
@@ -640,6 +820,24 @@ export function isWalkablePosition(x: number, z: number): boolean {
       Math.abs(x - BRIDGE_BOUNDS.minX) < 0.7 || Math.abs(x - BRIDGE_BOUNDS.maxX) < 0.7;
     if (onPylonX && Math.abs(z - BRIDGE_BOUNDS.centerZ) >= 2.8) return false;
     return true;
+  }
+  if (isOnLumbiniCanalBridge(x, z)) {
+    // Arched Maitri Peace Bridge balustrade edge rails block side plunge while keeping ±2.25m deck open
+    if (Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) >= 2.28) return false;
+    return true;
+  }
+  if (
+    x >= LUMBINI_PEACE_CANAL.minX - 0.65 &&
+    x <= LUMBINI_PEACE_CANAL.maxX + 0.65 &&
+    z >= LUMBINI_PEACE_CANAL.minZ - 0.65 &&
+    z <= LUMBINI_PEACE_CANAL.maxZ + 0.65
+  ) {
+    return false;
+  }
+  if (
+    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <= 4.35
+  ) {
+    return false;
   }
   if (Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.waterRadius - 0.6) {
     return false;
@@ -737,67 +935,103 @@ export function isWalkablePosition(x: number, z: number): boolean {
     }
   }
 
-  // Monumental Lumbini Maya Devi Temple & Sacred Garden obstacle boundaries
+  // Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden collision bounds
   const lumbiniLm = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbiniLm) {
     const ldx = x - lumbiniLm.position.x;
     const ldz = z - lumbiniLm.position.z;
-    if (Math.abs(ldx) <= 19.0 && ldz >= -17.0 && ldz <= 21.0) {
-      // 1. Perimeter low brick balustrade (keep South/North axial gates |ldx| <= 3.1 and West/East gates ldz in [6.8, 9.8] wide open)
-      if (Math.abs(ldz - 19.7) <= 0.58 && Math.abs(ldx) >= 3.1 && Math.abs(ldx) <= 18.2) return false;
-      if (Math.abs(ldz + 15.7) <= 0.58 && Math.abs(ldx) >= 3.1 && Math.abs(ldx) <= 18.2) return false;
-      if (Math.abs(Math.abs(ldx) - 17.7) <= 0.58 && (ldz < 6.8 || ldz > 9.8) && ldz >= -16.0 && ldz <= 20.0) {
+    if (ldx >= -45.2 && ldx <= 45.2 && ldz >= -45.2 && ldz <= 53.2) {
+      // 1. Perimeter low brick wall (keep North/South axial gates |ldx| <= 3.4 and West/East gates ldz in [1.5, 6.5] wide open)
+      if (Math.abs(ldz - 52.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
+      if (Math.abs(ldz + 44.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
+      if (Math.abs(ldx + 44.0) <= 0.65 && (ldz < 1.5 || ldz > 6.5) && ldz >= -44.4 && ldz <= 52.4) return false;
+      if (Math.abs(ldx - 44.0) <= 0.65 && (ldz < 1.5 || ldz > 6.5) && ldz >= -44.4 && ldz <= 52.4) return false;
+
+      // 2. South & North Dharmachakra Torana Gate piers + West/East Gate piers
+      if (Math.abs(Math.abs(ldx) - 4.12) <= 0.85 && (Math.abs(ldz - 51.8) <= 0.85 || Math.abs(ldz + 43.8) <= 0.85)) {
+        return false;
+      }
+      if ((Math.abs(ldx + 44.0) <= 0.82 || Math.abs(ldx - 44.0) <= 0.82) && (Math.abs(ldz - 1.5) <= 0.82 || Math.abs(ldz - 6.5) <= 0.82)) {
         return false;
       }
 
-      // 2. South & North Dharmachakra Torana Gate piers
-      if (Math.abs(Math.abs(ldx) - 3.55) <= 0.78 && (Math.abs(ldz - 18.2) <= 0.78 || Math.abs(ldz + 14.8) <= 0.78)) {
-        return false;
+      // 3. 2003 Maya Devi Temple (center 0, -22.0, 36m x 24m): outer walls & sunken pit blocked; South ramp, doorway & interior boardwalk loop open
+      if (Math.abs(ldx) <= 18.6 && ldz >= -34.6 && ldz <= -9.4) {
+        const inDoorway = Math.abs(ldx) <= 1.55 && ldz >= -12.8 && ldz <= -9.3;
+        const inBoardwalk =
+          Math.abs(ldx) <= 16.85 &&
+          ldz >= -32.85 &&
+          ldz <= -11.15 &&
+          !(Math.abs(ldx) <= 9.35 && ldz >= -27.95 && ldz <= -16.05);
+        if (!inDoorway && !inBoardwalk) return false;
       }
+      // South entrance ramp side Dharmachakra railings (center |ldx| <= 1.70 stays walkable!)
+      if (Math.abs(Math.abs(ldx) - 2.06) <= 0.36 && ldz >= -10.0 && ldz <= -1.9) return false;
 
-      // 3. Hero Great Shakyamuni Buddha Lotus Throne (0, +7.2)
-      if (Math.hypot(ldx, ldz - 7.2) <= 3.38) return false;
+      // 4. Stepped Pushkarini Sacred Pond coping & water basin (+10.0, +16.5, 26.0m x 17.6m)
+      if (ldx >= -3.35 && ldx <= 23.35 && ldz >= 7.35 && ldz <= 25.65) return false;
 
-      // 4. Maya Devi Temple Maurya plinth & sanctuary walls (keep central stair & inner sanctum doorway |ldx| <= 1.45, ldz >= -6.2 open!)
-      if (Math.abs(ldx) <= 7.45 && ldz >= -11.0 && ldz <= -0.35) {
-        const onFrontApproach = Math.abs(ldx) <= 1.45 && ldz >= -6.2;
-        if (!onFrontApproach) return false;
+      // 5. Historic Ashoka Pillar fenced enclosure (-27.0, -21.0, scaled 1.22x)
+      if (ldx >= -29.65 && ldx <= -24.35 && ldz >= -23.65 && ldz <= -18.35) return false;
+
+      // 6. Monumental Golden Baby Buddha Lotus Basin (0, +39.0, scaled 1.28x)
+      if (Math.hypot(ldx, ldz - 39.0) <= 4.15) return false;
+
+      // 7. Myanmar Golden Pagoda (-32.5, +39.0, scaled 1.25x) & Royal Thai Marble Sanctuary (+35.0, -22.0, scaled 1.12x)
+      if (Math.abs(ldx + 32.5) <= 5.6 && Math.abs(ldz - 39.0) <= 5.6) return false;
+      if (Math.abs(ldx - 35.0) <= 5.15 && Math.abs(ldz + 22.0) <= 5.15) return false;
+
+      // 8. Sacred Bodhi Tree Chautara (-29.0, +16.5, scaled 1.35x) & Eternal Peace Flame (+35.0, +24.0, scaled 1.22x)
+      if (Math.hypot(ldx + 29.0, ldz - 16.5) <= 4.35) return false;
+      if (Math.hypot(ldx - 35.0, ldz - 24.0) <= 2.75) return false;
+
+      // 9. Excavated Mauryan Brick Ruins, Peace Bell Pavilion, Spinning Prayer Wheels, Lanterns, Shilalekh & Hedges
+      for (const [rx, rz, rw, rd] of [
+        [-9.5, -3.5, 3.6, 3.0],
+        [9.5, -3.5, 4.0, 3.2],
+        [16.5, -3.2, 3.2, 2.8],
+        [-28.5, -8.0, 3.6, 3.0],
+        [-35.0, -3.5, 3.8, 3.2],
+        [-32.5, -32.0, 4.2, 3.4],
+        [33.5, -6.5, 3.4, 2.8],
+        [34.5, -0.5, 3.6, 3.0],
+        [-11.5, 13.5, 3.0, 2.8],
+        [-11.5, 20.5, 2.8, 2.6],
+        [-34.5, 26.5, 3.4, 3.0],
+        [35.0, 13.5, 3.2, 2.8],
+        [-14.5, -38.5, 3.4, 2.8],
+        [14.5, -38.5, 3.4, 2.8],
+      ] as Array<[number, number, number, number]>) {
+        if (Math.abs(ldx - rx) <= rw * 0.5 + 0.35 && Math.abs(ldz - rz) <= rd * 0.5 + 0.35) return false;
       }
-      if (Math.abs(Math.abs(ldx) - 2.55) <= 0.45 && ldz >= -0.5 && ldz <= 1.55) return false;
-
-      // 5. Historic Ashoka Pillar fenced enclosure (-11.4, -5.0)
-      if (ldx >= -13.65 && ldx <= -9.15 && ldz >= -7.25 && ldz <= -2.75) return false;
-
-      // 6. Sacred Pushkarini Bathing Pool (+11.6, -4.6)
-      if (ldx >= 6.45 && ldx <= 16.75 && ldz >= -10.35 && ldz <= 1.15) return false;
-
-      // 7. West Naga Buddha Pavilion (-11.8, +4.2) & East Standing Buddha Pavilion (+11.8, +4.2)
-      if (Math.abs(ldx + 11.8) <= 2.45 && Math.abs(ldz - 4.2) <= 2.45) return false;
-      if (Math.abs(ldx - 11.8) <= 2.45 && Math.abs(ldz - 4.2) <= 2.45) return false;
-
-      // 8. Sacred Bodhi Tree Chautara (-12.4, +12.6) & Eternal Peace Flame (+12.0, +12.6)
-      if (Math.hypot(ldx + 12.4, ldz - 12.6) <= 2.85) return false;
-      if (Math.hypot(ldx - 12.0, ldz - 12.6) <= 1.92) return false;
-
-      // 9. Votive Stupas, Spinning Prayer Wheel Racks, Peace Lanterns & Shilalekh Stele
-      for (const [vx, vz] of [
-        [-5.6, -1.6], [5.6, -1.6],
-        [-5.6, 8.8], [5.6, 8.8],
-        [-5.6, -12.2], [5.6, -12.2],
-      ] as Array<[number, number]>) {
-        if (Math.abs(ldx - vx) <= 0.92 && Math.abs(ldz - vz) <= 0.92) return false;
-      }
-      if (Math.abs(Math.abs(ldx) - 5.6) <= 0.72 && Math.abs(ldz - 12.6) <= 1.62) return false;
+      if (Math.abs(ldx + 13.0) <= 1.45 && Math.abs(ldz - 30.5) <= 1.45) return false;
+      if (Math.abs(Math.abs(ldx) - 7.4) <= 0.78 && Math.abs(ldz - 39.0) <= 1.85) return false;
+      if (Math.abs(ldx - 14.0) <= 2.05 && Math.abs(ldz - 46.5) <= 0.95) return false;
       for (const [plx, plz] of [
-        [-3.7, 15.2], [3.7, 15.2],
-        [-3.7, 10.6], [3.7, 10.6],
-        [-3.7, 2.4], [3.7, 2.4],
-        [-3.7, -11.4], [3.7, -11.4],
-        [-8.4, 7.6], [8.4, 7.6],
+        [-7.4, 48.5], [7.4, 48.5],
+        [-7.4, 33.0], [7.4, 33.0],
+        [-4.2, -1.2], [4.2, -1.2],
+        [-18.0, 0.8], [22.8, 0.8],
+        [-20.8, -36.5], [25.7, -36.5],
+        [23.2, 28.5], [-8.5, 28.5],
       ] as Array<[number, number]>) {
-        if (Math.hypot(ldx - plx, ldz - plz) <= 0.56) return false;
+        if (Math.hypot(ldx - plx, ldz - plz) <= 0.55) return false;
       }
-      if (ldx >= 4.8 && ldx <= 8.4 && ldz >= 15.6 && ldz <= 17.2) return false;
+      for (const [hx, hz, hsx, hsz] of [
+        [-22.8, -9.2, 0.68, 17.5],
+        [-22.8, -30.6, 0.68, 12.2],
+        [-22.8, 16.6, 0.68, 19.6],
+        [27.6, -16.8, 0.68, 39.2],
+        [27.6, 16.6, 0.68, 19.6],
+        [-33.4, 6.3, 19.8, 0.68],
+        [35.6, 6.3, 15.6, 0.68],
+        [-8.9, 41.2, 0.68, 19.8],
+        [8.9, 41.2, 0.68, 19.8],
+        [-16.4, 31.2, 13.8, 0.68],
+        [16.4, 31.2, 13.8, 0.68],
+      ] as Array<[number, number, number, number]>) {
+        if (Math.abs(ldx - hx) <= hsx * 0.5 + 0.25 && Math.abs(ldz - hz) <= hsz * 0.5 + 0.25) return false;
+      }
     }
   }
 
@@ -1270,7 +1504,7 @@ export function computeTimeLightingState(
   let skyHorizonColor = lerpHexColor(a.skyHorizon, b.skyHorizon, t);
   let sunIntensity = lerp(a.sunInt, b.sunInt, t);
   let fogDensity = 0.0018;
-  let cameraFar = 680;
+  let cameraFar = 780;
   let bloomStrength = lerp(a.bloomStrength, b.bloomStrength, t);
   let bloomRadius = lerp(a.bloomRadius, b.bloomRadius, t);
   let bloomThreshold = lerp(a.bloomThreshold, b.bloomThreshold, t);
@@ -1338,6 +1572,304 @@ export function computeTimeLightingState(
     bloomThreshold,
     emissiveScale,
     envIntensity,
+  };
+}
+
+/**
+ * Computes spatial proximity blend (0..1) inside the expanded Lumbini UNESCO Sacred Garden
+ * and Western Peace Canal Sanctuary (left of Janaki Mandir).
+ */
+export function computeLumbiniBlendFactor(
+  x: number,
+  z: number,
+  focusedLandmarkId?: string | null,
+): number {
+  if (focusedLandmarkId === 'lumbini-buddha') return 1.0;
+  // Rectangular core covering Maya Devi Sanctuary, Pushkarini Pond, Peace Canal & Western Peace Stupa
+  const dx = x < -316 ? -316 - x : x > -164 ? x - -164 : 0;
+  const dz = z < 32 ? 32 - z : z > 168 ? z - 168 : 0;
+  const boxDist = Math.hypot(dx, dz);
+  return 1 - smoothstep(0, 46, boxDist);
+}
+
+/**
+ * Blends valley time lighting with Lumbini Sanctuary atmosphere presets:
+ * - 'sanctuary-auto': preserves valley sky time while adding serene sanctum lamp glow & slight mist warmth
+ * - 'lotus-dawn': rose-gold Himalayan morning mist & warm butter-lamp highlights
+ * - 'bodhi-zen': high-clarity serene daylight with calm sky contrast & gentle inner sanctum radiance
+ * - 'butter-lamp-dusk': saffron-amber dusk activating Pushkarini, Peace Flame & Peace Canal lanterns
+ * - 'moonlight-vigil': deep starlit peaceful night vigil with warm butter-lamp pools
+ */
+export function computeEffectiveLightingState(
+  hourInput: number,
+  weather: WeatherKind,
+  x: number,
+  z: number,
+  lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  focusedLandmarkId?: string | null,
+): { lighting: TimeLightingState; lumbiniBlend: number } {
+  const base = computeTimeLightingState(hourInput, weather);
+  const spatialFactor = computeLumbiniBlendFactor(x, z, focusedLandmarkId);
+
+  if (spatialFactor <= 0.01) {
+    return { lighting: base, lumbiniBlend: 0 };
+  }
+
+  if (lumbiniPreset === 'sanctuary-auto') {
+    const subtleWarmth = spatialFactor * 0.22;
+    return {
+      lumbiniBlend: spatialFactor,
+      lighting: {
+        ...base,
+        sunColor: lerpHexColor(base.sunColor, '#ffe9c4', subtleWarmth),
+        skyHorizonColor: lerpHexColor(base.skyHorizonColor, '#dfceb8', subtleWarmth * 0.65),
+        fogColor: lerpHexColor(base.fogColor, '#dfceb8', subtleWarmth * 0.65),
+        lanternIntensity: Math.max(base.lanternIntensity, lerp(base.lanternIntensity, 0.72, spatialFactor)),
+        emissiveScale: Math.max(base.emissiveScale, lerp(base.emissiveScale, 0.96, spatialFactor)),
+      },
+    };
+  }
+
+  const presetSpecs: Record<
+    Exclude<LumbiniAmbiencePreset, 'sanctuary-auto'>,
+    {
+      hour: number;
+      sunColor: string;
+      sunInt: number;
+      hemiSky: string;
+      hemiGround: string;
+      hemiInt: number;
+      skyTop: string;
+      skyHorizon: string;
+      fogDensity: number;
+      lantern: number;
+      stars: number;
+      bloomStrength: number;
+      bloomRadius: number;
+      bloomThreshold: number;
+      emissiveScale: number;
+      envInt: number;
+      elevation: number;
+      azimuth: number;
+      phaseLabel: TimeLightingState['phaseLabel'];
+    }
+  > = {
+    'lotus-dawn': {
+      hour: 6.15,
+      sunColor: '#ffcba0',
+      sunInt: 1.32,
+      hemiSky: '#a3b6da',
+      hemiGround: '#4a3d33',
+      hemiInt: 0.56,
+      skyTop: '#2c5488',
+      skyHorizon: '#e5b293',
+      fogDensity: 0.0038,
+      lantern: 1.45,
+      stars: 0.08,
+      bloomStrength: 0.24,
+      bloomRadius: 0.42,
+      bloomThreshold: 1.22,
+      emissiveScale: 1.45,
+      envInt: 0.32,
+      elevation: 0.28,
+      azimuth: -0.68,
+      phaseLabel: 'Dawn',
+    },
+    'bodhi-zen': {
+      hour: 11.2,
+      sunColor: '#fff3dc',
+      sunInt: 1.54,
+      hemiSky: '#b2d0eb',
+      hemiGround: '#444639',
+      hemiInt: 0.59,
+      skyTop: '#2466ab',
+      skyHorizon: '#cae1ec',
+      fogDensity: 0.0017,
+      lantern: 0.65,
+      stars: 0.0,
+      bloomStrength: 0.14,
+      bloomRadius: 0.34,
+      bloomThreshold: 1.38,
+      emissiveScale: 0.92,
+      envInt: 0.35,
+      elevation: 0.98,
+      azimuth: -0.18,
+      phaseLabel: 'Morning',
+    },
+    'butter-lamp-dusk': {
+      hour: 17.95,
+      sunColor: '#ffad66',
+      sunInt: 1.24,
+      hemiSky: '#7d92c4',
+      hemiGround: '#3e2d24',
+      hemiInt: 0.53,
+      skyTop: '#1a2c59',
+      skyHorizon: '#de8f62',
+      fogDensity: 0.0029,
+      lantern: 3.15,
+      stars: 0.24,
+      bloomStrength: 0.32,
+      bloomRadius: 0.48,
+      bloomThreshold: 1.12,
+      emissiveScale: 2.25,
+      envInt: 0.29,
+      elevation: 0.24,
+      azimuth: 0.68,
+      phaseLabel: 'Dusk',
+    },
+    'moonlight-vigil': {
+      hour: 22.4,
+      sunColor: '#a6c2eb',
+      sunInt: 0.52,
+      hemiSky: '#4a689c',
+      hemiGround: '#161b26',
+      hemiInt: 0.46,
+      skyTop: '#070f24',
+      skyHorizon: '#1c2d4d',
+      fogDensity: 0.0024,
+      lantern: 3.85,
+      stars: 0.96,
+      bloomStrength: 0.38,
+      bloomRadius: 0.52,
+      bloomThreshold: 1.06,
+      emissiveScale: 2.7,
+      envInt: 0.24,
+      elevation: 0.48,
+      azimuth: 0.58,
+      phaseLabel: 'Night',
+    },
+  };
+
+  const target = presetSpecs[lumbiniPreset];
+  const blend = spatialFactor;
+  const fogColor = lerpHexColor(base.fogColor, target.skyHorizon, blend);
+
+  return {
+    lumbiniBlend: blend,
+    lighting: {
+      hour: blend > 0.5 ? target.hour : base.hour,
+      phaseLabel: blend > 0.5 ? target.phaseLabel : base.phaseLabel,
+      sunElevation: lerp(base.sunElevation, target.elevation, blend),
+      sunAzimuth: lerp(base.sunAzimuth, target.azimuth, blend),
+      sunColor: lerpHexColor(base.sunColor, target.sunColor, blend),
+      sunIntensity: lerp(base.sunIntensity, target.sunInt, blend),
+      hemiSkyColor: lerpHexColor(base.hemiSkyColor, target.hemiSky, blend),
+      hemiGroundColor: lerpHexColor(base.hemiGroundColor, target.hemiGround, blend),
+      hemiIntensity: lerp(base.hemiIntensity, target.hemiInt, blend),
+      skyTopColor: lerpHexColor(base.skyTopColor, target.skyTop, blend),
+      skyHorizonColor: lerpHexColor(base.skyHorizonColor, target.skyHorizon, blend),
+      fogColor,
+      fogDensity: Math.max(base.fogDensity, lerp(base.fogDensity, target.fogDensity, blend)),
+      lanternIntensity: lerp(base.lanternIntensity, target.lantern, blend),
+      starOpacity:
+        weather === 'rain' || weather === 'foggy'
+          ? 0
+          : lerp(base.starOpacity, target.stars, blend),
+      cameraFar: base.cameraFar,
+      bloomStrength: lerp(base.bloomStrength, target.bloomStrength, blend),
+      bloomRadius: lerp(base.bloomRadius, target.bloomRadius, blend),
+      bloomThreshold: lerp(base.bloomThreshold, target.bloomThreshold, blend),
+      emissiveScale: lerp(base.emissiveScale, target.emissiveScale, blend),
+      envIntensity: lerp(base.envIntensity, target.envInt, blend),
+    },
+  };
+}
+
+export interface LumbiniAudioProfile {
+  chimeActivity: number;
+  bowlActivity: number;
+  flagFlutterLevel: number;
+  padWarmth: number;
+  chimeIntervalMinSec: number;
+  chimeIntervalMaxSec: number;
+  bowlIntervalSec: number;
+}
+
+/**
+ * Computes soft temple wind-chimes, singing-bowl resonance, and prayer-flag cloth flutter
+ * levels driven by spatial proximity to Lumbini Sacred Garden and the active preset.
+ */
+export function computeLumbiniAudioProfile(
+  mix: SpatialAmbienceMix,
+  preset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  weather: WeatherKind = 'clear',
+): LumbiniAudioProfile {
+  const inSanctuary = mix.activeZone === 'peace-garden';
+  const baseFactor = inSanctuary ? 1.0 : mix.nearestForestId === 'lumbini-grove' ? 0.52 : 0.0;
+
+  if (baseFactor <= 0.01) {
+    return {
+      chimeActivity: 0,
+      bowlActivity: 0,
+      flagFlutterLevel: Math.min(0.35, mix.windLevel * 0.25),
+      padWarmth: mix.activeZone === 'temple-courtyard' ? 0.45 : 0.25,
+      chimeIntervalMinSec: 9,
+      chimeIntervalMaxSec: 15,
+      bowlIntervalSec: 20,
+    };
+  }
+
+  let chimeMult = 0.72;
+  let bowlMult = 0.56;
+  let flutterMult = 0.76;
+  let padWarmth = 0.78;
+  let chimeMin = 4.2;
+  let chimeMax = 8.4;
+  let bowlSec = 11.5;
+
+  switch (preset) {
+    case 'lotus-dawn':
+      chimeMult = 0.92;
+      bowlMult = 0.48;
+      flutterMult = 0.85;
+      padWarmth = 0.74;
+      chimeMin = 3.2;
+      chimeMax = 6.5;
+      bowlSec = 13.0;
+      break;
+    case 'bodhi-zen':
+      chimeMult = 0.84;
+      bowlMult = 0.72;
+      flutterMult = 0.92;
+      padWarmth = 0.86;
+      chimeMin = 3.8;
+      chimeMax = 7.2;
+      bowlSec = 10.5;
+      break;
+    case 'butter-lamp-dusk':
+      chimeMult = 0.76;
+      bowlMult = 0.92;
+      flutterMult = 0.74;
+      padWarmth = 0.95;
+      chimeMin = 4.5;
+      chimeMax = 8.6;
+      bowlSec = 9.0;
+      break;
+    case 'moonlight-vigil':
+      chimeMult = 0.64;
+      bowlMult = 1.0;
+      flutterMult = 0.58;
+      padWarmth = 1.0;
+      chimeMin = 5.4;
+      chimeMax = 9.8;
+      bowlSec = 8.2;
+      break;
+    case 'sanctuary-auto':
+    default:
+      break;
+  }
+
+  const weatherBreezeBoost = weather === 'rain' ? 0.8 : weather === 'mist' ? 0.92 : 1.0;
+  const windNorm = Math.max(0.28, Math.min(1.0, 0.34 + mix.windLevel * 0.72));
+
+  return {
+    chimeActivity: Math.min(1, baseFactor * chimeMult * (0.65 + windNorm * 0.35)),
+    bowlActivity: Math.min(1, baseFactor * bowlMult),
+    flagFlutterLevel: Math.min(1, baseFactor * flutterMult * windNorm * weatherBreezeBoost),
+    padWarmth: baseFactor * padWarmth,
+    chimeIntervalMinSec: chimeMin,
+    chimeIntervalMaxSec: chimeMax,
+    bowlIntervalSec: bowlSec,
   };
 }
 
@@ -1657,12 +2189,12 @@ export const FOREST_LANDMARK_AREAS: ForestLandmarkArea[] = [
   {
     id: 'lumbini-grove',
     name: 'Lumbini Sacred Grove',
-    x: -8,
-    z: 120,
-    innerRadius: 24,
-    outerRadius: 58,
+    x: -228,
+    z: 96,
+    innerRadius: 56,
+    outerRadius: 112,
     birdDensity: 1.0,
-    rustleDensity: 0.78,
+    rustleDensity: 0.82,
   },
   {
     id: 'pumdikot-forest',
@@ -1789,11 +2321,20 @@ export const MEADOW_ZONES: MeadowZone[] = [
   {
     id: 'lumbini-clover-meadow',
     name: 'Lumbini Clover Meadow',
-    x: 14,
-    z: 96,
-    radiusX: 24,
-    radiusZ: 26,
+    x: -175,
+    z: 24,
+    radiusX: 28,
+    radiusZ: 24,
     falloff: 9,
+  },
+  {
+    id: 'lumbini-western-peace-meadow',
+    name: 'Lumbini Peace Parkland Meadow',
+    x: -318,
+    z: 132,
+    radiusX: 26,
+    radiusZ: 28,
+    falloff: 10,
   },
   {
     id: 'bagmati-wildflower-meadow',
@@ -1920,13 +2461,48 @@ function pointToSegmentDist(
  */
 export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKind {
   if (isOnBridgeDeck(x, z)) return 'wood';
+  if (isOnLumbiniCanalBridge(x, z)) return 'stone';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
 
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbini) {
     const ldx = x - lumbini.position.x;
     const ldz = z - lumbini.position.z;
-    if (Math.abs(ldx) <= 18.5 && ldz >= -16.5 && ldz <= 20.5) return 'stone';
+    if (ldx >= -44.2 && ldx <= 44.2 && ldz >= -44.2 && ldz <= 52.2) {
+      if (
+        Math.abs(ldx) <= 17.2 &&
+        ldz >= -33.2 &&
+        ldz <= -10.8 &&
+        !(Math.abs(ldx) <= 9.0 && ldz >= -27.6 && ldz <= -16.4)
+      ) {
+        return 'wood';
+      }
+      const onBrickOrRamp =
+        (Math.abs(ldx) <= 1.95 && ldz > -10.8 && ldz <= -2.0) ||
+        (Math.abs(ldx) <= 8.5 && ldz >= 28.0 && ldz <= 52.4) ||
+        (ldz >= 2.0 && ldz <= 6.0) ||
+        (Math.abs(ldx) <= 3.4 && ldz >= -2.5 && ldz <= 2.0) ||
+        (ldx >= -22.4 && ldx <= -19.2 && ldz >= -42.5 && ldz <= 30.8) ||
+        (ldx >= 24.2 && ldx <= 27.2 && ldz >= -42.5 && ldz <= 30.8) ||
+        (ldx >= -19.2 && ldx <= 27.2 && ldz >= 27.2 && ldz <= 30.8) ||
+        (ldx >= -22.4 && ldx <= 27.2 && ldz >= -42.5 && ldz <= -38.5) ||
+        (Math.abs(ldx) <= 3.4 && ldz >= -44.4 && ldz <= -42.5) ||
+        (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
+        (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2);
+      return onBrickOrRamp ? 'stone' : 'grass';
+    }
+  }
+
+  // Western Lumbini Peace Canal promenade, Maitri bridge approach & Peace Stupa plaza
+  if (
+    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
+      LUMBINI_PEACE_CANAL.stupaPlazaRadius ||
+    (x >= -295.0 && x <= -254.0 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 2.6) ||
+    (z >= LUMBINI_PEACE_CANAL.minZ &&
+      z <= LUMBINI_PEACE_CANAL.maxZ &&
+      ((x >= -265.2 && x <= -261.2) || (x >= -282.8 && x <= -278.8)))
+  ) {
+    return 'stone';
   }
 
   const janaki = LANDMARKS.find((l) => l.id === 'janaki-mandir');
@@ -1984,6 +2560,10 @@ export function computeSpatialAmbienceMix(
   const dKtm = ktm ? Math.hypot(x - ktm.position.x, z - ktm.position.z) : 999;
   const dBoudha = boudha ? Math.hypot(x - boudha.position.x, z - boudha.position.z) : 999;
   const dRiver = Math.abs(x - getRiverCenterX(z));
+  const dPeaceCanal =
+    z >= LUMBINI_PEACE_CANAL.minZ - 12 && z <= LUMBINI_PEACE_CANAL.maxZ + 12
+      ? Math.abs(x - LUMBINI_PEACE_CANAL.centerX)
+      : 999;
 
   const ridgeFactor = Math.max(
     1 - smoothstep(10, 38, dPumdikot),
@@ -1991,12 +2571,16 @@ export function computeSpatialAmbienceMix(
     smoothstep(-95, -145, z) * 0.72,
     smoothstep(1.1, 3.0, elevation) * 0.58,
   );
-  const peaceGardenFactor = 1 - smoothstep(8, 30, dLumbini);
+  const peaceGardenFactor = Math.max(
+    1 - smoothstep(14, 54, dLumbini),
+    computeLumbiniBlendFactor(x, z),
+  );
   const stupaSanctuaryFactor = Math.max(
     1 - smoothstep(8, 22, dKtm),
     1 - smoothstep(10, 26, dBoudha),
   );
   const riverFactor = 1 - smoothstep(6, 26, dRiver);
+  const peaceCanalWaterFactor = (1 - smoothstep(4, 18, dPeaceCanal)) * 0.42;
 
   const forestInfo = computeForestProximity(x, z);
 
@@ -2059,6 +2643,7 @@ export function computeSpatialAmbienceMix(
         (1 - smoothstep(4, 24, dRiver)) * 0.95,
         (1 - smoothstep(20, 44, dLake)) * 0.85,
         nearJanakiWater,
+        peaceCanalWaterFactor,
       ),
     ),
   );

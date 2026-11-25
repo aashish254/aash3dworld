@@ -1,10 +1,16 @@
 import * as THREE from 'three';
 import { LANDMARKS } from '../data/portfolioData';
-import { createRectangularHipRoofGeometry } from './janakiMandirCraft';
+import {
+  createDetailedGajurSpire,
+  createRectangularHipRoofGeometry,
+} from './janakiMandirCraft';
+import { buildPeaceLantern } from './lumbiniShrines';
+import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 import { ProceduralTextureSet } from './proceduralTextures';
 import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
+  LUMBINI_PEACE_CANAL,
   ROAD_LANTERN_COORDS,
   ROAD_PATHS,
   SPAWN_POSITION,
@@ -15,6 +21,7 @@ import {
   getWorldBoulderSpots,
   getWorldTreeSpots,
   groundHeightAt,
+  isOnLumbiniCanalBridge,
 } from './worldLogic';
 import { applyRealisticWaterShader } from './waterShader';
 
@@ -186,9 +193,9 @@ function sampleRoadPoints(): Array<{ x: number; z: number }> {
  * (steep cliff faces remain dark gneiss rock while ridges & cirques hold wind-packed snow).
  */
 export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.Mesh {
-  const width = 960;
+  const width = 1360;
   const depth = 290;
-  const segX = 160;
+  const segX = 200;
   const segZ = 52;
 
   const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
@@ -204,7 +211,7 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
     const zFront = 1 - THREE.MathUtils.smoothstep(z, -315, -182);
     const zBack = THREE.MathUtils.smoothstep(z, -475, -355);
     const zBlend = zFront * zBack;
-    const flank = THREE.MathUtils.smoothstep(Math.abs(x), 210, 400) * 0.36;
+    const flank = THREE.MathUtils.smoothstep(Math.abs(x), 250, 460) * 0.36;
     const envelope = Math.min(1, zBlend + flank * (1 - THREE.MathUtils.smoothstep(z, -240, -145)));
 
     const ridge = ridgedNoise(x, z);
@@ -450,12 +457,12 @@ export function sampleTerrainMeshHeight(
  * across exposed river shingle/silt to sun-baked Tamil Nadu laterite loam (East).
  */
 export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh {
-  textures.meadowMap.repeat.set(110, 110);
-  textures.meadowNormal.repeat.set(110, 110);
-  textures.meadowRough.repeat.set(110, 110);
+  textures.meadowMap.repeat.set(138, 138);
+  textures.meadowNormal.repeat.set(138, 138);
+  textures.meadowRough.repeat.set(138, 138);
 
-  const size = 640;
-  const segs = 224;
+  const size = 1040;
+  const segs = 320;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
 
@@ -472,9 +479,9 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const underChowk = jx >= -56.5 && jx <= 38.2 && jz >= 15.5 && jz <= 57.6;
     const underPlinth = Math.abs(jx) <= 25.2 && jz >= -22.0 && jz <= 19.0;
     const underCompoundWalk =
-      (jx >= -56.6 && jx <= 38.2 && jz >= -34.6 && jz <= -30.0) ||
-      (jx >= -56.6 && jx <= -52.6 && jz >= -30.5 && jz <= 25.6) ||
-      (jx >= 34.2 && jx <= 38.2 && jz >= -30.5 && jz <= 16.0);
+      (jx >= -56.8 && jx <= 38.4 && jz >= -34.8 && jz <= -29.8) ||
+      (jx >= -56.8 && jx <= -52.2 && jz >= -30.5 && jz <= 25.6) ||
+      (jx >= 34.0 && jx <= 38.4 && jz >= -30.5 && jz <= 16.0);
     const underBridgeWalk =
       (jx >= -28.6 && jx <= -25.0 && jz >= -25.7 && jz <= 15.6) ||
       (jx >= 25.0 && jx <= 28.6 && jz >= -25.7 && jz <= 15.6) ||
@@ -484,19 +491,37 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       (jx >= -52.8 && jx <= -34.0 && jz >= 2.8 && jz <= 25.5) ||
       (jx >= -34.2 && jx <= -28.4 && jz >= 14.1 && jz <= 17.9);
     const underGangaSagarBasin = jx >= -51.6 && jx <= -37.4 && jz >= 7.2 && jz <= 24.8;
-    const lx = x + 8;
-    const lz = z - 120;
-    const underPushkariniBasin = lx >= 6.8 && lx <= 16.4 && lz >= -10.0 && lz <= 0.8;
-    const underLumbiniPlaza =
-      (Math.abs(lx) <= 18.8 && lz >= -16.8 && lz <= 20.8 && !(Math.abs(lx) <= 2.6 && lz >= -1.2 && lz <= 1.6)) ||
-      (Math.abs(lx) <= 4.2 && (lz >= 19.5 && lz <= 22.4 || lz >= -18.4 && lz <= -15.5));
+    const lx = x + 210;
+    const lz = z - 96;
+    const underPushkariniBasin = lx >= -3.2 && lx <= 23.2 && lz >= 7.5 && lz <= 25.5;
+    const underMayaPit = Math.abs(lx) <= 17.5 && lz >= -33.5 && lz <= -10.5;
+    const underLumbiniPlaza = lx >= -44.8 && lx <= 44.8 && lz >= -44.8 && lz <= 52.8;
+    const underPeaceCanal =
+      !isOnLumbiniCanalBridge(x, z) &&
+      x >= LUMBINI_PEACE_CANAL.minX - 0.8 &&
+      x <= LUMBINI_PEACE_CANAL.maxX + 0.8 &&
+      z >= LUMBINI_PEACE_CANAL.minZ - 0.8 &&
+      z <= LUMBINI_PEACE_CANAL.maxZ + 0.8;
+    const underWestPeaceWalk =
+      Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
+        LUMBINI_PEACE_CANAL.stupaPlazaRadius + 0.6 ||
+      (x >= -295.8 && x <= -253.5 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 3.0) ||
+      (z >= LUMBINI_PEACE_CANAL.minZ - 0.5 &&
+        z <= LUMBINI_PEACE_CANAL.maxZ + 0.5 &&
+        ((x >= -265.6 && x <= -260.8) || (x >= -283.2 && x <= -278.4)));
     const roadDist =
-      x > -118 && x < 105 && z > -118 && z < 172 ? minDistanceToRoads(x, z, roadSamples) : 99;
-    if (underGangaSagarBasin || underPushkariniBasin) {
+      x > -325 && x < 115 && z > -118 && z < 185 ? minDistanceToRoads(x, z, roadSamples) : 99;
+    if (underPeaceCanal) {
+      y = -1.15;
+    } else if (underPushkariniBasin) {
+      y = -0.82;
+    } else if (underGangaSagarBasin) {
       y = -0.48;
+    } else if (underMayaPit) {
+      y = -0.35;
     } else if (underPlinth) {
       y = 0.08;
-    } else if (underChowk || underCompoundWalk || underBridgeWalk || underLumbiniPlaza) {
+    } else if (underChowk || underCompoundWalk || underBridgeWalk || underLumbiniPlaza || underWestPeaceWalk) {
       y = 0.14;
     } else if (roadDist < 2.25) {
       // Depress roadbed sub-grade cleanly beneath the level stone road deck so grass triangles never pierce the pavers
@@ -507,7 +532,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const riverCenterX = getRiverCenterX(z);
     const distRiver = Math.abs(x - riverCenterX);
     const eastBankBlend = THREE.MathUtils.smoothstep(x - riverCenterX, 4.5, 22.0);
-    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 170, 250);
+    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 345, 430);
 
     const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
     if (distRiver < 8.4 || distLake < GLACIAL_LAKE.basinRadius) {
@@ -526,6 +551,12 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
         THREE.MathUtils.lerp(0.84, 0.88, eastBankBlend),
         THREE.MathUtils.lerp(0.68, 0.62, eastBankBlend),
       );
+      if (x >= -324 && x <= -162 && z >= 26 && z <= 174 && !underPeaceCanal && !underWestPeaceWalk) {
+        const parkDx = x < -314 ? -314 - x : x > -168 ? x + 168 : 0;
+        const parkDz = z < 34 ? 34 - z : z > 164 ? z - 164 : 0;
+        const parkLawnBlend = 1 - THREE.MathUtils.smoothstep(Math.hypot(parkDx, parkDz), 0, 14);
+        _color.lerp(new THREE.Color(0x5f8543), parkLawnBlend * 0.34);
+      }
       if (roadDist < 3.6) {
         const vergeBlend = 1 - THREE.MathUtils.smoothstep(roadDist, 1.8, 3.6);
         _color.lerp(new THREE.Color(0x666153), vergeBlend * 0.45);
@@ -573,7 +604,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 24 : lm.id === 'boudhanath-stupa' ? 12 : 11,
+      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 56 : lm.id === 'boudhanath-stupa' ? 12 : 11,
     })),
   ];
 
@@ -783,11 +814,32 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     ) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    // Keep ENTIRE Janaki Mandir & Lumbini Maya Devi Temple precincts free of wild grass, flowers & pebbles
+    // Keep ENTIRE Janaki Mandir, Lumbini Maya Devi Temple, Peace Canal promenades & Western Peace Stupa plaza free of wild grass, flowers & pebbles
     if (px > -152 && px < -50 && pz > 54.5 && pz < 153) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    if (px > -29.5 && px < 13.5 && pz > 100.5 && pz < 143.5) {
+    if (px > -260 && px < -160 && pz > 46 && pz < 152) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    if (
+      px >= LUMBINI_PEACE_CANAL.minX - 5.2 &&
+      px <= LUMBINI_PEACE_CANAL.maxX + 5.2 &&
+      pz >= LUMBINI_PEACE_CANAL.minZ - 2.2 &&
+      pz <= LUMBINI_PEACE_CANAL.maxZ + 2.2
+    ) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    if (
+      px >= -296 &&
+      px <= -254 &&
+      Math.abs(pz - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 4.6
+    ) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    if (
+      Math.hypot(px - LUMBINI_PEACE_CANAL.stupaCenterX, pz - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
+      LUMBINI_PEACE_CANAL.stupaPlazaRadius + 1.4
+    ) {
       return { excluded: true, roadD: 99, distRiver };
     }
     for (const pl of plazas) {
@@ -801,11 +853,11 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   };
 
   const goldenAngle = 2.39996323;
-  const maxAttempts = 22000;
-  for (let i = 0; i < maxAttempts && grassSpots.length < 10500; i++) {
+  const maxAttempts = 36000;
+  for (let i = 0; i < maxAttempts && grassSpots.length < 17500; i++) {
     const angle = i * goldenAngle;
     const t = (i + 0.5) / maxAttempts;
-    const radius = 7.4 + Math.sqrt(t) * 186.0;
+    const radius = 7.4 + Math.sqrt(t) * 345.0;
     const jx = Math.sin(i * 12.9898) * 1.45;
     const jz = Math.cos(i * 78.233) * 1.45;
     const x = Math.cos(angle) * radius + jx;
@@ -833,7 +885,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
       meadowFactor: meadowInfo.factor,
     });
 
-    if (!nearRiver && (i % 10 === 0 || (meadowInfo.inMeadow && i % 6 === 0)) && flowerSpots.length < 1100) {
+    if (!nearRiver && (i % 10 === 0 || (meadowInfo.inMeadow && i % 6 === 0)) && flowerSpots.length < 1500) {
       const fx = x + 0.14 * Math.cos(i);
       const fz = z + 0.14 * Math.sin(i);
       if (!isExcludedFloraPoint(fx, fz, 3.15).excluded) {
@@ -1491,7 +1543,7 @@ export function createCurbedRoads(
         const inChowk =
           baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
         const inLumbini =
-          baseX > -26.5 && baseX < 10.5 && baseZ > 103.5 && baseZ < 140.5;
+          baseX > -255.0 && baseX < -165.0 && baseZ > 51.0 && baseZ < 149.0;
         if (inChowk || inLumbini || rm.deckY <= -0.1) {
           prevRingStart = -1;
           continue;
@@ -2607,4 +2659,373 @@ export function createGlacialLakeAndWaterfall(
     },
   };
 }
+
+export interface LumbiniPeaceParklandResult extends AnimatedWaterController {
+  beaconLights: THREE.PointLight[];
+}
+
+/**
+ * Kenzo Tange Master Plan Western Sacred Peace Parkland (west of Lumbini Maya Devi Gate):
+ * - 12m x 128m Lumbini Central Reflection Peace Canal with stepped terracotta/sandstone ghats & red-brick promenades
+ * - Arched Maitri Peace Bridge connecting Maya Devi West Gate directly to the Western White Peace Stupa Overlook
+ * - White Shanti Peace Stupa Overlook plaza with golden Gajur spire, warm butter-lamp lights, stone benches,
+ *   and waving 5-color Buddhist Lungta prayer flags
+ */
+export function createLumbiniPeaceParkland(
+  textures: ProceduralTextureSet,
+): LumbiniPeaceParklandResult {
+  const group = new THREE.Group();
+  const beaconLights: THREE.PointLight[] = [];
+
+  const canalSpanZ = LUMBINI_PEACE_CANAL.maxZ - LUMBINI_PEACE_CANAL.minZ;
+  const canalMidZ = (LUMBINI_PEACE_CANAL.minZ + LUMBINI_PEACE_CANAL.maxZ) * 0.5;
+  const canalWidthX = LUMBINI_PEACE_CANAL.maxX - LUMBINI_PEACE_CANAL.minX;
+
+  const brickPaverMat = new THREE.MeshStandardMaterial({
+    map: textures.brickMap,
+    normalMap: textures.brickNormal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    color: 0xc96f52,
+    roughness: 0.86,
+    metalness: 0.02,
+  });
+  const chunarStoneMat = new THREE.MeshStandardMaterial({
+    map: textures.sandstoneMap,
+    normalMap: textures.sandstoneNormal,
+    normalScale: new THREE.Vector2(0.68, 0.68),
+    roughnessMap: textures.sandstoneRough,
+    aoMap: textures.sandstoneAo,
+    aoMapIntensity: 0.82,
+    color: 0xe6dccb,
+    roughness: 0.9,
+    metalness: 0.02,
+  });
+  const whiteStuccoMat = new THREE.MeshStandardMaterial({
+    map: textures.sandstoneMap,
+    normalMap: textures.sandstoneNormal,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    color: 0xf7f4ec,
+    roughness: 0.8,
+    metalness: 0.02,
+  });
+  const bronzeMat = new THREE.MeshStandardMaterial({
+    map: textures.agedBronzeMap,
+    normalMap: textures.agedBronzeNormal,
+    color: 0x8f6632,
+    roughness: 0.36,
+    metalness: 0.84,
+  });
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xf0bd45,
+    roughness: 0.22,
+    metalness: 0.9,
+    emissive: 0x5c3e08,
+    emissiveIntensity: 0.22,
+  });
+  const lanternGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xffdf9e,
+    emissive: 0xffaa38,
+    emissiveIntensity: 1.35,
+    roughness: 0.24,
+  });
+
+  // 1. Reflective Peace Canal Water Plane
+  const canalGeo = new THREE.PlaneGeometry(canalWidthX + 0.4, canalSpanZ + 0.4, 20, 64);
+  canalGeo.rotateX(-Math.PI / 2);
+  const uTime = { value: 0 };
+  const canalWaterMat = new THREE.MeshStandardMaterial({
+    color: 0x205a5c,
+    normalMap: textures.waterNormal,
+    normalScale: new THREE.Vector2(0.32, 0.32),
+    roughness: 0.06,
+    metalness: 0.5,
+    transparent: true,
+    opacity: 0.9,
+  });
+  applyRealisticWaterShader(canalWaterMat, uTime, {
+    mode: 'river',
+    maxRadius: canalWidthX * 0.52,
+    flowSpeed: 0.48,
+    deepTint: 0x0f3b40,
+    shallowTint: 0x266260,
+  });
+  const canalWater = new THREE.Mesh(canalGeo, canalWaterMat);
+  canalWater.position.set(LUMBINI_PEACE_CANAL.centerX, LUMBINI_PEACE_CANAL.waterLevel, canalMidZ);
+  canalWater.receiveShadow = true;
+  canalWater.userData.nonCollidable = true;
+  group.add(canalWater);
+
+  // Dark pebble bed floor beneath the canal so water has clean depth
+  const canalBed = new THREE.Mesh(
+    new THREE.BoxGeometry(canalWidthX + 1.2, 0.25, canalSpanZ + 1.2),
+    new THREE.MeshStandardMaterial({ color: 0x2e3533, roughness: 0.95 }),
+  );
+  canalBed.position.set(LUMBINI_PEACE_CANAL.centerX, -1.18, canalMidZ);
+  canalBed.receiveShadow = true;
+  group.add(canalBed);
+
+  // 2. Stepped Canal Coping Walls & Twin Brick Promenades (East & West banks)
+  const stepWallMat = brickPaverMat;
+  for (const side of [-1, 1]) {
+    const bankX = LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 0.25);
+    // Lower submerged step + middle ledge + upper sandstone coping rim
+    const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, canalSpanZ + 1.2), stepWallMat);
+    lowerStep.position.set(bankX - side * 0.15, -0.62, canalMidZ);
+    lowerStep.receiveShadow = true;
+
+    const copingWall = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.72, canalSpanZ + 1.2), chunarStoneMat);
+    copingWall.position.set(bankX + side * 0.15, 0.06, canalMidZ);
+    copingWall.castShadow = true;
+    copingWall.receiveShadow = true;
+
+    const promenade = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.22, canalSpanZ + 0.6), brickPaverMat);
+    promenade.position.set(LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 2.8), 0.21, canalMidZ);
+    promenade.receiveShadow = true;
+    group.add(lowerStep, copingWall, promenade);
+  }
+  for (const endZ of [LUMBINI_PEACE_CANAL.minZ - 0.25, LUMBINI_PEACE_CANAL.maxZ + 0.25]) {
+    const endWall = new THREE.Mesh(new THREE.BoxGeometry(canalWidthX + 1.5, 1.35, 0.9), chunarStoneMat);
+    endWall.position.set(LUMBINI_PEACE_CANAL.centerX, -0.22, endZ);
+    endWall.castShadow = true;
+    endWall.receiveShadow = true;
+    group.add(endWall);
+  }
+
+  // Axial brick approach walk linking Maya Devi West Gate (x = -254) across canal to Peace Stupa (x = -295)
+  for (const [segX, segW] of [
+    [-259.6, 11.4],
+    [-287.6, 15.2],
+  ] as Array<[number, number]>) {
+    const axisWalk = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.24, 5.2), brickPaverMat);
+    axisWalk.position.set(segX, 0.23, LUMBINI_PEACE_CANAL.bridgeCenterZ);
+    axisWalk.receiveShadow = true;
+    group.add(axisWalk);
+    for (const sz of [-2.68, 2.68]) {
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.3, 0.24), chunarStoneMat);
+      curb.position.set(segX, 0.23, LUMBINI_PEACE_CANAL.bridgeCenterZ + sz);
+      curb.receiveShadow = true;
+      group.add(curb);
+    }
+  }
+
+  // 3. Arched Maitri Peace Bridge (spanning x = -280.2 .. -263.8 at z = 100.0)
+  const bridgeGroup = new THREE.Group();
+  const bMin = LUMBINI_PEACE_CANAL.bridgeMinX;
+  const bMax = LUMBINI_PEACE_CANAL.bridgeMaxX;
+  const bZ = LUMBINI_PEACE_CANAL.bridgeCenterZ;
+  const bLen = bMax - bMin;
+  const segCount = 16;
+  const segLen = bLen / segCount;
+  for (let i = 0; i < segCount; i++) {
+    const t = (i + 0.5) / segCount;
+    const x = THREE.MathUtils.lerp(bMin, bMax, t);
+    const y = 0.36 + Math.sin(t * Math.PI) * 0.62;
+    const slope = ((Math.cos(t * Math.PI) * Math.PI) / bLen) * 0.62;
+    const pitch = Math.atan(slope);
+
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.14, 0.26, 5.15), brickPaverMat);
+    slab.position.set(x, y - 0.13, bZ);
+    slab.rotation.z = pitch;
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    bridgeGroup.add(slab);
+
+    const archFascia = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.16, 0.36, 5.38), chunarStoneMat);
+    archFascia.position.set(x, y - 0.32, bZ);
+    archFascia.rotation.z = pitch;
+    archFascia.castShadow = true;
+    bridgeGroup.add(archFascia);
+
+    // Carved Chunar sandstone parapet balusters on both sides of the bridge
+    for (const side of [-1, 1]) {
+      const bzSide = bZ + side * 2.38;
+      if (i % 2 === 0) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.92, 0.24), chunarStoneMat);
+        post.position.set(x, y + 0.44, bzSide);
+        post.castShadow = true;
+        bridgeGroup.add(post);
+      }
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.14, 0.14, 0.22), chunarStoneMat);
+      rail.position.set(x, y + 0.88, bzSide);
+      rail.rotation.z = pitch;
+      rail.castShadow = true;
+      bridgeGroup.add(rail);
+    }
+  }
+  // Bridge stone abutments & 4 Maitri Peace Lanterns flanking bridge entrances
+  for (const bxEnd of [bMin + 0.45, bMax - 0.45]) {
+    const abutment = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.45, 5.5), chunarStoneMat);
+    abutment.position.set(bxEnd, -0.25, bZ);
+    abutment.castShadow = true;
+    abutment.receiveShadow = true;
+    bridgeGroup.add(abutment);
+
+    for (const side of [-1, 1]) {
+      const lantern = buildPeaceLantern(chunarStoneMat, bronzeMat, lanternGlowMat);
+      lantern.position.set(bxEnd, 0.36, bZ + side * 2.48);
+      bridgeGroup.add(lantern);
+      const pLight = new THREE.PointLight(0xffb85c, 1.35, 19, 1.65);
+      pLight.position.set(0, 1.65, 0);
+      pLight.userData.intensityScale = 1.05;
+      pLight.userData.flickerAmp = 0.08;
+      pLight.userData.flickerPhase = bxEnd * 0.2 + side;
+      pLight.userData.warmFlicker = true;
+      lantern.add(pLight);
+      beaconLights.push(pLight);
+    }
+  }
+  group.add(bridgeGroup);
+
+  // 4. Western White Peace Stupa Overlook at (-304, 100)
+  const sx = LUMBINI_PEACE_CANAL.stupaCenterX;
+  const sz = LUMBINI_PEACE_CANAL.stupaCenterZ;
+  const stupaGroup = new THREE.Group();
+  stupaGroup.position.set(sx, 0, sz);
+
+  const plazaPad = new THREE.Mesh(
+    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius, LUMBINI_PEACE_CANAL.stupaPlazaRadius + 0.55, 0.32, 36),
+    chunarStoneMat,
+  );
+  plazaPad.position.y = 0.19;
+  plazaPad.receiveShadow = true;
+  const brickInlay = new THREE.Mesh(
+    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, 0.04, 36),
+    brickPaverMat,
+  );
+  brickInlay.position.y = 0.345;
+  brickInlay.receiveShadow = true;
+  stupaGroup.add(plazaPad, brickInlay);
+
+  // Layered Shanti Stupa: stepped plinths -> white hemispherical dome -> harmika cube -> golden Gajur spire
+  const baseTier1 = new THREE.Mesh(new THREE.CylinderGeometry(4.35, 4.75, 0.72, 24), whiteStuccoMat);
+  baseTier1.position.y = 0.71;
+  baseTier1.castShadow = true;
+  baseTier1.receiveShadow = true;
+  const baseTier2 = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.95, 0.68, 24), whiteStuccoMat);
+  baseTier2.position.y = 1.41;
+  baseTier2.castShadow = true;
+  const medhiCollar = new THREE.Mesh(new THREE.TorusGeometry(3.25, 0.14, 10, 32), goldMat);
+  medhiCollar.rotation.x = Math.PI / 2;
+  medhiCollar.position.y = 1.76;
+
+  const domeGeo = new THREE.SphereGeometry(3.15, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  const dome = new THREE.Mesh(domeGeo, whiteStuccoMat);
+  dome.position.y = 1.76;
+  dome.castShadow = true;
+  dome.receiveShadow = true;
+
+  const harmika = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.78, 1.42), goldMat);
+  harmika.position.y = 5.15;
+  harmika.castShadow = true;
+  const harmikaCap = new THREE.Mesh(
+    createRectangularHipRoofGeometry(1.68, 0.42, 1.68, 0.12),
+    goldMat,
+  );
+  harmikaCap.position.y = 5.56;
+  const gajur = createDetailedGajurSpire(goldMat, 2.35, 0.44);
+  gajur.position.y = 5.95;
+
+  // East-facing Buddha Blessing Niche overlooking the Peace Canal & Maya Devi Temple
+  const nicheFrame = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.55, 1.25), goldMat);
+  nicheFrame.position.set(3.22, 1.78, 0);
+  const nicheAlcove = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 1.25, 0.92),
+    new THREE.MeshStandardMaterial({ color: 0x2c1b12, roughness: 0.75 }),
+  );
+  nicheAlcove.position.set(3.32, 1.78, 0);
+  const dharmaHalo = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.045, 8, 24), goldMat);
+  dharmaHalo.rotation.y = Math.PI / 2;
+  dharmaHalo.position.set(3.48, 1.98, 0);
+  const stupaBuddhaBody = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.78, 12), goldMat);
+  stupaBuddhaBody.position.set(3.48, 1.64, 0);
+  const stupaBuddhaHead = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), goldMat);
+  stupaBuddhaHead.position.set(3.48, 2.12, 0);
+
+  const stupaLight = new THREE.PointLight(0xffcb78, 1.65, 24, 1.6);
+  stupaLight.position.set(2.4, 3.2, 0);
+  stupaLight.userData.intensityScale = 1.25;
+  stupaLight.userData.flickerAmp = 0.06;
+  stupaLight.userData.flickerPhase = 1.7;
+  stupaLight.userData.warmFlicker = true;
+  beaconLights.push(stupaLight);
+
+  stupaGroup.add(
+    baseTier1,
+    baseTier2,
+    medhiCollar,
+    dome,
+    harmika,
+    harmikaCap,
+    gajur,
+    nicheFrame,
+    nicheAlcove,
+    dharmaHalo,
+    stupaBuddhaBody,
+    stupaBuddhaHead,
+    stupaLight,
+  );
+
+  // Two quiet Chunar stone meditation benches flanking the overlook
+  for (const bzBench of [-6.4, 6.4]) {
+    const bench = new THREE.Group();
+    bench.position.set(5.4, 0.35, bzBench);
+    bench.rotation.y = bzBench < 0 ? -0.32 : 0.32;
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.14, 0.68), chunarStoneMat);
+    seat.position.y = 0.44;
+    seat.castShadow = true;
+    for (const lx of [-0.75, 0.75]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.44, 0.56), chunarStoneMat);
+      leg.position.set(lx, 0.22, 0);
+      leg.castShadow = true;
+      bench.add(leg);
+    }
+    bench.add(seat);
+    stupaGroup.add(bench);
+  }
+
+  // 4 Bamboo/Timber Lungta prayer flag poles around the Peace Stupa with waving cloth banners + radial garlands
+  const stupaPoleMat = new THREE.MeshStandardMaterial({ color: 0x6f5032, roughness: 0.85 });
+  const poleCoords: Array<[number, number]> = [
+    [-6.6, -6.6],
+    [6.6, -6.6],
+    [6.6, 6.6],
+    [-6.6, 6.6],
+  ];
+  poleCoords.forEach(([px, pz], idx) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 5.4, 8), stupaPoleMat);
+    pole.position.set(px, 3.05, pz);
+    pole.castShadow = true;
+    const mastTip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), goldMat);
+    mastTip.position.set(px, 5.8, pz);
+    stupaGroup.add(pole, mastTip);
+
+    const poleBanner = createWavingPoleBanner(2.15, 0.68, idx * 1.15);
+    poleBanner.position.set(px + 0.06, 4.95, pz);
+    poleBanner.rotation.y = Math.atan2(-px, -pz);
+    poleBanner.userData.nonCollidable = true;
+    poleBanner.userData.noSpin = true;
+    stupaGroup.add(poleBanner);
+
+    const garland = createWavingPrayerFlagGarland(
+      new THREE.Vector3(px, 5.45, pz),
+      new THREE.Vector3(0, 5.65, 0),
+      8,
+      0.28,
+      0.34,
+      0.24,
+    );
+    stupaGroup.add(garland);
+  });
+
+  group.add(stupaGroup);
+
+  return {
+    group,
+    beaconLights,
+    update: (elapsed: number) => {
+      uTime.value = elapsed;
+    },
+  };
+}
+
 

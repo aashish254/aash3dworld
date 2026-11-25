@@ -5,6 +5,7 @@ import { WorldEngine, WorldGameState, WorldHudSnapshot } from './world/WorldEngi
 import { soundEngine } from './world/soundEngine';
 import {
   CustomWaypoint,
+  LumbiniAmbiencePreset,
   TimePreset,
   WeatherKind,
   computeTimeLightingState,
@@ -132,6 +133,7 @@ export default function App() {
 
   const [timePreset, setTimePreset] = useState<TimePreset>('live');
   const [weatherMode, setWeatherMode] = useState<'live' | WeatherKind>('live');
+  const [lumbiniPreset, setLumbiniPreset] = useState<LumbiniAmbiencePreset>('sanctuary-auto');
   const [weatherInfo, setWeatherInfo] = useState<LiveWeatherInfo>({
     weather: 'clear',
     temperatureC: 18,
@@ -290,6 +292,10 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setWeather(activeWeather);
   }, [activeWeather]);
+
+  useEffect(() => {
+    engineRef.current?.setLumbiniPreset(lumbiniPreset);
+  }, [lumbiniPreset]);
 
   useEffect(() => {
     engineRef.current?.setPlacementMode(placementMode);
@@ -517,6 +523,13 @@ export default function App() {
             onChangeTimePreset={setTimePreset}
             weatherMode={weatherMode}
             onChangeWeatherMode={setWeatherMode}
+            lumbiniPreset={lumbiniPreset}
+            onChangeLumbiniPreset={setLumbiniPreset}
+            showLumbiniPresets={
+              hud.zoneName === 'Lumbini Sacred Garden' ||
+              selectedLandmark?.id === 'lumbini-buddha' ||
+              (hud.coords.x <= -152 && hud.coords.z >= 15 && hud.coords.z <= 185)
+            }
             soundEnabled={soundEnabled}
             onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
             placementMode={placementMode}

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ProceduralTextureSet } from './proceduralTextures';
 import { BRIDGE_BOUNDS, getSurfaceHeightAt, groundHeightAt } from './worldLogic';
+import { createWavingPrayerFlagGarland, getLungtaDrapeMaterials } from './prayerFlags';
 
 export interface ExplorerCharacterRig {
   root: THREE.Group;
@@ -2328,17 +2329,18 @@ export function createSuspensionBridge(textures: ProceduralTextureSet): THREE.Gr
       bridge.add(rod);
     }
 
+    const bridgeFlagGeo = new THREE.PlaneGeometry(0.3, 0.4, 4, 6);
+    bridgeFlagGeo.translate(0, -0.2, 0);
+    const bridgeDrapeMats = getLungtaDrapeMaterials();
     for (let f = 1; f < 13; f++) {
       const pt = curve.getPointAt(f / 13);
       const flag = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.3, 0.4),
-        new THREE.MeshStandardMaterial({
-          color: flagColors[f % flagColors.length],
-          roughness: 0.88,
-          side: THREE.DoubleSide,
-        }),
+        bridgeFlagGeo,
+        bridgeDrapeMats[f % bridgeDrapeMats.length],
       );
-      flag.position.set(pt.x, pt.y - 0.22, pt.z);
+      flag.position.set(pt.x, pt.y - 0.02, pt.z);
+      flag.userData.nonCollidable = true;
+      flag.userData.noSpin = true;
       bridge.add(flag);
     }
   }
@@ -2351,49 +2353,14 @@ export function createPrayerFlagLine(
   end: THREE.Vector3,
   flagCount = 10,
 ): { group: THREE.Group; flags: THREE.Mesh[] } {
-  const group = new THREE.Group();
-  const flags: THREE.Mesh[] = [];
-  const flagColors = [0x2c5c8f, 0xd8d3c8, 0x992c27, 0x2d6b3c, 0xb88c28];
-
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x4b3826, roughness: 0.86 });
-  for (const p of [start, end]) {
-    const y = groundHeightAt(p.x, p.z);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, p.y - y + 0.65, 8), poleMat);
-    pole.position.set(p.x, (p.y + y) / 2 - 0.125, p.z);
-    pole.castShadow = true;
-    group.add(pole);
-  }
-
-  const mid = start.clone().lerp(end, 0.5);
-  mid.y -= 0.75;
-  const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-  const rope = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, 16, 0.018, 5, false),
-    new THREE.MeshStandardMaterial({ color: 0xb5afa5, roughness: 0.85 }),
-  );
-  rope.userData.nonCollidable = true;
-  group.add(rope);
-
-  const flagGeo = new THREE.PlaneGeometry(0.36, 0.46);
-  for (let i = 1; i <= flagCount; i++) {
-    const t = i / (flagCount + 1);
-    const pos = curve.getPoint(t);
-    const flag = new THREE.Mesh(
-      flagGeo,
-      new THREE.MeshStandardMaterial({
-        color: flagColors[i % flagColors.length],
-        roughness: 0.88,
-        side: THREE.DoubleSide,
-      }),
-    );
-    flag.position.set(pos.x, pos.y - 0.23, pos.z);
-    flag.rotation.y = Math.atan2(end.z - start.z, end.x - start.x);
-    flag.userData.nonCollidable = true;
-    group.add(flag);
-    flags.push(flag);
-  }
-
-  return { group, flags };
+  return createWavingPrayerFlagGarland(start, end, {
+    flagCount,
+    flagWidth: 0.36,
+    flagHeight: 0.46,
+    sag: 0.75,
+    includePoles: true,
+    poleBaseGroundY: groundHeightAt,
+  });
 }
 
 export function createCustomWaypointFlag(colorHex: string): THREE.Group {

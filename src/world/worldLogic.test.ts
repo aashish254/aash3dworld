@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
+  LUMBINI_PEACE_CANAL,
   ROAD_LANTERN_COORDS,
   SPAWN_POSITION,
   WORLD_RADIUS,
   clampToWalkable,
   computeAtmosphereParticleProfile,
+  computeEffectiveLightingState,
   computeIncenseSmokeProfile,
   computeIncenseVentOffsets,
+  computeLumbiniAudioProfile,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
   decodeWaypointsFromHash,
@@ -19,6 +22,7 @@ import {
   getLandmarkApproachPoint,
   getRiverCenterX,
   groundHeightAt,
+  isOnLumbiniCanalBridge,
   isWalkablePosition,
   mapWmoToWeather,
   sampleBirdFlightState,
@@ -27,7 +31,7 @@ import {
 import { LANDMARKS } from '../data/portfolioData';
 
 test('spawn and all landmark plazas sit on walkable terrain above water', () => {
-  assert.equal(WORLD_RADIUS, 220);
+  assert.equal(WORLD_RADIUS, 410);
   assert.equal(isWalkablePosition(SPAWN_POSITION.x, SPAWN_POSITION.z), true);
   assert.ok(groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) > -0.2);
   assert.equal(LANDMARKS.length, 10);
@@ -388,7 +392,7 @@ test('spatial ambience mix adapts realistically across nature landmarks and encl
   assert.equal(ridge.activeZone, 'himalayan-ridge');
   assert.ok(ridge.windLevel > 0.7, 'Pumdikot Himalayan ridge should have strong alpine wind');
 
-  const lumbini = computeSpatialAmbienceMix(-8, 120, 0.2);
+  const lumbini = computeSpatialAmbienceMix(-210, 96, 0.2);
   assert.equal(lumbini.activeZone, 'peace-garden');
   assert.ok(lumbini.birdLevel > 0.75, 'Lumbini Peace Garden should have rich tranquil birdsong');
 
@@ -450,11 +454,11 @@ test('world obstacles prevent walking through trees, boulders, lanterns, kiosks,
   }
 });
 
-test('400 botanical multi-species trees, outer temple artifacts, and raised surface heights align cleanly', async () => {
+test('660 botanical multi-species trees, outer temple artifacts, and raised surface heights align cleanly', async () => {
   const { OUTER_TEMPLE_ARTIFACT_SPOTS, getSurfaceHeightAt, getWorldTreeSpots } = await import('./worldLogic');
 
   const trees = getWorldTreeSpots();
-  assert.equal(trees.length, 400, 'Expected 400 diverse trees across the valley');
+  assert.equal(trees.length, 660, 'Expected 660 diverse trees across the expanded valley');
   const speciesSet = new Set(trees.map((t) => t.type));
   for (const required of ['sakura', 'maple', 'willow', 'jacaranda', 'birch', 'deodar', 'peepal']) {
     assert.ok(speciesSet.has(required as never), `Missing species ${required} in world trees`);
@@ -585,7 +589,7 @@ test('forest landmark proximity drives bird chirping and wind-rustling levels wh
   const { createInstancedGrassField } = await import('./mountainAndTerrain');
 
   assert.ok(FOREST_LANDMARK_AREAS.length >= 4);
-  const inLumbiniForest = computeForestProximity(-8, 120);
+  const inLumbiniForest = computeForestProximity(-210, 96);
   const inPumdikotForest = computeForestProximity(-108, -74);
   const openSpawn = computeForestProximity(0, 6);
 
@@ -594,7 +598,7 @@ test('forest landmark proximity drives bird chirping and wind-rustling levels wh
   assert.ok(inPumdikotForest.windRustleLevel > 0.9);
   assert.ok(openSpawn.forestProximity < 0.35);
 
-  const lumbiniMix = computeSpatialAmbienceMix(-8, 120, 0.2);
+  const lumbiniMix = computeSpatialAmbienceMix(-210, 96, 0.2);
   const pumdikotMix = computeSpatialAmbienceMix(-108, -74, 1.45);
   const courtyardMix = computeSpatialAmbienceMix(-92, 92, 1.05);
   assert.ok(lumbiniMix.forestLevel > 0.85 && lumbiniMix.birdLevel > 0.75);
@@ -863,36 +867,54 @@ test('Janaki exterior urns parent foliage rigidly and roadside lanterns use deep
   assert.equal(exteriorUrnCount, 6);
 });
 
-test('Monumental Lumbini Maya Devi Temple precinct has walkable gates/stairs, blocked statues/pond, depressed pond terrain, and wild-grass exclusion', async () => {
+test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Janaki Mandir has walkable gates/ramp/boardwalk, blocked monuments/pond/pit, depressed terrain, and wild-grass exclusion', async () => {
   const THREE = await import('three');
   const { createDioramaTerrain, createInstancedGrassField, sampleTerrainMeshHeight } = await import('./mountainAndTerrain');
   const { createLumbiniBuddha } = await import('./lumbiniTemple');
 
-  const lx = -8;
-  const lz = 120;
+  const lx = -210;
+  const lz = 96;
 
-  // Walkable ceremonial gates, South promenade, and Maya Devi Sanctuary entrance steps
-  assert.equal(isWalkablePosition(lx, lz + 22.5), true, 'Lumbini South approach must be walkable');
-  assert.equal(isWalkablePosition(lx, lz + 18.2), true, 'South Torana Gate opening must be walkable');
-  assert.equal(isWalkablePosition(lx, lz + 12.0), true, 'Central marble promenade must be walkable');
-  assert.equal(isWalkablePosition(lx, lz + 0.5), true, 'Maya Devi Temple front steps must be walkable');
-  assert.equal(isWalkablePosition(lx, lz - 3.5), true, 'Maya Devi Sanctuary inner doorway threshold must be walkable');
-  assert.equal(isWalkablePosition(lx, lz - 14.8), true, 'North Torana Gate opening must be walkable');
+  // Walkable ceremonial gates, red-brick promenades, Maya Devi South Dharmachakra ramp & interior timber boardwalk
+  assert.equal(isWalkablePosition(lx, lz + 56.5), true, 'Lumbini South approach must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 51.8), true, 'South Torana Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 43.8), true, 'North Torana Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx - 44.0, lz + 4.0), true, 'West Cross Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx + 44.0, lz + 4.0), true, 'East Cross Gate opening toward Janaki corridor must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 4.0), true, 'Main East-West red brick promenade must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 6.0), true, 'Maya Devi Temple South Dharmachakra ramp must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 10.5), true, 'Maya Devi Temple doorway threshold must be walkable');
+  assert.equal(isWalkablePosition(lx - 13.0, lz - 22.0), true, 'Maya Devi Temple interior West boardwalk must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 30.5), true, 'Maya Devi Temple interior North boardwalk must be walkable');
 
-  // Solid statues, Ashoka Pillar, Pushkarini Pond, Bodhi Chautara & Eternal Peace Flame block walking
-  assert.equal(isWalkablePosition(lx, lz + 7.2), false, 'Hero Great Buddha Lotus Throne must block walking');
-  assert.equal(isWalkablePosition(lx - 11.4, lz - 5.0), false, 'Ashoka Pillar enclosure must block walking');
-  assert.equal(isWalkablePosition(lx + 11.6, lz - 4.6), false, 'Pushkarini Sacred Pond must block walking');
-  assert.equal(isWalkablePosition(lx - 11.8, lz + 4.2), false, 'West Naga Buddha Pavilion must block walking');
-  assert.equal(isWalkablePosition(lx + 11.8, lz + 4.2), false, 'East Standing Buddha Pavilion must block walking');
-  assert.equal(isWalkablePosition(lx - 12.4, lz + 12.6), false, 'Bodhi Tree Chautara must block walking');
-  assert.equal(isWalkablePosition(lx + 12.0, lz + 12.6), false, 'Eternal Peace Flame must block walking');
+  // Swept walk from South cross-promenade straight up the Dharmachakra ramp into the Maya Devi boardwalk
+  let rampZ = lz + 4.0;
+  for (let s = 0; s < 20; s++) {
+    rampZ = clampToWalkable(lx, rampZ, lx, rampZ - 0.95).z;
+  }
+  assert.ok(rampZ <= lz - 11.5, `Expected straight walk up Maya Devi ramp to enter interior boardwalk, got ldz=${rampZ - lz}`);
 
-  // Terrain & surface heights align cleanly
-  assert.ok(groundHeightAt(lx + 11.6, lz - 4.6) < -0.25, 'Pushkarini Pond basin must be carved below zero');
-  assert.ok(Math.abs(groundHeightAt(lx, lz + 12.0) - 0.25) < 0.02, 'Lumbini courtyard base must sit level at 0.25m');
-  assert.ok(groundHeightAt(lx, lz - 5.6) > 1.2, 'Maya Devi Temple sanctuary terrace must be elevated');
-  assert.equal(getFootstepSurfaceKind(lx, lz + 12.0), 'stone');
+  // Solid walls, sunken pit, statues, Ashoka Pillar, Pushkarini Pond & Sacred Garden shrines block walking
+  assert.equal(isWalkablePosition(lx, lz - 22.0), false, 'Maya Devi sunken Mauryan ruins pit / Marker Stone must block walking');
+  assert.equal(isWalkablePosition(lx + 10.0, lz - 10.2), false, 'Maya Devi South white-brick wall must block walking');
+  assert.equal(isWalkablePosition(lx, lz + 39.0), false, 'Golden Baby Buddha Lotus Monument must block walking');
+  assert.equal(isWalkablePosition(lx - 27.0, lz - 21.0), false, 'Ashoka Pillar enclosure must block walking');
+  assert.equal(isWalkablePosition(lx + 10.0, lz + 16.5), false, 'Pushkarini Sacred Pond water must block walking');
+  assert.equal(isWalkablePosition(lx - 32.5, lz + 39.0), false, 'Myanmar Golden Pagoda must block walking');
+  assert.equal(isWalkablePosition(lx + 35.0, lz - 22.0), false, 'Royal Thai Marble Sanctuary must block walking');
+  assert.equal(isWalkablePosition(lx - 29.0, lz + 16.5), false, 'Sacred Bodhi Tree Chautara must block walking');
+  assert.equal(isWalkablePosition(lx + 35.0, lz + 24.0), false, 'Eternal Peace Flame must block walking');
+
+  // Terrain, surface heights & footstep acoustics align cleanly
+  assert.ok(groundHeightAt(lx + 10.0, lz + 16.5) < -0.7, 'Pushkarini Pond basin must be carved deeply below zero');
+  assert.ok(Math.abs(groundHeightAt(lx, lz + 4.0) - 0.25) < 0.02, 'Lumbini garden ground must sit level at 0.25m');
+  assert.ok(groundHeightAt(lx, lz - 6.0) > 0.45 && groundHeightAt(lx, lz - 6.0) < 1.15, 'Maya Devi South ramp climbs smoothly');
+  assert.ok(Math.abs(groundHeightAt(lx - 13.0, lz - 22.0) - 1.25) < 0.02, 'Maya Devi interior boardwalk sits at 1.25m');
+  assert.ok(Math.abs(groundHeightAt(lx, lz - 22.0) + 0.10) < 0.02, 'Maya Devi sunken Mauryan pit sits at -0.10m');
+  assert.equal(getFootstepSurfaceKind(lx, lz + 4.0), 'stone');
+  assert.equal(getFootstepSurfaceKind(lx, lz - 6.0), 'stone');
+  assert.equal(getFootstepSurfaceKind(lx - 13.0, lz - 22.0), 'wood');
+  assert.equal(getFootstepSurfaceKind(lx - 30.0, lz - 15.0), 'grass');
 
   const tex = new THREE.Texture();
   const mockTextures = new Proxy(
@@ -907,8 +929,9 @@ test('Monumental Lumbini Maya Devi Temple precinct has walkable gates/stairs, bl
   ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
 
   const terrainMesh = createDioramaTerrain(mockTextures);
-  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx + 11.6, lz - 4.6) <= -0.45, 'Pushkarini terrain mesh depressed cleanly');
-  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz + 12.0) <= 0.16, 'Courtyard terrain depressed below brick pavers');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx + 10.0, lz + 16.5) <= -0.55, 'Pushkarini terrain mesh depressed cleanly');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz - 22.0) <= -0.20, 'Maya Devi pit terrain mesh depressed cleanly');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz + 29.0) <= 0.16, 'Garden plaza terrain depressed below brick pavers');
 
   const grassCtrl = createInstancedGrassField(terrainMesh);
   const grassIms = grassCtrl.group.children.filter(
@@ -923,14 +946,14 @@ test('Monumental Lumbini Maya Devi Temple precinct has walkable gates/stairs, bl
       im.getMatrixAt(i, mat);
       mat.decompose(pos, quat, scl);
       assert.equal(
-        pos.x > -28.0 && pos.x < 12.0 && pos.z > 102.0 && pos.z < 142.0,
+        pos.x > -260 && pos.x < -160 && pos.z > 46 && pos.z < 152,
         false,
-        `Wild flora spawned inside Lumbini Sacred Garden at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+        `Wild flora spawned inside 88m x 96m Lumbini Sacred Garden at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
       );
     }
   }
 
-  // Headless build sanity for monumental Lumbini complex
+  // Headless build sanity for 88m x 96m Lumbini Sacred Garden complex
   const built = createLumbiniBuddha(mockTextures);
   assert.ok(built.beaconLights.length >= 2);
   assert.ok(built.animatedNodes.length >= 4);
@@ -939,8 +962,124 @@ test('Monumental Lumbini Maya Devi Temple precinct has walkable gates/stairs, bl
   const bb = new THREE.Box3().setFromObject(built.group);
   const size = new THREE.Vector3();
   bb.getSize(size);
-  assert.ok(size.x >= 35 && size.z >= 35 && size.y >= 13.5, `Expected monumental Lumbini dimensions, got ${size.toArray()}`);
+  assert.ok(size.x >= 86 && size.z >= 94 && size.y >= 15.0, `Expected 88m x 96m Lumbini dimensions, got ${size.toArray()}`);
+
+  // Maya Devi corner flags and Sacred Garden garlands use GPU waving cloth & never spin
+  let wavingGarlands = 0;
+  let wavingPoleBanners = 0;
+  built.group.traverse((o) => {
+    if (o.userData?.prayerFlagMode === 'garland') {
+      wavingGarlands++;
+      assert.equal(o.userData.nonCollidable, true);
+    } else if (o.userData?.prayerFlagMode === 'pole-banner') {
+      wavingPoleBanners++;
+      assert.equal(o.userData.nonCollidable, true);
+      assert.equal(o.userData.noSpin, true);
+    }
+  });
+  assert.ok(wavingGarlands >= 12, 'Expected waving Lungta prayer-flag garlands across Maya Devi & Bodhi Chautara');
+  assert.ok(wavingPoleBanners >= 4, 'Expected Maya Devi rooftop Lungta pole banners');
+  assert.ok(
+    built.animatedNodes.some((n) => typeof n.userData?.onEnvironmentUpdate === 'function'),
+    'Expected wind-driven prayer-flag sync controller',
+  );
 });
+
+test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace Stupa, and ambience lighting/audio presets behave coherently', async () => {
+  const THREE = await import('three');
+  const {
+    createDioramaTerrain,
+    createInstancedGrassField,
+    createLumbiniPeaceParkland,
+    sampleTerrainMeshHeight,
+  } = await import('./mountainAndTerrain');
+
+  // Peace Canal blocks wading, Maitri Peace Bridge carries visitor cleanly across, and Western Stupa plaza stays open around core
+  assert.equal(isWalkablePosition(LUMBINI_PEACE_CANAL.centerX, 76), false, 'Peace Canal basin must block walking');
+  assert.equal(isOnLumbiniCanalBridge(-272, 100), true);
+  assert.equal(isWalkablePosition(-272, 100), true, 'Maitri Peace Bridge deck center must be walkable');
+  assert.ok(groundHeightAt(-272, 100) > 0.9, 'Arched Maitri Peace Bridge rises cleanly over Peace Canal');
+  assert.equal(getFootstepSurfaceKind(-272, 100), 'stone');
+  assert.equal(isWalkablePosition(-298.5, 100), true, 'Western Shanti Peace Stupa Overlook plaza stays walkable');
+  assert.equal(isWalkablePosition(LUMBINI_PEACE_CANAL.stupaCenterX, LUMBINI_PEACE_CANAL.stupaCenterZ), false, 'Shanti Peace Stupa masonry blocks pass-through');
+  assert.equal(getFootstepSurfaceKind(-298.5, 100), 'stone');
+
+  // Effective lighting state blends smoothly at Lumbini across all presets without bleaching snow/stucco or leaking to Kathmandu
+  const dusk = computeEffectiveLightingState(12.5, 'clear', -210, 96, 'butter-lamp-dusk');
+  const vigil = computeEffectiveLightingState(12.5, 'clear', -304, 100, 'moonlight-vigil');
+  const dawn = computeEffectiveLightingState(12.5, 'clear', -210, 96, 'lotus-dawn');
+  const zen = computeEffectiveLightingState(12.5, 'clear', -210, 96, 'bodhi-zen');
+  const valleyOutside = computeEffectiveLightingState(12.5, 'clear', 0, 6, 'moonlight-vigil');
+
+  assert.equal(dusk.lumbiniBlend, 1);
+  assert.equal(vigil.lumbiniBlend, 1);
+  assert.equal(valleyOutside.lumbiniBlend, 0, 'Lumbini preset must not override distant valley lighting');
+  assert.ok(dusk.lighting.lanternIntensity > zen.lighting.lanternIntensity);
+  assert.ok(vigil.lighting.lanternIntensity > dusk.lighting.lanternIntensity);
+  assert.ok(vigil.lighting.starOpacity > 0.8);
+  assert.ok(dawn.lighting.bloomThreshold >= 1.0 && vigil.lighting.bloomThreshold >= 1.0);
+
+  // Audio profile activates chimes, singing bowls, and cloth flutter inside Lumbini Peace Garden
+  const lumbiniMix = computeSpatialAmbienceMix(-272, 100, 0.98);
+  assert.equal(lumbiniMix.activeZone, 'peace-garden');
+  const duskAudio = computeLumbiniAudioProfile(lumbiniMix, 'butter-lamp-dusk', 'clear');
+  const vigilAudio = computeLumbiniAudioProfile(lumbiniMix, 'moonlight-vigil', 'clear');
+  const outsideAudio = computeLumbiniAudioProfile(computeSpatialAmbienceMix(0, 6, 0.25), 'moonlight-vigil', 'clear');
+  assert.ok(duskAudio.chimeActivity > 0.5 && duskAudio.flagFlutterLevel > 0.4);
+  assert.ok(vigilAudio.bowlActivity > 0.6);
+  assert.equal(outsideAudio.chimeActivity, 0);
+
+  // Parkland 3D builder & terrain depression + wild flora exclusion
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    {
+      meadowMap: tex,
+      meadowNormal: tex,
+      meadowRough: tex,
+      createSignTexture: () => tex,
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, LUMBINI_PEACE_CANAL.centerX, 76) <= -0.85, 'Peace Canal basin depressed in terrain');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, -298.5, 100) <= 0.16, 'Western Peace Stupa plaza depressed below paving');
+
+  const grassCtrl = createInstancedGrassField(terrainMesh);
+  const grassIms = grassCtrl.group.children.filter(
+    (c): c is import('three').InstancedMesh => c instanceof THREE.InstancedMesh,
+  );
+  const mat = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  for (const im of grassIms) {
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, mat);
+      mat.decompose(pos, quat, scl);
+      assert.equal(
+        Math.hypot(pos.x - LUMBINI_PEACE_CANAL.stupaCenterX, pos.z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
+          LUMBINI_PEACE_CANAL.stupaPlazaRadius + 1.0,
+        false,
+        `Wild flora spawned inside Western Peace Stupa plaza at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+      );
+    }
+  }
+
+  const parkland = createLumbiniPeaceParkland(mockTextures);
+  assert.ok(parkland.beaconLights.length >= 5, 'Expected Maitri bridge & Shanti Stupa beacon lights');
+  let stupaFlags = 0;
+  parkland.group.traverse((o) => {
+    if (typeof o.userData?.prayerFlagMode === 'string') {
+      stupaFlags++;
+      assert.equal(o.userData.nonCollidable, true);
+    }
+  });
+  assert.ok(stupaFlags >= 8, 'Expected waving Lungta flags around Western Shanti Peace Stupa');
+});
+
+
 
 
 

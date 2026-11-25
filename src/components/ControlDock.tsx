@@ -10,11 +10,17 @@ import {
   Sun,
   Sunset,
   Moon,
+  Sparkles,
   Volume2,
   VolumeX,
   Wind,
 } from 'lucide-react';
-import { TimePreset, WeatherKind } from '../world/worldLogic';
+import {
+  LUMBINI_PRESET_OPTIONS,
+  LumbiniAmbiencePreset,
+  TimePreset,
+  WeatherKind,
+} from '../world/worldLogic';
 
 interface ControlDockProps {
   collapsed: boolean;
@@ -23,6 +29,9 @@ interface ControlDockProps {
   onChangeTimePreset: (preset: TimePreset) => void;
   weatherMode: 'live' | WeatherKind;
   onChangeWeatherMode: (mode: 'live' | WeatherKind) => void;
+  lumbiniPreset: LumbiniAmbiencePreset;
+  onChangeLumbiniPreset: (preset: LumbiniAmbiencePreset) => void;
+  showLumbiniPresets: boolean;
   soundEnabled: boolean;
   onToggleSound: () => void;
   placementMode: boolean;
@@ -60,6 +69,9 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   onChangeTimePreset,
   weatherMode,
   onChangeWeatherMode,
+  lumbiniPreset,
+  onChangeLumbiniPreset,
+  showLumbiniPresets,
   soundEnabled,
   onToggleSound,
   placementMode,
@@ -71,7 +83,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   return (
     <div
       className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none"
-      style={{ maxWidth: 'min(920px, 95vw)' }}
+      style={{ maxWidth: 'min(960px, 95vw)' }}
     >
       {/* Collapse / Expand Tab */}
       <button
@@ -204,6 +216,39 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               </button>
             )}
           </div>
+
+          {showLumbiniPresets && (
+            <div
+              className="w-full pt-2 border-t border-slate-300/15 flex flex-wrap items-center justify-center gap-1"
+              role="group"
+              aria-label="Lumbini Atmosphere"
+            >
+              <span className="text-[11px] font-medium text-amber-300/90 mr-1.5 inline-flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Lumbini Ambience</span>
+              </span>
+              {LUMBINI_PRESET_OPTIONS.map((opt) => {
+                const active = lumbiniPreset === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    data-testid={`lumbini-preset-${opt.id}`}
+                    title={opt.description}
+                    aria-pressed={active}
+                    onClick={() => onChangeLumbiniPreset(opt.id)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      active
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'text-slate-300 hover:text-[#eae5da] hover:bg-slate-200/10'
+                    }`}
+                  >
+                    {opt.shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
