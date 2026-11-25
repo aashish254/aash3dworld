@@ -1129,8 +1129,23 @@ export function isWalkablePosition(x: number, z: number): boolean {
       // 6. Monumental Golden Baby Buddha Lotus Basin (0, +39.0, scaled 1.28x)
       if (Math.hypot(ldx, ldz - 39.0) <= 4.15) return false;
 
-      // 7. Myanmar Golden Pagoda (-32.5, +39.0, scaled 1.25x) & Royal Thai Marble Sanctuary (+35.0, -22.0, scaled 1.12x)
-      if (Math.abs(ldx + 32.5) <= 5.6 && Math.abs(ldz - 39.0) <= 5.6) return false;
+      // 7. Myanmar Golden Pagoda (-32.2, +41.2; 16.8m stone forecourt walkable, 13.84m chamfered fence & corner fixtures blocked) & Royal Thai Marble Sanctuary (+35.0, -22.0, scaled 1.12x)
+      if (
+        Math.abs(ldx + 32.2) <= 7.25 &&
+        Math.abs(ldz - 41.2) <= 7.25 &&
+        Math.abs(ldx + 32.2) + Math.abs(ldz - 41.2) <= 12.95
+      ) {
+        return false;
+      }
+      if (Math.abs(Math.abs(ldx + 32.2) - 2.25) <= 0.72 && Math.abs(ldz - 48.46) <= 0.72) return false;
+      if (Math.abs(Math.abs(ldx + 32.2) - 7.48) <= 0.48 && Math.abs(ldz - 47.92) <= 0.48) return false;
+      if (Math.abs(ldx + 29.82) <= 0.42 && Math.abs(ldz - 48.92) <= 0.36) return false;
+      if (
+        Math.abs(ldx + 39.82) <= 0.36 &&
+        (Math.abs(ldz - 45.4) <= 0.36 || Math.abs(ldz - 43.3) <= 0.36 || Math.abs(ldz - 41.2) <= 0.36)
+      ) {
+        return false;
+      }
       if (Math.abs(ldx - 35.0) <= 5.15 && Math.abs(ldz + 22.0) <= 5.15) return false;
 
       // 8. Sacred Bodhi Tree Chautara (-29.0, +16.5, scaled 1.35x) & Eternal Peace Flame (+35.0, +24.0, scaled 1.22x)
@@ -1196,7 +1211,8 @@ export function isWalkablePosition(x: number, z: number): boolean {
         [27.6, 16.6, 0.68, 19.6],
         [-33.4, 6.3, 19.8, 0.68],
         [35.6, 6.3, 15.6, 0.68],
-        [-8.9, 41.2, 0.68, 19.8],
+        [-8.9, 35.1, 0.68, 7.6],
+        [-8.9, 47.2, 0.68, 7.8],
         [8.9, 41.2, 0.68, 19.8],
         [-16.4, 31.2, 13.8, 0.68],
         [16.4, 31.2, 13.8, 0.68],
@@ -2662,7 +2678,8 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
         (Math.abs(ldx) <= 3.4 && ldz >= -44.4 && ldz <= -42.5) ||
         (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
         (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2) ||
-        (ldx >= -27.5 && ldx <= -8.5 && ldz >= 37.2 && ldz <= 40.8) ||
+        (ldx >= -23.85 && ldx <= -8.5 && ldz >= 39.4 && ldz <= 43.0) ||
+        (ldx >= -40.6 && ldx <= -23.8 && ldz >= 32.8 && ldz <= 49.6) ||
         (ldx >= -19.2 && ldx <= -8.5 && ldz >= 28.8 && ldz <= 32.2) ||
         (ldx >= -25.6 && ldx <= -22.4 && ldz >= 14.8 && ldz <= 18.2) ||
         (ldx >= 27.2 && ldx <= 32.4 && ldz >= 22.4 && ldz <= 25.6) ||
@@ -3664,3 +3681,426 @@ export function findLumbiniTrailPondRippleOrigin(
 
   return null;
 }
+
+export type WeatherParticleMode = 'petals' | 'rain' | 'snow' | 'mist' | 'foggy';
+
+export interface WeatherParticleModeProfile {
+  weather: WeatherKind;
+  mode: WeatherParticleMode;
+  activeRatio: number;
+  opacity: number;
+  baseSize: number;
+  fallSpeed: number;
+  windDriftX: number;
+  windDriftZ: number;
+  turbulence: number;
+  tumbleSpeed: number;
+  stretch: number;
+  primaryColorHex: string;
+  secondaryColorHex: string;
+}
+
+/**
+ * Computes the dedicated 3D scene weather particle system configuration from activeWeather:
+ * - 'clear' -> falling cherry blossom petals across the valley
+ * - 'rain'  -> wind-slanted falling raindrops
+ * - 'snow'  -> gentle light snow flakes
+ * - 'mist' / 'foggy' -> drifting valley mist motes
+ */
+export function computeWeatherParticleModeProfile(
+  weather: WeatherKind,
+): WeatherParticleModeProfile {
+  switch (weather) {
+    case 'rain':
+      return {
+        weather: 'rain',
+        mode: 'rain',
+        activeRatio: 1.0,
+        opacity: 0.84,
+        baseSize: 335,
+        fallSpeed: 19.5,
+        windDriftX: 3.4,
+        windDriftZ: 1.15,
+        turbulence: 0.14,
+        tumbleSpeed: 0,
+        stretch: 1.0,
+        primaryColorHex: '#e0f2fe',
+        secondaryColorHex: '#93c5fd',
+      };
+    case 'snow':
+      return {
+        weather: 'snow',
+        mode: 'snow',
+        activeRatio: 0.56,
+        opacity: 0.82,
+        baseSize: 136,
+        fallSpeed: 1.82,
+        windDriftX: 1.08,
+        windDriftZ: 0.52,
+        turbulence: 1.72,
+        tumbleSpeed: 0.85,
+        stretch: 0,
+        primaryColorHex: '#ffffff',
+        secondaryColorHex: '#dbeafe',
+      };
+    case 'mist':
+      return {
+        weather: 'mist',
+        mode: 'mist',
+        activeRatio: 0.24,
+        opacity: 0.34,
+        baseSize: 122,
+        fallSpeed: 0.46,
+        windDriftX: 1.65,
+        windDriftZ: 0.65,
+        turbulence: 1.15,
+        tumbleSpeed: 0.45,
+        stretch: 0,
+        primaryColorHex: '#e2e8f0',
+        secondaryColorHex: '#cbd5e1',
+      };
+    case 'foggy':
+      return {
+        weather: 'foggy',
+        mode: 'foggy',
+        activeRatio: 0.3,
+        opacity: 0.32,
+        baseSize: 145,
+        fallSpeed: 0.22,
+        windDriftX: 0.92,
+        windDriftZ: 0.4,
+        turbulence: 1.25,
+        tumbleSpeed: 0.3,
+        stretch: 0,
+        primaryColorHex: '#d1d5db',
+        secondaryColorHex: '#9ca3af',
+      };
+    case 'clear':
+    default:
+      return {
+        weather: 'clear',
+        mode: 'petals',
+        activeRatio: 0.44,
+        opacity: 0.9,
+        baseSize: 148,
+        fallSpeed: 1.38,
+        windDriftX: 1.15,
+        windDriftZ: 0.58,
+        turbulence: 1.55,
+        tumbleSpeed: 2.3,
+        stretch: 0,
+        primaryColorHex: '#fff1f2',
+        secondaryColorHex: '#f472b6',
+      };
+  }
+}
+
+export interface LumbiniFireflyPlacement {
+  id: number;
+  pond: 'pushkarini' | 'surrounding';
+  x: number;
+  y: number;
+  z: number;
+  phase: number;
+  speed: number;
+  scale: number;
+  warmShift: number;
+}
+
+/**
+ * Computes bioluminescent firefly visibility [0..1] near the Lumbini ponds
+ * during nighttime presets ('night', 'moonlight-vigil') and night/dusk hours.
+ */
+export function computeLumbiniFireflyIntensity(
+  timePreset: TimePreset,
+  effectiveHour: number,
+  lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  weather: WeatherKind = 'clear',
+  phaseLabel?: TimeLightingState['phaseLabel'],
+): number {
+  const hour = ((effectiveHour % 24) + 24) % 24;
+  let nightFactor = 0;
+
+  if (timePreset === 'night' || lumbiniPreset === 'moonlight-vigil' || phaseLabel === 'Night') {
+    nightFactor = 1.0;
+  } else if (hour >= 19.2 || hour < 5.2) {
+    nightFactor = 1.0;
+  } else if (hour >= 17.4 && hour < 19.2) {
+    nightFactor = 0.18 + 0.82 * smoothstep(17.4, 19.2, hour);
+  } else if (hour >= 5.2 && hour < 6.4) {
+    nightFactor = 1.0 - smoothstep(5.2, 6.4, hour);
+  }
+
+  if (nightFactor <= 0.005) return 0;
+
+  const weatherScale =
+    weather === 'rain'
+      ? 0.28
+      : weather === 'snow'
+        ? 0.24
+        : weather === 'foggy'
+          ? 0.72
+          : weather === 'mist'
+            ? 0.86
+            : 1.0;
+
+  return Math.max(0, Math.min(1, nightFactor * weatherScale));
+}
+
+/**
+ * Generates deterministic bioluminescent firefly placements hovering above
+ * the Lumbini Pushkarini Sacred Pond and the Surrounding Sacred Pond moat.
+ */
+export function generateLumbiniFireflyPlacements(
+  count = 260,
+  seed = 202611,
+): LumbiniFireflyPlacement[] {
+  const rand = createMulberry32(seed);
+  const out: LumbiniFireflyPlacement[] = [];
+  const pk = LUMBINI_PUSHKARINI_POND;
+  const sp = LUMBINI_SACRED_POND;
+
+  const pushkariniTarget = Math.round(count * 0.36);
+
+  for (let i = 0; i < pushkariniTarget; i++) {
+    const x = lerp(pk.minX - 0.6, pk.maxX + 0.6, rand());
+    const z = lerp(pk.minZ - 0.6, pk.maxZ + 0.6, rand());
+    out.push({
+      id: out.length,
+      pond: 'pushkarini',
+      x,
+      y: pk.waterLevel + 0.35 + rand() * 2.05,
+      z,
+      phase: rand() * Math.PI * 2,
+      speed: 0.42 + rand() * 0.65,
+      scale: 0.75 + rand() * 0.65,
+      warmShift: rand(),
+    });
+  }
+
+  // Distribute surrounding pond fireflies across all 4 moat channels with generous presence near the South bridge & promenade
+  const channels: Array<{ minX: number; maxX: number; minZ: number; maxZ: number; weight: number }> = [
+    // South channel (in front of Lumbini approach & flanking South Sacred Bridge)
+    { minX: sp.outerMinX + 2, maxX: sp.outerMaxX - 2, minZ: sp.innerMaxZ - 0.3, maxZ: sp.outerMaxZ + 0.4, weight: 0.42 },
+    // West channel
+    { minX: sp.outerMinX - 0.3, maxX: sp.innerMinX + 0.3, minZ: sp.outerMinZ + 4, maxZ: sp.outerMaxZ - 4, weight: 0.2 },
+    // East channel
+    { minX: sp.innerMaxX - 0.3, maxX: sp.outerMaxX + 0.3, minZ: sp.outerMinZ + 4, maxZ: sp.outerMaxZ - 4, weight: 0.2 },
+    // North channel
+    { minX: sp.outerMinX + 2, maxX: sp.outerMaxX - 2, minZ: sp.outerMinZ - 0.3, maxZ: sp.innerMinZ + 0.3, weight: 0.18 },
+  ];
+
+  const remaining = count - pushkariniTarget;
+  for (let i = 0; i < remaining; i++) {
+    let pickRoll = rand();
+    let ch = channels[0];
+    for (let c = 0; c < channels.length; c++) {
+      pickRoll -= channels[c].weight;
+      if (pickRoll <= 0) {
+        ch = channels[c];
+        break;
+      }
+    }
+    const x = lerp(ch.minX, ch.maxX, rand());
+    const z = lerp(ch.minZ, ch.maxZ, rand());
+    out.push({
+      id: out.length,
+      pond: 'surrounding',
+      x,
+      y: sp.waterLevel + 0.32 + rand() * 2.25,
+      z,
+      phase: rand() * Math.PI * 2,
+      speed: 0.38 + rand() * 0.72,
+      scale: 0.78 + rand() * 0.68,
+      warmShift: rand(),
+    });
+  }
+
+  return out;
+}
+
+export interface LandmarkApproachCueSpec {
+  landmarkId: string;
+  motifName: string;
+  notesHz: number[];
+  waveType: 'sine' | 'triangle';
+  stepSec: number;
+  noteDurSec: number;
+  shimmerRatio: number;
+  baseGain: number;
+}
+
+export const LANDMARK_APPROACH_CUE_SPECS: Record<string, LandmarkApproachCueSpec> = {
+  'kathmandu-stupa': {
+    landmarkId: 'kathmandu-stupa',
+    motifName: 'Pashupati Bronze Ghanta',
+    notesHz: [392.0, 523.25, 659.25],
+    waveType: 'sine',
+    stepSec: 0.15,
+    noteDurSec: 0.95,
+    shimmerRatio: 2.756,
+    baseGain: 0.032,
+  },
+  'boudhanath-stupa': {
+    landmarkId: 'boudhanath-stupa',
+    motifName: 'Boudha Mandala Chime',
+    notesHz: [329.63, 440.0, 587.33],
+    waveType: 'sine',
+    stepSec: 0.18,
+    noteDurSec: 1.05,
+    shimmerRatio: 2.0,
+    baseGain: 0.03,
+  },
+  'pumdikot-shiva': {
+    landmarkId: 'pumdikot-shiva',
+    motifName: 'Annapurna Ridge Wind-Flute',
+    notesHz: [440.0, 587.33, 880.0],
+    waveType: 'sine',
+    stepSec: 0.17,
+    noteDurSec: 1.0,
+    shimmerRatio: 2.0,
+    baseGain: 0.028,
+  },
+  'janaki-mandir': {
+    landmarkId: 'janaki-mandir',
+    motifName: 'Mithila Courtyard Sitar-Bell',
+    notesHz: [349.23, 440.0, 523.25, 698.46],
+    waveType: 'triangle',
+    stepSec: 0.12,
+    noteDurSec: 0.85,
+    shimmerRatio: 2.0,
+    baseGain: 0.028,
+  },
+  'lumbini-buddha': {
+    landmarkId: 'lumbini-buddha',
+    motifName: 'Lumbini Lotus Sanctuary Bowl',
+    notesHz: [293.66, 440.0, 587.33],
+    waveType: 'sine',
+    stepSec: 0.22,
+    noteDurSec: 1.25,
+    shimmerRatio: 2.0,
+    baseGain: 0.03,
+  },
+  'vit-vellore-tower': {
+    landmarkId: 'vit-vellore-tower',
+    motifName: 'Vellore Clock Carillon',
+    notesHz: [493.88, 659.25, 783.99],
+    waveType: 'triangle',
+    stepSec: 0.14,
+    noteDurSec: 0.82,
+    shimmerRatio: 2.756,
+    baseGain: 0.028,
+  },
+  'aniflow-studio': {
+    landmarkId: 'aniflow-studio',
+    motifName: 'AniFlow Studio Marimba',
+    notesHz: [523.25, 659.25, 783.99, 1046.5],
+    waveType: 'triangle',
+    stepSec: 0.1,
+    noteDurSec: 0.65,
+    shimmerRatio: 1.5,
+    baseGain: 0.027,
+  },
+  'agent-infra-monolith': {
+    landmarkId: 'agent-infra-monolith',
+    motifName: 'Systems Citadel Harmonic Pulse',
+    notesHz: [392.0, 587.33, 783.99],
+    waveType: 'sine',
+    stepSec: 0.12,
+    noteDurSec: 0.78,
+    shimmerRatio: 3.0,
+    baseGain: 0.029,
+  },
+  'breath-sensor-lab': {
+    landmarkId: 'breath-sensor-lab',
+    motifName: 'Observatory Crystalline Resonance',
+    notesHz: [466.16, 698.46, 932.33],
+    waveType: 'sine',
+    stepSec: 0.16,
+    noteDurSec: 0.92,
+    shimmerRatio: 2.5,
+    baseGain: 0.028,
+  },
+  'recruiter-beacon': {
+    landmarkId: 'recruiter-beacon',
+    motifName: 'Summit Beacon Signal',
+    notesHz: [587.33, 739.99, 880.0, 1174.66],
+    waveType: 'sine',
+    stepSec: 0.11,
+    noteDurSec: 0.85,
+    shimmerRatio: 2.0,
+    baseGain: 0.03,
+  },
+};
+
+export function getLandmarkApproachCueRadius(lm: (typeof LANDMARKS)[number]): number {
+  return lm.interactRadius + 16;
+}
+
+export function computeLandmarkApproachCuePanAndGain(
+  listenerX: number,
+  listenerZ: number,
+  forwardX: number,
+  forwardZ: number,
+  targetX: number,
+  targetZ: number,
+  cueRadius: number,
+): { pan: number; distanceGain: number; distance: number } {
+  const dx = targetX - listenerX;
+  const dz = targetZ - listenerZ;
+  const distance = Math.hypot(dx, dz);
+
+  const fLen = Math.hypot(forwardX, forwardZ) || 1;
+  const fx = forwardX / fLen;
+  const fz = forwardZ / fLen;
+  // Right vector in Three.js XZ (+Y up): forward x up = (-fz, fx)
+  const rx = -fz;
+  const rz = fx;
+
+  let pan = 0;
+  if (distance > 0.05) {
+    pan = Math.max(-1, Math.min(1, (dx * rx + dz * rz) / distance));
+  }
+
+  const maxRange = Math.max(cueRadius * 1.35, 34);
+  const norm = Math.max(0, Math.min(1, 1 - distance / maxRange));
+  const distanceGain = Math.max(0.22, Math.min(1.0, 0.25 + norm * 0.75));
+
+  return { pan, distanceGain, distance };
+}
+
+export interface UnexploredLandmarkApproachMatch {
+  landmark: (typeof LANDMARKS)[number];
+  distance: number;
+  cueRadius: number;
+  spec: LandmarkApproachCueSpec;
+}
+
+/**
+ * Finds the closest unexplored landmark within its spatial approach cue radius
+ * that has not yet been discovered or triggered for a first-time approach cue.
+ */
+export function findFirstUnexploredLandmarkApproach(
+  x: number,
+  z: number,
+  discoveredIds: ReadonlySet<string> | readonly string[],
+  cuedIds: ReadonlySet<string> | readonly string[],
+): UnexploredLandmarkApproachMatch | null {
+  const hasId = (col: ReadonlySet<string> | readonly string[], id: string) =>
+    Array.isArray(col) ? col.includes(id) : (col as ReadonlySet<string>).has(id);
+
+  let best: UnexploredLandmarkApproachMatch | null = null;
+  for (let i = 0; i < LANDMARKS.length; i++) {
+    const lm = LANDMARKS[i];
+    if (hasId(discoveredIds, lm.id) || hasId(cuedIds, lm.id)) continue;
+    const cueRadius = getLandmarkApproachCueRadius(lm);
+    const distance = Math.hypot(x - lm.position.x, z - lm.position.z);
+    if (distance <= cueRadius && (!best || distance < best.distance)) {
+      const spec =
+        LANDMARK_APPROACH_CUE_SPECS[lm.id] ?? LANDMARK_APPROACH_CUE_SPECS['recruiter-beacon'];
+      best = { landmark: lm, distance, cueRadius, spec };
+    }
+  }
+  return best;
+}
+

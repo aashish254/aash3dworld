@@ -6,6 +6,11 @@ export interface ProceduralTextureSet {
   meadowMap: THREE.CanvasTexture;
   meadowNormal: THREE.CanvasTexture;
   meadowRough: THREE.CanvasTexture;
+  meadowAo: THREE.CanvasTexture;
+  pebbleMap: THREE.CanvasTexture;
+  pebbleNormal: THREE.CanvasTexture;
+  pebbleRough: THREE.CanvasTexture;
+  pebbleAo: THREE.CanvasTexture;
   cobbleMap: THREE.CanvasTexture;
   cobbleNormal: THREE.CanvasTexture;
   cobbleRough: THREE.CanvasTexture;
@@ -27,7 +32,9 @@ export interface ProceduralTextureSet {
   pineCanopyMap: THREE.CanvasTexture;
   pineNeedlesMap: THREE.CanvasTexture;
   palmFrondMap: THREE.CanvasTexture;
+  rockMap: THREE.CanvasTexture;
   rockNormal: THREE.CanvasTexture;
+  rockRough: THREE.CanvasTexture;
   rockAo: THREE.CanvasTexture;
   waterNormal: THREE.CanvasTexture;
   crateFaceMap: THREE.CanvasTexture;
@@ -217,62 +224,248 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     return tex;
   };
 
-  // 1. Natural Valley Loam, Moss & Grass Turf (desaturated real-world foliage & soil base)
+  // 1. Natural Valley Loam, Moss & Grass Turf (seamless 512x512 multi-tone turf, humus pockets & fine blade micro-relief)
   const [meadowC, meadowCtx] = makeCanvas(512, 512);
   const [meadowHC, meadowHCtx] = makeCanvas(512, 512);
   const [meadowRC, meadowRCtx] = makeCanvas(512, 512);
-  meadowCtx.fillStyle = '#4f5e3b';
+  meadowCtx.fillStyle = '#4c5c38';
   meadowCtx.fillRect(0, 0, 512, 512);
-  meadowHCtx.fillStyle = '#808080';
+  meadowHCtx.fillStyle = '#787878';
   meadowHCtx.fillRect(0, 0, 512, 512);
-  meadowRCtx.fillStyle = '#dadada';
+  meadowRCtx.fillStyle = '#dcdcdc';
   meadowRCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 650; i++) {
+  const drawWrappedDisc = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    r: number,
+    fill: string | CanvasGradient,
+  ) => {
+    ctx.fillStyle = fill;
+    for (let ox = -512; ox <= 512; ox += 512) {
+      if (x + ox + r < 0 || x + ox - r > 512) continue;
+      for (let oy = -512; oy <= 512; oy += 512) {
+        if (y + oy + r < 0 || y + oy - r > 512) continue;
+        ctx.beginPath();
+        ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  // Organic humus soil & clover/moss clumps
+  for (let i = 0; i < 720; i++) {
     const cx = (i * 197 + (i % 13) * 41) % 512;
     const cy = (i * 313 + (i % 17) * 29) % 512;
-    const r = 10 + (i % 24);
-    meadowCtx.fillStyle =
-      i % 3 === 0
-        ? 'rgba(56, 70, 42, 0.22)'
-        : i % 3 === 1
-          ? 'rgba(92, 86, 62, 0.16)'
-          : 'rgba(104, 120, 74, 0.18)';
-    meadowCtx.beginPath();
-    meadowCtx.arc(cx, cy, r, 0, Math.PI * 2);
-    meadowCtx.fill();
+    const r = 9 + (i % 22);
+    const col =
+      i % 4 === 0
+        ? 'rgba(54, 68, 38, 0.24)'
+        : i % 4 === 1
+          ? 'rgba(88, 82, 58, 0.19)'
+          : i % 4 === 2
+            ? 'rgba(98, 114, 68, 0.20)'
+            : 'rgba(62, 78, 44, 0.18)';
+    drawWrappedDisc(meadowCtx, cx, cy, r, col);
 
-    const hVal = i % 2 === 0 ? 115 : 142;
-    meadowHCtx.fillStyle = `rgba(${hVal},${hVal},${hVal},0.18)`;
-    meadowHCtx.beginPath();
-    meadowHCtx.arc(cx, cy, r * 0.85, 0, Math.PI * 2);
-    meadowHCtx.fill();
+    const hVal = i % 4 === 1 ? 102 : i % 2 === 0 ? 118 : 148;
+    drawWrappedDisc(meadowHCtx, cx, cy, r * 0.85, `rgba(${hVal},${hVal},${hVal},0.2)`);
+
+    const rVal = i % 4 === 1 ? 244 : 210;
+    drawWrappedDisc(meadowRCtx, cx, cy, r * 0.9, `rgba(${rVal},${rVal},${rVal},0.2)`);
   }
-  for (let i = 0; i < 14000; i++) {
+
+  // Crisp grass blade clusters & dry thatch flecks with wrapped height & roughness
+  for (let i = 0; i < 16500; i++) {
     const x = (i * 173 + (i % 19) * 31) % 512;
     const y = (i * 257 + (i % 23) * 43) % 512;
-    const shade = (i * 29) % 5;
-    meadowCtx.fillStyle =
+    const shade = (i * 29) % 6;
+    const tilt = ((i % 7) - 3) * 0.65;
+    const bLen = 3.2 + (i % 4);
+    meadowCtx.strokeStyle =
       shade === 0
-        ? 'rgba(48, 60, 34, 0.55)'
+        ? 'rgba(46, 58, 32, 0.62)'
         : shade === 1
-          ? 'rgba(72, 88, 50, 0.52)'
+          ? 'rgba(72, 90, 48, 0.56)'
           : shade === 2
-            ? 'rgba(94, 108, 64, 0.45)'
+            ? 'rgba(96, 112, 64, 0.48)'
             : shade === 3
-              ? 'rgba(102, 92, 68, 0.42)'
-              : 'rgba(116, 128, 82, 0.36)';
-    meadowCtx.fillRect(x, y, 1.4, 3.5);
-    const b = 96 + ((i * 37) % 110);
-    meadowHCtx.fillStyle = `rgb(${b},${b},${b})`;
-    meadowHCtx.fillRect(x, y, 1.6, 3.5);
-    const rv = 195 + ((i * 17) % 55);
+              ? 'rgba(104, 92, 66, 0.44)'
+              : shade === 4
+                ? 'rgba(122, 134, 82, 0.4)'
+                : 'rgba(64, 80, 42, 0.54)';
+    meadowCtx.lineWidth = shade === 3 ? 1.8 : 1.3;
+    meadowCtx.beginPath();
+    meadowCtx.moveTo(x, y);
+    meadowCtx.lineTo(x + tilt, y - bLen);
+    meadowCtx.stroke();
+
+    const b = shade === 3 ? 86 + ((i * 23) % 45) : 122 + ((i * 37) % 108);
+    meadowHCtx.strokeStyle = `rgb(${b},${b},${b})`;
+    meadowHCtx.lineWidth = 1.6;
+    meadowHCtx.beginPath();
+    meadowHCtx.moveTo(x, y);
+    meadowHCtx.lineTo(x + tilt, y - bLen);
+    meadowHCtx.stroke();
+
+    const rv = shade === 3 ? 238 : 186 + ((i * 17) % 48);
     meadowRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
-    meadowRCtx.fillRect(x, y, 2, 3);
+    meadowRCtx.fillRect(x, y - 2, 2, 3);
   }
   const meadowMap = register(meadowC, true, 36, 36);
-  const meadowNormal = register(heightToNormalCanvas(meadowHC, 1.8), false, 36, 36);
+  const meadowNormal = register(heightToNormalCanvas(meadowHC, 2.2), false, 36, 36);
   const meadowRough = register(meadowRC, false, 36, 36);
+  const meadowAo = register(heightToAoCanvas(meadowHC, 2, 1.45, 112), false, 36, 36);
+
+  // 1b. Riverbed, Shoreline & Trail Verge Multi-Scale Pebbles / River Shingle (512x512 seamless PBR set)
+  const [pebC, pebCtx] = makeCanvas(512, 512);
+  const [pebHC, pebHCtx] = makeCanvas(512, 512);
+  const [pebRC, pebRCtx] = makeCanvas(512, 512);
+  // Damp river silt & coarse sand bed beneath stones
+  pebCtx.fillStyle = '#5c554a';
+  pebCtx.fillRect(0, 0, 512, 512);
+  pebHCtx.fillStyle = '#343434';
+  pebHCtx.fillRect(0, 0, 512, 512);
+  pebRCtx.fillStyle = '#ececec';
+  pebRCtx.fillRect(0, 0, 512, 512);
+
+  const drawWrappedPebble = (
+    px: number,
+    py: number,
+    rx: number,
+    ry: number,
+    ang: number,
+    rgb: [number, number, number],
+    crownH: number,
+    roughVal: number,
+    speckleSeed: number,
+  ) => {
+    const maxR = Math.max(rx, ry) + 2;
+    for (let ox = -512; ox <= 512; ox += 512) {
+      if (px + ox + maxR < 0 || px + ox - maxR > 512) continue;
+      for (let oy = -512; oy <= 512; oy += 512) {
+        if (py + oy + maxR < 0 || py + oy - maxR > 512) continue;
+        const cx = px + ox;
+        const cy = py + oy;
+
+        // Albedo with soft edge shadow & top sun-worn mineral sheen
+        pebCtx.save();
+        pebCtx.translate(cx, cy);
+        pebCtx.rotate(ang);
+        pebCtx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+        pebCtx.beginPath();
+        pebCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+        pebCtx.fill();
+        pebCtx.strokeStyle = 'rgba(26, 23, 19, 0.42)';
+        pebCtx.lineWidth = 1.2;
+        pebCtx.stroke();
+        // Mineral grain fleck inside stone
+        pebCtx.fillStyle = speckleSeed % 3 === 0 ? 'rgba(240, 235, 224, 0.18)' : 'rgba(34, 32, 30, 0.16)';
+        pebCtx.fillRect(-rx * 0.35, -ry * 0.25, rx * 0.35, ry * 0.22);
+        pebCtx.restore();
+
+        // Domed 3D spherical-cap height gradient for crisp normal & AO relief
+        pebHCtx.save();
+        pebHCtx.translate(cx, cy);
+        pebHCtx.rotate(ang);
+        pebHCtx.scale(1, ry / Math.max(1, rx));
+        const hGrad = pebHCtx.createRadialGradient(0, 0, rx * 0.08, 0, 0, rx);
+        hGrad.addColorStop(0, `rgb(${crownH},${crownH},${crownH})`);
+        hGrad.addColorStop(0.72, `rgb(${Math.round(crownH * 0.78)},${Math.round(crownH * 0.78)},${Math.round(crownH * 0.78)})`);
+        hGrad.addColorStop(1, 'rgb(48,48,48)');
+        pebHCtx.fillStyle = hGrad;
+        pebHCtx.beginPath();
+        pebHCtx.arc(0, 0, rx, 0, Math.PI * 2);
+        pebHCtx.fill();
+        pebHCtx.restore();
+
+        // Water-tumbled smoother centers vs matte crevices
+        pebRCtx.save();
+        pebRCtx.translate(cx, cy);
+        pebRCtx.rotate(ang);
+        pebRCtx.fillStyle = `rgb(${roughVal},${roughVal},${roughVal})`;
+        pebRCtx.beginPath();
+        pebRCtx.ellipse(0, 0, rx * 0.88, ry * 0.88, 0, 0, Math.PI * 2);
+        pebRCtx.fill();
+        pebRCtx.restore();
+      }
+    }
+  };
+
+  const pebbleTones: Array<[number, number, number]> = [
+    [136, 132, 124], // Quartzite grey
+    [116, 118, 122], // River slate
+    [152, 138, 118], // Warm sandstone pebble
+    [102, 98, 92],   // Basalt cobble
+    [164, 156, 144], // Pale granite pebble
+    [132, 114, 96],  // Iron-stained river stone
+  ];
+
+  // Fine coarse gravel bed (950 grains)
+  for (let i = 0; i < 950; i++) {
+    const gx = (i * 199 + (i % 17) * 23) % 512;
+    const gy = (i * 311 + (i % 13) * 37) % 512;
+    const rx = 2.2 + (i % 4);
+    const ry = 1.8 + ((i * 3) % 3);
+    const tone = pebbleTones[i % pebbleTones.length];
+    const shade = 0.86 + ((i % 5) * 0.06);
+    drawWrappedPebble(
+      gx,
+      gy,
+      rx,
+      ry,
+      (i * 0.9) % Math.PI,
+      [Math.round(tone[0] * shade), Math.round(tone[1] * shade), Math.round(tone[2] * shade)],
+      115 + (i % 45),
+      150 + (i % 50),
+      i,
+    );
+  }
+  // Medium rounded river pebbles (420 stones)
+  for (let i = 0; i < 420; i++) {
+    const px = (i * 241 + (i % 19) * 31 + 17) % 512;
+    const py = (i * 379 + (i % 23) * 19 + 11) % 512;
+    const rx = 6.5 + (i % 9);
+    const ry = 4.8 + ((i * 5) % 7);
+    const tone = pebbleTones[(i * 7) % pebbleTones.length];
+    const v = ((i * 13) % 24) - 12;
+    drawWrappedPebble(
+      px,
+      py,
+      rx,
+      ry,
+      (i * 1.17) % Math.PI,
+      [tone[0] + v, tone[1] + v, tone[2] + v],
+      165 + (i % 52),
+      112 + (i % 46),
+      i + 3,
+    );
+  }
+  // Larger cobble stones (115 stones)
+  for (let i = 0; i < 115; i++) {
+    const px = (i * 283 + (i % 11) * 47 + 29) % 512;
+    const py = (i * 409 + (i % 13) * 41 + 23) % 512;
+    const rx = 13 + (i % 11);
+    const ry = 9.5 + ((i * 3) % 8);
+    const tone = pebbleTones[(i * 5 + 2) % pebbleTones.length];
+    const v = ((i * 17) % 26) - 13;
+    drawWrappedPebble(
+      px,
+      py,
+      rx,
+      ry,
+      (i * 0.73) % Math.PI,
+      [tone[0] + v, tone[1] + v, tone[2] + v],
+      195 + (i % 52),
+      96 + (i % 44),
+      i + 9,
+    );
+  }
+  const pebbleMap = register(pebC, true, 1, 1);
+  const pebbleNormal = register(heightToNormalCanvas(pebHC, 2.8), false, 1, 1);
+  const pebbleRough = register(pebRC, false, 1, 1);
+  const pebbleAo = register(heightToAoCanvas(pebHC, 3, 1.7, 92), false, 1, 1);
 
   // 2. Authentic Damp Patan Durbar Square Quartzite & Slate Flagstones
   const [cobbleC, cobbleCtx] = makeCanvas(512, 512);
@@ -502,25 +695,148 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const barkMap = register(barkC, true, 2, 3);
   const barkNormal = register(heightToNormalCanvas(barkHC, 3.0), false, 2, 3);
 
-  // 7b. Organic Alpine Gneiss Rock Micro-Crag Normal Map (zero rectangular masonry seams)
-  const [rockHC, rockHCtx] = makeCanvas(256, 256);
-  rockHCtx.fillStyle = '#808080';
-  rockHCtx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 650; i++) {
-    const rx = (i * 89 + (i % 11) * 23) % 256;
-    const ry = (i * 137 + (i % 17) * 19) % 256;
-    const rw = 4 + (i % 16);
-    const rh = 3 + ((i * 7) % 10);
-    const v = 90 + ((i * 31) % 85);
-    rockHCtx.fillStyle = `rgba(${v},${v},${v},0.42)`;
-    rockHCtx.save();
-    rockHCtx.translate(rx, ry);
-    rockHCtx.rotate((i % 7) * 0.45);
-    rockHCtx.fillRect(-rw / 2, -rh / 2, rw, rh);
-    rockHCtx.restore();
+  // 7b. Weathered Alpine Gneiss & Stratified Outcrop Rock PBR Maps (seamless 512x512 albedo, normal, roughness, AO)
+  const [rockC, rockCtx] = makeCanvas(512, 512);
+  const [rockHC, rockHCtx] = makeCanvas(512, 512);
+  const [rockRC, rockRCtx] = makeCanvas(512, 512);
+  rockCtx.fillStyle = '#696864';
+  rockCtx.fillRect(0, 0, 512, 512);
+  rockHCtx.fillStyle = '#848484';
+  rockHCtx.fillRect(0, 0, 512, 512);
+  rockRCtx.fillStyle = '#cccccc';
+  rockRCtx.fillRect(0, 0, 512, 512);
+
+  // Horizontal tectonic rock strata bands with gentle wave undulation
+  for (let row = 0; row < 28; row++) {
+    const baseY = (row / 28) * 512;
+    const tone = ((row * 37) % 28) - 14;
+    const bandR = 104 + tone + (row % 5 === 0 ? 12 : 0);
+    const bandG = 102 + tone + (row % 5 === 0 ? 6 : 0);
+    const bandB = 98 + tone;
+    rockCtx.fillStyle = `rgba(${bandR},${bandG},${bandB},0.36)`;
+    rockCtx.beginPath();
+    rockCtx.moveTo(0, baseY);
+    for (let x = 0; x <= 512; x += 32) {
+      const wave = Math.sin((x / 512) * Math.PI * 2 + row * 0.7) * 5 + Math.cos((x / 512) * Math.PI * 4 - row) * 2.5;
+      rockCtx.lineTo(x, baseY + wave);
+    }
+    rockCtx.lineTo(512, baseY + 22);
+    rockCtx.lineTo(0, baseY + 22);
+    rockCtx.closePath();
+    rockCtx.fill();
+
+    const hBand = 112 + ((row * 29) % 44);
+    rockHCtx.fillStyle = `rgba(${hBand},${hBand},${hBand},0.32)`;
+    rockHCtx.fillRect(0, baseY, 512, 16);
   }
-  const rockNormal = register(heightToNormalCanvas(rockHC, 2.2), false, 10, 4);
-  const rockAo = register(heightToAoCanvas(rockHC, 3, 1.55), false, 10, 4);
+
+  // Faceted granite/gneiss mineral blocks, iron-oxide weathering & alpine lichen spots (wrapped cleanly)
+  for (let i = 0; i < 1400; i++) {
+    const rx = (i * 157 + (i % 13) * 31) % 512;
+    const ry = (i * 269 + (i % 17) * 23) % 512;
+    const rw = 5 + (i % 20);
+    const rh = 3 + ((i * 7) % 12);
+    const ang = ((i % 11) - 5) * 0.14;
+    const isRust = i % 13 === 0;
+    const isLichen = i % 19 === 0;
+    const isQuartz = i % 11 === 0;
+    const col = isRust
+      ? 'rgba(132, 92, 62, 0.24)'
+      : isLichen
+        ? 'rgba(98, 108, 64, 0.22)'
+        : isQuartz
+          ? 'rgba(176, 174, 168, 0.18)'
+          : i % 2 === 0
+            ? 'rgba(72, 74, 78, 0.24)'
+            : 'rgba(132, 130, 124, 0.20)';
+    const hVal = isQuartz ? 186 : i % 3 === 0 ? 74 : 154 + ((i * 19) % 55);
+    const rVal = isQuartz ? 142 : i % 4 === 0 ? 236 : 178 + ((i * 13) % 48);
+
+    for (let ox = -512; ox <= 512; ox += 512) {
+      if (rx + ox + rw < 0 || rx + ox - rw > 512) continue;
+      for (let oy = -512; oy <= 512; oy += 512) {
+        if (ry + oy + rw < 0 || ry + oy - rw > 512) continue;
+        rockCtx.save();
+        rockCtx.translate(rx + ox, ry + oy);
+        rockCtx.rotate(ang);
+        rockCtx.fillStyle = col;
+        rockCtx.fillRect(-rw / 2, -rh / 2, rw, rh);
+        rockCtx.restore();
+
+        rockHCtx.save();
+        rockHCtx.translate(rx + ox, ry + oy);
+        rockHCtx.rotate(ang);
+        rockHCtx.fillStyle = `rgba(${hVal},${hVal},${hVal},0.46)`;
+        rockHCtx.fillRect(-rw / 2, -rh / 2, rw, rh);
+        rockHCtx.restore();
+
+        rockRCtx.save();
+        rockRCtx.translate(rx + ox, ry + oy);
+        rockRCtx.rotate(ang);
+        rockRCtx.fillStyle = `rgba(${rVal},${rVal},${rVal},0.35)`;
+        rockRCtx.fillRect(-rw / 2, -rh / 2, rw, rh);
+        rockRCtx.restore();
+      }
+    }
+  }
+
+  // Deep weathered tectonic fissures & frost-shattered joint cracks
+  for (let c = 0; c < 68; c++) {
+    const sx = (c * 131) % 512;
+    const sy = (c * 211) % 512;
+    const dx = 42 + (c % 5) * 22;
+    const dy = ((c % 3) - 1) * 28 + 12;
+    for (let ox = -512; ox <= 512; ox += 512) {
+      for (let oy = -512; oy <= 512; oy += 512) {
+        if (sx + ox < -140 || sx + ox > 650 || sy + oy < -140 || sy + oy > 650) continue;
+        rockCtx.strokeStyle = c % 4 === 0 ? 'rgba(32, 30, 28, 0.56)' : 'rgba(46, 44, 42, 0.42)';
+        rockCtx.lineWidth = c % 3 === 0 ? 2.2 : 1.3;
+        rockCtx.beginPath();
+        rockCtx.moveTo(sx + ox, sy + oy);
+        rockCtx.bezierCurveTo(
+          sx + ox + dx * 0.35,
+          sy + oy + dy * 0.7,
+          sx + ox + dx * 0.7,
+          sy + oy - dy * 0.3,
+          sx + ox + dx,
+          sy + oy + dy,
+        );
+        rockCtx.stroke();
+
+        rockHCtx.strokeStyle = 'rgba(28, 28, 28, 0.72)';
+        rockHCtx.lineWidth = c % 3 === 0 ? 2.6 : 1.6;
+        rockHCtx.beginPath();
+        rockHCtx.moveTo(sx + ox, sy + oy);
+        rockHCtx.bezierCurveTo(
+          sx + ox + dx * 0.35,
+          sy + oy + dy * 0.7,
+          sx + ox + dx * 0.7,
+          sy + oy - dy * 0.3,
+          sx + ox + dx,
+          sy + oy + dy,
+        );
+        rockHCtx.stroke();
+
+        rockRCtx.strokeStyle = 'rgba(246, 246, 246, 0.65)';
+        rockRCtx.lineWidth = 2.4;
+        rockRCtx.beginPath();
+        rockRCtx.moveTo(sx + ox, sy + oy);
+        rockRCtx.bezierCurveTo(
+          sx + ox + dx * 0.35,
+          sy + oy + dy * 0.7,
+          sx + ox + dx * 0.7,
+          sy + oy - dy * 0.3,
+          sx + ox + dx,
+          sy + oy + dy,
+        );
+        rockRCtx.stroke();
+      }
+    }
+  }
+  const rockMap = register(rockC, true, 10, 4);
+  const rockNormal = register(heightToNormalCanvas(rockHC, 2.8), false, 10, 4);
+  const rockRough = register(rockRC, false, 10, 4);
+  const rockAo = register(heightToAoCanvas(rockHC, 3, 1.7, 86), false, 10, 4);
 
   // 7c. Flowing Glacial Stream Ripple Normal Map
   const [watHC, watHCtx] = makeCanvas(256, 256);
@@ -1528,6 +1844,11 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     meadowMap,
     meadowNormal,
     meadowRough,
+    meadowAo,
+    pebbleMap,
+    pebbleNormal,
+    pebbleRough,
+    pebbleAo,
     cobbleMap,
     cobbleNormal,
     cobbleRough,
@@ -1549,7 +1870,9 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     pineCanopyMap,
     pineNeedlesMap,
     palmFrondMap,
+    rockMap,
     rockNormal,
+    rockRough,
     rockAo,
     waterNormal,
     crateFaceMap,

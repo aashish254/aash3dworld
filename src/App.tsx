@@ -192,6 +192,7 @@ export default function App() {
       // Ignore quota issues
     }
     engineRef.current?.syncCustomWaypoints(persisted.customWaypoints);
+    engineRef.current?.syncDiscoveredLandmarks(persisted.discoveredIds);
   }, [persisted]);
 
   // Real-time weather fetch + online/offline sync listener
@@ -222,6 +223,7 @@ export default function App() {
     setSelectedLandmark(landmark);
     setAtlasOpen(false);
     setAchievementsOpen(false);
+    engineRef.current?.markLandmarkDiscovered(landmark.id);
     engineRef.current?.setFocusedLandmark(landmark);
     soundEngine.playBellChime();
     setPersisted((prev) => {
@@ -272,6 +274,7 @@ export default function App() {
     engine.setInitialDistanceWalked(persisted.totalDistanceWalked);
     engine.setGameState(initialAutostart ? 'playing' : 'title');
     engine.syncCustomWaypoints(persisted.customWaypoints);
+    engine.syncDiscoveredLandmarks(persisted.discoveredIds);
 
     return () => {
       engine.dispose();
@@ -488,58 +491,61 @@ export default function App() {
       )}
 
       {/* Playing HUD & Collapsible Bottom Dock */}
-      {gameState === 'playing' && (
-        <>
-          <WorldHud
-            zoneName={hud.zoneName}
-            discoveredCount={persisted.discoveredIds.length}
-            totalLandmarks={LANDMARKS.length}
-            unlockedAchievementsCount={unlockedAchievementsCount}
-            totalAchievementsCount={ACHIEVEMENTS.length}
-            distanceWalked={hud.distanceWalked}
-            timeState={hud.timeState}
-            weatherInfo={weatherInfo}
-            activeWeather={activeWeather}
-            isOffline={isOffline}
-            soundEnabled={soundEnabled}
-            nearestLandmark={hud.nearestLandmark}
-            placementMode={placementMode}
-            dockCollapsed={dockCollapsed}
-            hasOpenLandmark={Boolean(selectedLandmark)}
-            onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
-            onOpenAchievements={() => setAchievementsOpen(true)}
-            onOpenAtlas={() => setAtlasOpen(true)}
-            onOpenContact={() => setContactOpen(true)}
-            onPause={() => setGameState('paused')}
-            onInspectNearest={openLandmark}
-            onJoystickMove={(x, y) => engineRef.current?.setJoystickInput(x, y)}
-            onJump={() => engineRef.current?.triggerJump()}
-          />
+      {gameState === 'playing' && (() => {
+        const showLumbiniPresets =
+          hud.zoneName === 'Lumbini Sacred Garden' ||
+          selectedLandmark?.id === 'lumbini-buddha' ||
+          (hud.coords.x <= -152 && hud.coords.z >= 15 && hud.coords.z <= 185);
+        return (
+          <>
+            <WorldHud
+              zoneName={hud.zoneName}
+              discoveredCount={persisted.discoveredIds.length}
+              totalLandmarks={LANDMARKS.length}
+              unlockedAchievementsCount={unlockedAchievementsCount}
+              totalAchievementsCount={ACHIEVEMENTS.length}
+              distanceWalked={hud.distanceWalked}
+              timeState={hud.timeState}
+              weatherInfo={weatherInfo}
+              activeWeather={activeWeather}
+              isOffline={isOffline}
+              soundEnabled={soundEnabled}
+              nearestLandmark={hud.nearestLandmark}
+              placementMode={placementMode}
+              dockCollapsed={dockCollapsed}
+              showLumbiniPresets={showLumbiniPresets}
+              hasOpenLandmark={Boolean(selectedLandmark)}
+              onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
+              onOpenAchievements={() => setAchievementsOpen(true)}
+              onOpenAtlas={() => setAtlasOpen(true)}
+              onOpenContact={() => setContactOpen(true)}
+              onPause={() => setGameState('paused')}
+              onInspectNearest={openLandmark}
+              onJoystickMove={(x, y) => engineRef.current?.setJoystickInput(x, y)}
+              onJump={() => engineRef.current?.triggerJump()}
+            />
 
-          <ControlDock
-            collapsed={dockCollapsed}
-            onToggleCollapsed={() => setDockCollapsed((p) => !p)}
-            timePreset={timePreset}
-            onChangeTimePreset={setTimePreset}
-            weatherMode={weatherMode}
-            onChangeWeatherMode={setWeatherMode}
-            lumbiniPreset={lumbiniPreset}
-            onChangeLumbiniPreset={setLumbiniPreset}
-            showLumbiniPresets={
-              hud.zoneName === 'Lumbini Sacred Garden' ||
-              selectedLandmark?.id === 'lumbini-buddha' ||
-              (hud.coords.x <= -152 && hud.coords.z >= 15 && hud.coords.z <= 185)
-            }
-            soundEnabled={soundEnabled}
-            onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
-            placementMode={placementMode}
-            onTogglePlacementMode={() => setPlacementMode((p) => !p)}
-            onShareTrail={handleShareTrail}
-            waypointCount={persisted.customWaypoints.length}
-            shareFeedback={shareFeedback}
-          />
-        </>
-      )}
+            <ControlDock
+              collapsed={dockCollapsed}
+              onToggleCollapsed={() => setDockCollapsed((p) => !p)}
+              timePreset={timePreset}
+              onChangeTimePreset={setTimePreset}
+              weatherMode={weatherMode}
+              onChangeWeatherMode={setWeatherMode}
+              lumbiniPreset={lumbiniPreset}
+              onChangeLumbiniPreset={setLumbiniPreset}
+              showLumbiniPresets={showLumbiniPresets}
+              soundEnabled={soundEnabled}
+              onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
+              placementMode={placementMode}
+              onTogglePlacementMode={() => setPlacementMode((p) => !p)}
+              onShareTrail={handleShareTrail}
+              waypointCount={persisted.customWaypoints.length}
+              shareFeedback={shareFeedback}
+            />
+          </>
+        );
+      })()}
 
       {/* Landmark Story & Project Drawer */}
       <LandmarkDrawer

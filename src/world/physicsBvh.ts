@@ -1084,6 +1084,10 @@ export class StaticPhysicsWorld {
     const pos = mesh.geometry.getAttribute('position');
     if (!pos || pos.count < 3) return;
 
+    const isTerrainGrid = Boolean(mesh.userData?.terrainGrid);
+    const skipNavMesh = Boolean(mesh.userData?.skipNavMesh);
+    const skipNavSubdiv = isTerrainGrid || Boolean(mesh.userData?.skipNavSubdiv);
+
     const matWorld = mesh.matrixWorld;
     const detSign = matWorld.determinant() < 0 ? -1 : 1;
     const index = mesh.geometry.getIndex();
@@ -1131,10 +1135,43 @@ export class StaticPhysicsWorld {
 
       if (ny >= 0.48) {
         pushTri(this.floorTris, ax, ay, az, bx, by, bz, cx, cy, cz, ny);
-        this.addNavMeshTriangleVertices(ax, ay, az, bx, by, bz, cx, cy, cz, nx, ny, nz);
+        if (!isTerrainGrid && !skipNavMesh) {
+          this.addNavMeshTriangleVertices(ax, ay, az, bx, by, bz, cx, cy, cz, nx, ny, nz, skipNavSubdiv);
+        }
       }
       if (Math.abs(ny) < 0.72) {
         pushTri(this.wallTris, ax, ay, az, bx, by, bz, cx, cy, cz, ny);
+      }
+    }
+
+    if (isTerrainGrid && !skipNavMesh) {
+      const normAttr = mesh.geometry.getAttribute('normal');
+      for (let vi = 0; vi < pos.count; vi++) {
+        const lx = pos.getX(vi);
+        const ly = pos.getY(vi);
+        const lz = pos.getZ(vi);
+        const wx = m00 * lx + m01 * ly + m02 * lz + m03;
+        const wy = m10 * lx + m11 * ly + m12 * lz + m13;
+        const wz = m20 * lx + m21 * ly + m22 * lz + m23;
+
+        let wnx = 0;
+        let wny = 1;
+        let wnz = 0;
+        if (normAttr) {
+          const lnx = normAttr.getX(vi);
+          const lny = normAttr.getY(vi);
+          const lnz = normAttr.getZ(vi);
+          const rx = m00 * lnx + m01 * lny + m02 * lnz;
+          const ry = m10 * lnx + m11 * lny + m12 * lnz;
+          const rz = m20 * lnx + m21 * lny + m22 * lnz;
+          const nLen = Math.hypot(rx, ry, rz) || 1;
+          wnx = rx / nLen;
+          wny = ry / nLen;
+          wnz = rz / nLen;
+        }
+        if (wny >= 0.48) {
+          this.pushNavVertex(wx, wy, wz, wnx, wny, wnz);
+        }
       }
     }
   }
@@ -1204,10 +1241,13 @@ export class StaticPhysicsWorld {
     nx: number,
     ny: number,
     nz: number,
+    skipSubdiv = false,
   ): void {
     this.pushNavVertex(ax, ay, az, nx, ny, nz);
     this.pushNavVertex(bx, by, bz, nx, ny, nz);
     this.pushNavVertex(cx, cy, cz, nx, ny, nz);
+
+    if (skipSubdiv) return;
 
     const ab = Math.hypot(bx - ax, bz - az);
     const bc = Math.hypot(cx - bx, cz - bz);

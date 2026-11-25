@@ -28,6 +28,7 @@ interface WorldHudProps {
   nearestLandmark: LandmarkData | null;
   placementMode: boolean;
   dockCollapsed: boolean;
+  showLumbiniPresets?: boolean;
   hasOpenLandmark: boolean;
   onToggleSound: () => void;
   onOpenAchievements: () => void;
@@ -62,6 +63,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
   nearestLandmark,
   placementMode,
   dockCollapsed,
+  showLumbiniPresets = false,
   hasOpenLandmark,
   onToggleSound,
   onOpenAchievements,
@@ -241,7 +243,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
       {/* Center-Bottom Contextual Interaction Prompt */}
       <div
         className={`flex flex-col items-center gap-2 transition-all ${
-          dockCollapsed ? 'mb-16' : 'mb-44'
+          dockCollapsed ? 'mb-16' : showLumbiniPresets ? 'mb-56' : 'mb-44'
         }`}
       >
         {placementMode && (
@@ -268,7 +270,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
       {/* Mobile Touch Controls (Positioned cleanly above collapsed dock) */}
       <div
         className={`sm:hidden fixed inset-x-0 px-3 flex items-end justify-between pointer-events-none transition-all ${
-          dockCollapsed ? 'bottom-14' : 'bottom-40'
+          dockCollapsed ? 'bottom-14' : showLumbiniPresets ? 'bottom-52' : 'bottom-40'
         }`}
       >
         {/* Virtual Thumbstick */}

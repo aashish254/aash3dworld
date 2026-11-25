@@ -53,8 +53,9 @@ export function createLumbiniBuddha(
 
   const lTex = createLumbiniTextures();
   const jTex = textures.janaki;
+  const extraDisposers: Array<() => void> = [() => lTex.dispose()];
   group.userData.disposeExtraTextures = () => {
-    lTex.dispose();
+    for (const fn of extraDisposers) fn();
   };
 
   // =========================================================================
@@ -272,7 +273,7 @@ export function createLumbiniBuddha(
   addBrickWalk(-27.0, -22.4, -22.8, -19.2); // Ashoka Pillar Viewing Spur
   addBrickWalk(-20.4, 20.4, -36.8, -34.2); // Maya Devi North Circumambulation Walk
   // Monument Shrine Spur Trails connecting every pavilion cleanly to the main network
-  addBrickWalk(-27.5, -8.5, 37.2, 40.8); // Myanmar Golden Pagoda spur
+  addBrickWalk(-23.85, -8.5, 39.4, 43.0); // Myanmar Golden Pagoda spur aligned with East Pyatthat gate axis
   addBrickWalk(-19.2, -8.5, 28.8, 32.2); // Peace Bell Pavilion spur
   addBrickWalk(-25.6, -22.4, 14.8, 18.2); // Sacred Bodhi Chautara spur
   addBrickWalk(27.2, 32.4, 22.4, 25.6); // Eternal Peace Flame spur
@@ -474,7 +475,8 @@ export function createLumbiniBuddha(
     [27.6, 16.6, 0.68, 19.6],
     [-33.4, 6.3, 19.8, 0.68],
     [35.6, 6.3, 15.6, 0.68],
-    [-8.9, 41.2, 0.68, 19.8],
+    [-8.9, 35.1, 0.68, 7.6],
+    [-8.9, 47.2, 0.68, 7.8],
     [8.9, 41.2, 0.68, 19.8],
     [-16.4, 31.2, 13.8, 0.68],
     [16.4, 31.2, 13.8, 0.68],
@@ -609,11 +611,27 @@ export function createLumbiniBuddha(
   group.add(babyBuddha, babyLight);
 
   // =========================================================================
-  // 7. MYANMAR GOLDEN PAGODA (-32.5, +39.0) & ROYAL THAI SANCTUARY (+35.0, -22.0)
+  // 7. MYANMAR GOLDEN PAGODA (-32.2, +41.2) & ROYAL THAI SANCTUARY (+35.0, -22.0)
   // =========================================================================
-  const myanmarPagoda = buildMyanmarGoldenPagoda(whiteStuccoMat, giltGoldMat, crimsonLacquerMat);
-  myanmarPagoda.scale.setScalar(1.25);
-  myanmarPagoda.position.set(-32.5, 0.03, 39.0);
+  const myanmarPagoda = buildMyanmarGoldenPagoda(
+    whiteStuccoMat,
+    giltGoldMat,
+    crimsonLacquerMat,
+    chunarStoneMat,
+    warmBronzeMat,
+    darkMetalMat,
+    flameGlowMat,
+    heroMats,
+  );
+  myanmarPagoda.position.set(-32.2, 0.03, 41.2);
+  if (typeof myanmarPagoda.userData.disposeExtraTextures === 'function') {
+    extraDisposers.push(myanmarPagoda.userData.disposeExtraTextures as () => void);
+  }
+  myanmarPagoda.traverse((obj) => {
+    if (obj instanceof THREE.PointLight) {
+      beaconLights.push(obj);
+    }
+  });
   group.add(myanmarPagoda);
 
   const thaiSanctuary = buildThaiMarbleSanctuary(whiteMarbleMat, giltGoldMat, crimsonLacquerMat, heroMats);
@@ -843,12 +861,12 @@ export function createLumbiniBuddha(
       ? surroundingPond.userData.lotusCount
       : 0);
 
-  // Hit target encompassing entire Lumbini Sacred Garden & surrounding Pond Promenades
+  // Hit target encompassing entire Lumbini Sacred Garden & 21.8m Myanmar Golden Pagoda spire
   const hitMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(108.0, 16.5, 122.0),
+    new THREE.BoxGeometry(108.0, 23.5, 122.0),
     new THREE.MeshBasicMaterial({ visible: false }),
   );
-  hitMesh.position.set(0, 8.2, 4.0);
+  hitMesh.position.set(0, 11.75, 4.0);
   hitMesh.layers.set(1);
   group.add(hitMesh);
 

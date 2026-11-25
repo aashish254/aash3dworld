@@ -24,8 +24,10 @@ import {
   computeAtmosphereParticleProfile,
   computeEffectiveLightingState,
   computeLumbiniAudioProfile,
+  computeLumbiniFireflyIntensity,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
+  findFirstUnexploredLandmarkApproach,
   findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
   getFootstepSurfaceKind,
@@ -40,6 +42,8 @@ import {
   isOnLumbiniCanalBridge,
   isOnLumbiniSacredBridge,
 } from './worldLogic';
+import { LumbiniFireflySystem } from './lumbiniFireflies';
+import { WeatherParticleSystem } from './weatherParticles';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
 import {
   AnimatedFoliageController,
@@ -166,7 +170,10 @@ export class WorldEngine {
   private milkyWayPoints!: THREE.Points;
   private atmospherePoints!: THREE.Points;
   private atmosphereMat!: THREE.ShaderMaterial;
+  private weatherParticles!: WeatherParticleSystem;
+  private lumbiniFireflies!: LumbiniFireflySystem;
   private sakuraPetalsMat: THREE.ShaderMaterial | null = null;
+  private sakuraPetalsPoints: THREE.Points | null = null;
   private riverController!: AnimatedWaterController;
   private glacialLakeController!: AnimatedWaterController;
   private peaceParklandController?: AnimatedWaterController;
@@ -317,6 +324,10 @@ export class WorldEngine {
   private pondRainIntensity = 0;
   private pondTrailRippleCount = 0;
   private lastTrailRippleAt = -10;
+  private discoveredLandmarkIds = new Set<string>();
+  private cuedLandmarkIds = new Set<string>();
+  private lastApproachCueLandmarkId: string | null = null;
+  private approachCueCount = 0;
 
   constructor(container: HTMLElement, callbacks: WorldEngineCallbacks) {
     this.container = container;
@@ -330,6 +341,10 @@ export class WorldEngine {
     this.buildSakuraPetals();
     this.buildInteractiveProps();
     this.buildAtmosphereParticles();
+    this.weatherParticles = new WeatherParticleSystem(this.weather, this.getPixelScale());
+    this.scene.add(this.weatherParticles.points);
+    this.lumbiniFireflies = new LumbiniFireflySystem();
+    this.scene.add(this.lumbiniFireflies.points);
     this.buildFootstepParticles();
     this.buildWorldBurstParticles();
     this.buildCharacter();
@@ -1295,6 +1310,7 @@ export class WorldEngine {
     const pts = new THREE.Points(geo, this.sakuraPetalsMat);
     pts.frustumCulled = false;
     pts.renderOrder = 2;
+    this.sakuraPetalsPoints = pts;
     this.scene.add(pts);
   }
 
@@ -2077,6 +2093,9 @@ export class WorldEngine {
     if (this.character?.root) exclude.add(this.character.root);
     if (this.walkMarkerMesh) exclude.add(this.walkMarkerMesh);
     if (this.atmospherePoints) exclude.add(this.atmospherePoints);
+    if (this.weatherParticles?.points) exclude.add(this.weatherParticles.points);
+    if (this.lumbiniFireflies?.points) exclude.add(this.lumbiniFireflies.points);
+    if (this.sakuraPetalsPoints) exclude.add(this.sakuraPetalsPoints);
     if (this.footstepPoints) exclude.add(this.footstepPoints);
     if (this.worldBurstPoints) exclude.add(this.worldBurstPoints);
     if (this.starsPoints) exclude.add(this.starsPoints);
@@ -2504,8 +2523,13 @@ export class WorldEngine {
           this.renderer.getPixelRatio() * Math.max(0.65, h / 900);
       }
       if (this.sakuraPetalsMat) {
-        this.sakuraPetalsMat.uniforms.uPixelScale.value =
-          this.renderer.getPixelRatio() * Math.max(0.65, h / 900);
+        this.sakuraPetalsMat.uniforms.uPixelScale.value = this.getPixelScale();
+      }
+      if (this.weatherParticles) {
+        this.weatherParticles.material.uniforms.uPixelScale.value = this.getPixelScale();
+      }
+      if (this.lumbiniFireflies) {
+        this.lumbiniFireflies.material.uniforms.uPixelScale.value = this.getPixelScale();
       }
       this.renderScene();
     };
@@ -2636,10 +2660,27 @@ export class WorldEngine {
     this.scheduleImmediateRender();
   }
 
+  private getPixelScale(): number {
+    const h = Math.max(1, this.container.clientHeight || window.innerHeight);
+    return this.renderer.getPixelRatio() * Math.max(0.65, h / 900);
+  }
+
+  public syncDiscoveredLandmarks(ids: string[]): void {
+    this.discoveredLandmarkIds = new Set(ids);
+  }
+
+  public markLandmarkDiscovered(id: string): void {
+    this.discoveredLandmarkIds.add(id);
+  }
+
   public setWeather(weather: WeatherKind): void {
     this.weather = weather;
     this.pondRainIntensity = weather === 'rain' ? 1.0 : weather === 'mist' ? 0.14 : 0.0;
     REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value = this.pondRainIntensity;
+    this.weatherParticles?.syncWeatherImmediate(weather, this.getPixelScale());
+    if (this.sakuraPetalsPoints) {
+      this.sakuraPetalsPoints.visible = weather === 'clear' || weather === 'mist';
+    }
     this.syncLighting((performance.now() - this.startTimeMs) / 1000);
     this.emitHud(true);
     this.scheduleImmediateRender();
@@ -2992,12 +3033,34 @@ export class WorldEngine {
       entry.mat.emissiveIntensity = entry.baseIntensity * state.emissiveScale;
     }
 
+    const fireflyIntensity = computeLumbiniFireflyIntensity(
+      this.timePreset,
+      state.hour,
+      this.lumbiniPreset,
+      this.weather,
+      state.phaseLabel,
+    );
+    const pixelScale = this.getPixelScale();
+    this.lumbiniFireflies?.update(elapsed, fireflyIntensity, pixelScale);
+    if (this.atmospherePoints) {
+      this.atmospherePoints.visible = this.weather === 'mist' || this.weather === 'foggy';
+    }
+    if (this.sakuraPetalsPoints) {
+      this.sakuraPetalsPoints.visible = this.weather === 'clear' || this.weather === 'mist';
+    }
+
     const canvas = this.renderer?.domElement;
     if (canvas) {
       canvas.dataset.weather = this.weather;
       canvas.dataset.lumbiniPreset = this.lumbiniPreset;
       canvas.dataset.lumbiniBlend = lumbiniBlend.toFixed(2);
       canvas.dataset.particleIntensity = profile.activeRatio.toFixed(2);
+      canvas.dataset.weatherParticleMode = this.weatherParticles?.currentMode ?? 'petals';
+      canvas.dataset.weatherParticleCount = String(this.weatherParticles?.count ?? 0);
+      canvas.dataset.lumbiniFireflyIntensity = fireflyIntensity.toFixed(2);
+      canvas.dataset.lumbiniFireflyCount = String(this.lumbiniFireflies?.count ?? 0);
+      canvas.dataset.lastApproachCueLandmark = this.lastApproachCueLandmarkId ?? 'none';
+      canvas.dataset.approachCueCount = String(this.approachCueCount);
       canvas.dataset.cameraFar = String(Math.round(this.camera.far));
       canvas.dataset.bloomStrength = state.bloomStrength.toFixed(2);
       canvas.dataset.bloomThreshold = state.bloomThreshold.toFixed(2);
@@ -3150,6 +3213,15 @@ export class WorldEngine {
     );
     this.cloudController.update(elapsed);
 
+    const weatherAnchor = this.gameState === 'title' ? this.currentLookAt : this.playerPos;
+    this.weatherParticles?.update(
+      dt,
+      elapsed,
+      this.weather,
+      weatherAnchor,
+      this.getPixelScale(),
+      this.birdEnvState.sunColorHex,
+    );
     this.updateAtmosphereParticles(dt, elapsed);
     this.updateFootstepParticles(dt);
     this.updateWorldBurstParticles(dt);
@@ -3163,14 +3235,47 @@ export class WorldEngine {
       this.playerPos.y,
     );
     this.camera.getWorldDirection(_camForward);
-    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather, {
+    const listenerPose = {
       x: this.playerPos.x,
       y: this.playerPos.y + 1.6,
       z: this.playerPos.z,
       forwardX: _camForward.x,
       forwardY: _camForward.y,
       forwardZ: _camForward.z,
-    });
+    };
+    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather, listenerPose);
+
+    if (this.gameState === 'playing' && !this.focusedLandmark) {
+      const approachMatch = findFirstUnexploredLandmarkApproach(
+        this.playerPos.x,
+        this.playerPos.z,
+        this.discoveredLandmarkIds,
+        this.cuedLandmarkIds,
+      );
+      if (approachMatch && soundEngine.isEnabled()) {
+        const lm = approachMatch.landmark;
+        const targetPos = {
+          x: lm.position.x,
+          y: groundHeightAt(lm.position.x, lm.position.z) + 2.4,
+          z: lm.position.z,
+        };
+        const played = soundEngine.playLandmarkApproachCue(
+          lm.id,
+          targetPos,
+          approachMatch.cueRadius,
+          listenerPose,
+        );
+        if (played) {
+          this.cuedLandmarkIds.add(lm.id);
+          this.lastApproachCueLandmarkId = lm.id;
+          this.approachCueCount++;
+          if (this.renderer?.domElement) {
+            this.renderer.domElement.dataset.lastApproachCueLandmark = lm.id;
+            this.renderer.domElement.dataset.approachCueCount = String(this.approachCueCount);
+          }
+        }
+      }
+    }
     const leafBurst = soundEngine.consumeTriggeredLeafBurst();
     if (
       leafBurst &&
@@ -3950,6 +4055,8 @@ export class WorldEngine {
         }
       }
     });
+    this.weatherParticles?.dispose();
+    this.lumbiniFireflies?.dispose();
     this.textures?.dispose();
     this.composer?.dispose();
     this.renderer?.dispose();

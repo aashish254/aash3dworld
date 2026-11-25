@@ -91,6 +91,236 @@ export function applyVolumetricHazeShader(mat: THREE.MeshStandardMaterial): void
   };
 }
 
+/**
+ * Multi-layered procedural PBR ground shader blending Grass Turf, River/Verge Pebbles,
+ * and Weathered Alpine Rock (albedo, tangent-space normal maps, roughness maps, and AO maps)
+ * with world-space anti-tiling and organic noise breakup, plus volumetric aerial haze.
+ */
+export function applyTerrainMultiLayerShader(
+  mat: THREE.MeshStandardMaterial,
+  textures: ProceduralTextureSet,
+  opts: { isHimalayas?: boolean } = {},
+): void {
+  const isHimalayas = Boolean(opts.isHimalayas);
+  mat.customProgramCacheKey = () =>
+    isHimalayas ? 'himalaya-multilayer-v1' : 'terrain-multilayer-v1';
+
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uHazeColor = WORLD_HAZE_UNIFORMS.uHazeColor;
+    shader.uniforms.uSunDir = WORLD_HAZE_UNIFORMS.uSunDir;
+    shader.uniforms.uSunColor = WORLD_HAZE_UNIFORMS.uSunColor;
+    shader.uniforms.uHazeDensity = WORLD_HAZE_UNIFORMS.uHazeDensity;
+    shader.uniforms.uHeightFalloff = WORLD_HAZE_UNIFORMS.uHeightFalloff;
+    shader.uniforms.uMaxHaze = WORLD_HAZE_UNIFORMS.uMaxHaze;
+
+    shader.uniforms.uGrassMap = { value: textures.meadowMap };
+    shader.uniforms.uGrassNormal = { value: textures.meadowNormal };
+    shader.uniforms.uGrassRough = { value: textures.meadowRough };
+    shader.uniforms.uGrassAo = { value: textures.meadowAo ?? textures.meadowRough };
+
+    shader.uniforms.uPebbleMap = { value: textures.pebbleMap ?? textures.meadowMap };
+    shader.uniforms.uPebbleNormal = { value: textures.pebbleNormal ?? textures.rockNormal };
+    shader.uniforms.uPebbleRough = { value: textures.pebbleRough ?? textures.meadowRough };
+    shader.uniforms.uPebbleAo = { value: textures.pebbleAo ?? textures.rockAo };
+
+    shader.uniforms.uRockMap = { value: textures.rockMap ?? textures.meadowMap };
+    shader.uniforms.uRockNormal = { value: textures.rockNormal };
+    shader.uniforms.uRockRough = { value: textures.rockRough ?? textures.meadowRough };
+    shader.uniforms.uRockAo = { value: textures.rockAo };
+    shader.uniforms.uIsHimalayas = { value: isHimalayas ? 1.0 : 0.0 };
+
+    shader.vertexShader = `
+      attribute vec3 aTerrainMix;
+      attribute float aSnowMask;
+      varying vec3 vHazeWorldPos;
+      varying vec3 vTerrainWorldPos;
+      varying vec3 vTerrainMix;
+      varying float vTerrainSnow;
+      ${shader.vertexShader}
+    `.replace(
+      '#include <project_vertex>',
+      `vTerrainMix = aTerrainMix;
+       vTerrainSnow = aSnowMask;
+       #ifdef USE_INSTANCING
+         vHazeWorldPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+       #else
+         vHazeWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+       #endif
+       vTerrainWorldPos = vHazeWorldPos;
+       #include <project_vertex>`,
+    );
+
+    shader.fragmentShader = `
+      uniform vec3 uHazeColor;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uHazeDensity;
+      uniform float uHeightFalloff;
+      uniform float uMaxHaze;
+
+      uniform sampler2D uGrassMap;
+      uniform sampler2D uGrassNormal;
+      uniform sampler2D uGrassRough;
+      uniform sampler2D uGrassAo;
+
+      uniform sampler2D uPebbleMap;
+      uniform sampler2D uPebbleNormal;
+      uniform sampler2D uPebbleRough;
+      uniform sampler2D uPebbleAo;
+
+      uniform sampler2D uRockMap;
+      uniform sampler2D uRockNormal;
+      uniform sampler2D uRockRough;
+      uniform sampler2D uRockAo;
+      uniform float uIsHimalayas;
+
+      varying vec3 vHazeWorldPos;
+      varying vec3 vTerrainWorldPos;
+      varying vec3 vTerrainMix;
+      varying float vTerrainSnow;
+
+      float terrainHash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      float terrainVNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = terrainHash21(i);
+        float b = terrainHash21(i + vec2(1.0, 0.0));
+        float c = terrainHash21(i + vec2(0.0, 1.0));
+        float d = terrainHash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float terrainFbm2(vec2 p) {
+        float v = terrainVNoise(p) * 0.65;
+        v += terrainVNoise(p * 2.13 + vec2(7.4, 3.1)) * 0.35;
+        return v;
+      }
+
+      vec2 terrainRot2(vec2 p, float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+      }
+      ${shader.fragmentShader}
+    `
+      .replace(
+        '#include <map_fragment>',
+        `float terrainBlendRough = 0.9;
+         vec3 terrainBlendMapN = vec3(0.0, 0.0, 1.0);
+         float terrainBlendAo = 1.0;
+         {
+           vec2 tPos = vec2(vTerrainWorldPos.x, -vTerrainWorldPos.z);
+           float macroVar = terrainFbm2(tPos * 0.085);
+           float detailBreak = terrainFbm2(tPos * 0.44 + vec2(17.3, 9.1));
+
+           vec2 uvGrassA = tPos * 0.175;
+           vec2 uvGrassB = terrainRot2(tPos * 0.068, 0.58) + vec2(0.37, 0.71);
+           vec2 uvPebA = tPos * 0.24 + vec2(detailBreak - 0.5, macroVar - 0.5) * 0.09;
+           vec2 uvPebB = terrainRot2(tPos * 0.135, 0.72) + vec2(0.41, 0.27);
+           vec2 uvRockA = tPos * 0.092;
+           vec2 uvRockB = terrainRot2(tPos * 0.041, -0.48) + vec2(0.19, 0.63);
+
+           vec3 gAlb = mix(texture2D(uGrassMap, uvGrassA).rgb, texture2D(uGrassMap, uvGrassB).rgb, 0.34);
+           gAlb *= mix(0.88, 1.12, macroVar);
+           vec3 gNorm = normalize(mix(texture2D(uGrassNormal, uvGrassA).xyz * 2.0 - 1.0, texture2D(uGrassNormal, uvGrassB).xyz * 2.0 - 1.0, 0.34));
+           float gRough = mix(texture2D(uGrassRough, uvGrassA).g, texture2D(uGrassRough, uvGrassB).g, 0.34);
+           float gAo = mix(texture2D(uGrassAo, uvGrassA).r, texture2D(uGrassAo, uvGrassB).r, 0.34);
+
+           vec3 pAlb = mix(texture2D(uPebbleMap, uvPebA).rgb, texture2D(uPebbleMap, uvPebB).rgb, 0.42);
+           pAlb *= mix(0.85, 1.15, macroVar);
+           vec3 pNorm = normalize(mix(texture2D(uPebbleNormal, uvPebA).xyz * 2.0 - 1.0, texture2D(uPebbleNormal, uvPebB).xyz * 2.0 - 1.0, 0.42));
+           float pRough = mix(texture2D(uPebbleRough, uvPebA).g, texture2D(uPebbleRough, uvPebB).g, 0.42);
+           float pAo = mix(texture2D(uPebbleAo, uvPebA).r, texture2D(uPebbleAo, uvPebB).r, 0.42);
+
+           vec3 rAlb = mix(texture2D(uRockMap, uvRockA).rgb, texture2D(uRockMap, uvRockB).rgb, 0.38);
+           vec3 rNorm = normalize(mix(texture2D(uRockNormal, uvRockA).xyz * 2.0 - 1.0, texture2D(uRockNormal, uvRockB).xyz * 2.0 - 1.0, 0.38));
+           float rRough = mix(texture2D(uRockRough, uvRockA).g, texture2D(uRockRough, uvRockB).g, 0.38);
+           float rAo = mix(texture2D(uRockAo, uvRockA).r, texture2D(uRockAo, uvRockB).r, 0.38);
+
+           float pebHeight = pAo * 0.65 + pAlb.g * 0.35;
+           float rockHeight = rAo * 0.55 + (1.0 - rRough) * 0.45;
+           float grassHeight = gAo * 0.5 + 0.22;
+
+           vec3 rawW = max(vTerrainMix, vec3(0.0));
+           rawW /= max(rawW.x + rawW.y + rawW.z, 0.0001);
+
+           float b0 = rawW.x + (grassHeight - 0.5) * 0.14 + (detailBreak - 0.5) * 0.16;
+           float b1 = rawW.y + (pebHeight - 0.5) * 0.22 + (detailBreak - 0.5) * 0.18;
+           float b2 = rawW.z + (rockHeight - 0.5) * 0.22 + (macroVar - 0.5) * 0.18;
+
+           float maxB = max(b0, max(b1, b2)) - 0.26;
+           vec3 wSharp = max(vec3(b0, b1, b2) - vec3(maxB), vec3(0.0));
+           wSharp *= step(vec3(0.005), rawW);
+           float wSum = wSharp.x + wSharp.y + wSharp.z;
+           vec3 wLayer = wSum > 0.0001 ? (wSharp / wSum) : rawW;
+
+           vec3 layerAlbedo = gAlb * wLayer.x + pAlb * wLayer.y + rAlb * wLayer.z;
+           terrainBlendRough = clamp(gRough * wLayer.x + pRough * wLayer.y + rRough * wLayer.z, 0.16, 0.99);
+           terrainBlendMapN = normalize(gNorm * wLayer.x + pNorm * wLayer.y + rNorm * wLayer.z);
+           terrainBlendAo = clamp(gAo * wLayer.x + pAo * wLayer.y + rAo * wLayer.z, 0.25, 1.0);
+
+           if (uIsHimalayas > 0.5) {
+             float snowMask = smoothstep(0.24, 0.74, vTerrainSnow + (detailBreak - 0.5) * 0.22);
+             vec3 snowDriftN = normalize(vec3((detailBreak - 0.5) * 0.2, (macroVar - 0.5) * 0.14, 1.0));
+             layerAlbedo = mix(layerAlbedo, vec3(0.84, 0.87, 0.92), snowMask);
+             terrainBlendRough = mix(terrainBlendRough, 0.74, snowMask);
+             terrainBlendMapN = normalize(mix(terrainBlendMapN, snowDriftN, snowMask * 0.85));
+             terrainBlendAo = mix(terrainBlendAo, 0.96, snowMask * 0.72);
+           }
+
+           diffuseColor.rgb *= layerAlbedo;
+         }`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `float roughnessFactor = roughness * terrainBlendRough;`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#if defined( USE_NORMALMAP_TANGENTSPACE )
+           vec3 mapN = terrainBlendMapN;
+           mapN.xy *= normalScale;
+           normal = normalize( tbn * mapN );
+         #endif`,
+      )
+      .replace(
+        '#include <aomap_fragment>',
+        `#ifdef USE_AOMAP
+           float ambientOcclusion = ( terrainBlendAo - 1.0 ) * aoMapIntensity + 1.0;
+           reflectedLight.indirectDiffuse *= ambientOcclusion;
+           #if defined( USE_ENVMAP ) && defined( STANDARD )
+             float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+             reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
+           #endif
+         #endif`,
+      )
+      .replace(
+        '#include <fog_fragment>',
+        `#include <fog_fragment>
+        {
+          vec3 toFrag = vHazeWorldPos - cameraPosition;
+          float fragDist = length(toFrag);
+          vec3 rayDir = toFrag / max(fragDist, 0.0001);
+          float camH = max(cameraPosition.y, -2.0);
+          float fragH = max(vHazeWorldPos.y, -2.0);
+          float avgH = mix(camH, fragH, 0.48);
+          float heightAtten = exp(-max(0.0, avgH + 1.5) * uHeightFalloff);
+          float opticalDepth = max(0.0, fragDist - 18.0) * uHazeDensity * (0.34 + 0.66 * heightAtten);
+          float hazeFactor = clamp(1.0 - exp(-opticalDepth), 0.0, uMaxHaze);
+          float sunScatter = pow(max(dot(rayDir, normalize(uSunDir)), 0.0), 5.0);
+          vec3 aerialTint = mix(uHazeColor, mix(uHazeColor, uSunColor, 0.42), sunScatter * 0.65);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, aerialTint, hazeFactor);
+        }`,
+      );
+  };
+}
+
 export interface AnimatedWaterController {
   group: THREE.Group;
   update: (elapsed: number) => void;
@@ -164,18 +394,54 @@ function buildRoadCurves(): THREE.CatmullRomCurve3[] {
   );
 }
 
-function minDistanceToRoads(
+interface RoadSampleGrid {
+  cellSize: number;
+  buckets: Map<number, number[]>;
+  samples: Array<{ x: number; z: number }>;
+}
+
+function buildRoadSampleGrid(
+  samples: Array<{ x: number; z: number }>,
+  cellSize = 10,
+): RoadSampleGrid {
+  const buckets = new Map<number, number[]>();
+  for (let i = 0; i < samples.length; i++) {
+    const gx = Math.floor(samples[i].x / cellSize);
+    const gz = Math.floor(samples[i].z / cellSize);
+    const key = (gx + 2048) * 4096 + (gz + 2048);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(key, bucket);
+    }
+    bucket.push(i);
+  }
+  return { cellSize, buckets, samples };
+}
+
+function minDistanceToRoadsFast(
   x: number,
   z: number,
-  samples: Array<{ x: number; z: number }>,
+  grid: RoadSampleGrid,
 ): number {
-  let minD = Infinity;
-  for (let i = 0; i < samples.length; i++) {
-    const s = samples[i];
-    const d = Math.hypot(x - s.x, z - s.z);
-    if (d < minD) minD = d;
+  const gx = Math.floor(x / grid.cellSize);
+  const gz = Math.floor(z / grid.cellSize);
+  let minD2 = Infinity;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const key = (gx + dx + 2048) * 4096 + (gz + dz + 2048);
+      const bucket = grid.buckets.get(key);
+      if (!bucket) continue;
+      for (let i = 0; i < bucket.length; i++) {
+        const s = grid.samples[bucket[i]];
+        const rx = x - s.x;
+        const rz = z - s.z;
+        const d2 = rx * rx + rz * rz;
+        if (d2 < minD2) minD2 = d2;
+      }
+    }
   }
-  return minD;
+  return minD2 === Infinity ? 99 : Math.sqrt(minD2);
 }
 
 function sampleRoadPoints(): Array<{ x: number; z: number }> {
@@ -192,17 +458,20 @@ function sampleRoadPoints(): Array<{ x: number; z: number }> {
 
 /**
  * Photorealistic Himalayan Range along the northern horizon:
- * smooth high-resolution tectonic ridgelines, eroded couloirs, slope-based snow & glacier stratification
- * (steep cliff faces remain dark gneiss rock while ridges & cirques hold wind-packed snow).
+ * high-density tectonic ridgelines, eroded couloirs, slope-based snow & glacier stratification,
+ * and multi-layer alpine grass / talus pebble / weathered gneiss rock PBR maps.
  */
 export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.Mesh {
   const width = 1360;
   const depth = 290;
-  const segX = 200;
-  const segZ = 52;
+  const segX = 360;
+  const segZ = 96;
 
   const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
   geo.rotateX(-Math.PI / 2);
+  if (geo.attributes.uv) {
+    geo.setAttribute('uv1', geo.attributes.uv.clone());
+  }
 
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -261,17 +530,25 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
       Math.cos(x * 0.24 + z * 0.55) *
       1.35 *
       THREE.MathUtils.smoothstep(massHeight, 12, 54);
+    const fineStrataRib =
+      Math.sin(x * 1.18 + z * 0.82) *
+      Math.cos(x * 0.74 - z * 0.96) *
+      0.72 *
+      THREE.MathUtils.smoothstep(massHeight, 6, 38);
 
     const frontCanyonWeight = 1 - THREE.MathUtils.smoothstep(z, -318, -238);
     const gorgeMask = 1 - Math.exp(-Math.pow((x - 42) / 28, 2)) * 0.55 * frontCanyonWeight;
     const height =
-      -3.8 + envelope * gorgeMask * (8.5 + ridge * 24 + massHeight + couloirErosion + microCrag);
+      -3.8 +
+      envelope * gorgeMask * (8.5 + ridge * 24 + massHeight + couloirErosion + microCrag + fineStrataRib);
     pos.setY(i, height);
   }
 
   geo.computeVertexNormals();
   const norm = geo.attributes.normal;
   const colors = new Float32Array(pos.count * 3);
+  const terrainMix = new Float32Array(pos.count * 3);
+  const snowMaskAttr = new Float32Array(pos.count);
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -284,31 +561,45 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
     const altSnow = THREE.MathUtils.smoothstep(y, snowAlt, snowAlt + 15.0);
     const slopeSnowRetention = THREE.MathUtils.smoothstep(slopeY, 0.56, 0.82);
     const snowFactor = altSnow * (0.18 + 0.82 * slopeSnowRetention);
+    snowMaskAttr[i] = snowFactor;
 
     const glacierShelf =
       THREE.MathUtils.smoothstep(y, snowAlt - 7.5, snowAlt + 6.0) *
       THREE.MathUtils.smoothstep(slopeY, 0.58, 0.86) *
       (0.5 + 0.5 * Math.sin(x * 0.11 + z * 0.09));
 
-    let r = THREE.MathUtils.lerp(0.18, 0.24, timberline);
-    let g = THREE.MathUtils.lerp(0.24, 0.26, timberline);
-    let b = THREE.MathUtils.lerp(0.16, 0.29, timberline);
+    const wGrass = (1 - timberline) * THREE.MathUtils.smoothstep(slopeY, 0.62, 0.9);
+    const talusBand =
+      THREE.MathUtils.smoothstep(y, 2.0, 11.0) *
+      (1 - THREE.MathUtils.smoothstep(y, 16.0, 28.0)) *
+      THREE.MathUtils.smoothstep(slopeY, 0.55, 0.85);
+    const wPebble = talusBand * 0.72;
+    const wRock = Math.max(0.08, 1.0 - wGrass - wPebble);
+    const sumW = wGrass + wPebble + wRock;
+    terrainMix[i * 3] = wGrass / sumW;
+    terrainMix[i * 3 + 1] = wPebble / sumW;
+    terrainMix[i * 3 + 2] = wRock / sumW;
+
+    // Neutral-warm to cool slate vertex tint calibrated for multiplied rock/pebble/grass albedo maps
+    let r = THREE.MathUtils.lerp(0.84, 0.88, timberline);
+    let g = THREE.MathUtils.lerp(0.92, 0.89, timberline);
+    let b = THREE.MathUtils.lerp(0.76, 0.94, timberline);
 
     const cragTint = 0.5 + 0.5 * Math.sin(x * 0.095 - z * 0.068);
-    r = THREE.MathUtils.lerp(r, 0.36, cragTint * 0.28 * timberline);
-    g = THREE.MathUtils.lerp(g, 0.34, cragTint * 0.28 * timberline);
-    b = THREE.MathUtils.lerp(b, 0.33, cragTint * 0.28 * timberline);
+    r = THREE.MathUtils.lerp(r, 0.98, cragTint * 0.28 * timberline);
+    g = THREE.MathUtils.lerp(g, 0.93, cragTint * 0.28 * timberline);
+    b = THREE.MathUtils.lerp(b, 0.89, cragTint * 0.28 * timberline);
 
     if (glacierShelf > 0.15) {
-      r = THREE.MathUtils.lerp(r, 0.52, glacierShelf * 0.48);
-      g = THREE.MathUtils.lerp(g, 0.65, glacierShelf * 0.48);
-      b = THREE.MathUtils.lerp(b, 0.76, glacierShelf * 0.48);
+      r = THREE.MathUtils.lerp(r, 0.78, glacierShelf * 0.45);
+      g = THREE.MathUtils.lerp(g, 0.91, glacierShelf * 0.45);
+      b = THREE.MathUtils.lerp(b, 1.0, glacierShelf * 0.45);
     }
 
     _color.setRGB(
-      THREE.MathUtils.lerp(r, 0.8, snowFactor),
-      THREE.MathUtils.lerp(g, 0.82, snowFactor),
-      THREE.MathUtils.lerp(b, 0.85, snowFactor),
+      THREE.MathUtils.lerp(r, 0.95, snowFactor),
+      THREE.MathUtils.lerp(g, 0.97, snowFactor),
+      THREE.MathUtils.lerp(b, 1.0, snowFactor),
     );
     colors[i * 3] = _color.r;
     colors[i * 3 + 1] = _color.g;
@@ -316,22 +607,27 @@ export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.M
   }
 
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('aTerrainMix', new THREE.BufferAttribute(terrainMix, 3));
+  geo.setAttribute('aSnowMask', new THREE.BufferAttribute(snowMaskAttr, 1));
 
   const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
+    map: textures.rockMap ?? textures.meadowMap,
     normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(0.85, 0.85),
+    normalScale: new THREE.Vector2(1.05, 1.05),
+    roughnessMap: textures.rockRough ?? textures.meadowRough,
     aoMap: textures.rockAo,
-    aoMapIntensity: 0.72,
-    roughness: 0.9,
+    aoMapIntensity: 0.82,
+    vertexColors: true,
+    roughness: 0.94,
     metalness: 0.03,
     flatShading: false,
   });
-  applyVolumetricHazeShader(mat);
+  applyTerrainMultiLayerShader(mat, textures, { isHimalayas: true });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.castShadow = false;
+  mesh.userData.skipNavMesh = true;
   return mesh;
 }
 
@@ -465,13 +761,27 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
   textures.meadowRough.repeat.set(138, 138);
 
   const size = 1040;
-  const segs = 320;
+  const segs = 512;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
+  if (geo.attributes.uv) {
+    geo.setAttribute('uv1', geo.attributes.uv.clone());
+  }
 
   const roadSamples = sampleRoadPoints();
+  const roadGrid = buildRoadSampleGrid(roadSamples, 10);
+  const landmarkClearZones = [
+    { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 12 },
+    ...LANDMARKS.map((lm) => ({
+      x: lm.position.x,
+      z: lm.position.z,
+      r: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 68 : 20,
+    })),
+  ];
+
   const pos = geo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
+  const roadDistCache = new Float32Array(pos.count);
+  const pondMaskCache = new Uint8Array(pos.count);
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -523,12 +833,32 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       (z >= LUMBINI_PEACE_CANAL.minZ - 0.5 &&
         z <= LUMBINI_PEACE_CANAL.maxZ + 0.5 &&
         ((x >= -265.6 && x <= -260.8) || (x >= -283.2 && x <= -278.4)));
+
     const roadDist =
-      x > -325 && x < 115 && z > -118 && z < 185 ? minDistanceToRoads(x, z, roadSamples) : 99;
+      x > -325 && x < 115 && z > -118 && z < 185 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
+    roadDistCache[i] = roadDist;
+    const inWaterBasin =
+      underPeaceCanal || inSurroundingPond || underPushkariniBasin || underGangaSagarBasin;
+    const isStructuralClear =
+      inWaterBasin ||
+      onBridgePier ||
+      onSacredBridge ||
+      underMayaPit ||
+      underPlinth ||
+      underChowk ||
+      underCompoundWalk ||
+      underBridgeWalk ||
+      underLumbiniPlaza ||
+      underLumbiniOuterPromenade ||
+      underWestPeaceWalk;
+    if (isStructuralClear) {
+      pondMaskCache[i] = inWaterBasin ? 2 : 1;
+    }
+
     if (underPeaceCanal) {
       y = -1.15;
     } else if (inSurroundingPond) {
-      y = -0.90;
+      y = -0.9;
     } else if (onBridgePier) {
       y = 0.34;
     } else if (onSacredBridge) {
@@ -553,45 +883,153 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     } else if (roadDist < 2.25) {
       // Depress roadbed sub-grade cleanly beneath the level stone road deck so grass triangles never pierce the pavers
       y -= (1 - THREE.MathUtils.smoothstep(roadDist, 0.8, 2.25)) * 0.09;
+    } else {
+      // High-density subtle micro-relief across natural valley turf, riverbanks & rocky foothills
+      const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
+      const distRiver = Math.abs(x - getRiverCenterX(z));
+      const inPark = x >= -324 && x <= -162 && z >= 26 && z <= 174;
+      let landmarkClear = 1.0;
+      for (let li = 0; li < landmarkClearZones.length; li++) {
+        const lzZone = landmarkClearZones[li];
+        const ld = Math.hypot(x - lzZone.x, z - lzZone.z);
+        if (ld < lzZone.r + 7) {
+          landmarkClear = Math.min(
+            landmarkClear,
+            THREE.MathUtils.smoothstep(ld, lzZone.r, lzZone.r + 7),
+          );
+          if (landmarkClear <= 0.001) break;
+        }
+      }
+      const riverBridgeClear =
+        x > BRIDGE_BOUNDS.minX - 6 &&
+        x < BRIDGE_BOUNDS.maxX + 6 &&
+        Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.5
+          ? 0
+          : 1;
+      const roadFade = THREE.MathUtils.smoothstep(roadDist, 3.6, 7.2);
+      const lakeFade = THREE.MathUtils.smoothstep(distLake, GLACIAL_LAKE.basinRadius + 1.5, GLACIAL_LAKE.basinRadius + 7);
+      const riverFade = THREE.MathUtils.smoothstep(distRiver, 3.5, 9.5);
+      const parkScale = inPark ? 0.25 : 1.0;
+      const reliefMask = landmarkClear * roadFade * lakeFade * riverFade * riverBridgeClear * parkScale;
+
+      if (reliefMask > 0.005) {
+        const foothillBoost = 1 + THREE.MathUtils.smoothstep(Math.hypot(x, z), 280, 420) * 1.65;
+        const undulation =
+          Math.sin(x * 0.23 + z * 0.16) * 0.105 +
+          Math.cos(x * 0.51 - z * 0.41) * 0.068 +
+          Math.sin(x * 0.94 + z * 0.87) * 0.042;
+        y += undulation * reliefMask * foothillBoost;
+      }
     }
     pos.setY(i, y);
+  }
+
+  geo.computeVertexNormals();
+  const norm = geo.attributes.normal;
+  const colors = new Float32Array(pos.count * 3);
+  const terrainMix = new Float32Array(pos.count * 3);
+  const snowMaskAttr = new Float32Array(pos.count);
+
+  const parkTint = new THREE.Color(0x6c944d);
+  const vergeTint = new THREE.Color(0x9a9285);
+  const rockSlopeTint = new THREE.Color(0x95948f);
+  const riverWetTint = new THREE.Color(0x7c888a);
+  const riverBankTint = new THREE.Color(0xa9a59b);
+
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const roadDist = roadDistCache[i];
+    const clearFlag = pondMaskCache[i];
+    const slope = 1 - THREE.MathUtils.clamp(norm.getY(i), 0, 1);
 
     const riverCenterX = getRiverCenterX(z);
     const distRiver = Math.abs(x - riverCenterX);
     const eastBankBlend = THREE.MathUtils.smoothstep(x - riverCenterX, 4.5, 22.0);
-    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 345, 430);
-
+    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 335, 430);
+    const northSlopeBlend = THREE.MathUtils.smoothstep(-z, 118, 195);
     const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
-    if (inSurroundingPond) {
-      _color.setRGB(0.16, 0.24, 0.24);
+
+    // Compute per-vertex surface mix: [grass, pebble, rock]
+    let wPebble = 0;
+    let wRock = 0;
+
+    if (clearFlag === 2) {
+      wPebble = 0.86;
+      wRock = 0.14;
+    } else if (distRiver < 9.6 || distLake < GLACIAL_LAKE.basinRadius + 2.4) {
+      const riverPeb =
+        distRiver < 9.6 ? 1 - THREE.MathUtils.smoothstep(distRiver, 5.2, 9.6) : 0;
+      const lakePeb =
+        distLake < GLACIAL_LAKE.basinRadius + 2.4
+          ? 1 - THREE.MathUtils.smoothstep(distLake, GLACIAL_LAKE.basinRadius - 1.2, GLACIAL_LAKE.basinRadius + 2.4)
+          : 0;
+      wPebble = Math.max(riverPeb, lakePeb);
+      wRock = THREE.MathUtils.smoothstep(slope, 0.045, 0.18) * 0.72;
+    } else {
+      if (roadDist >= 1.5 && roadDist < 4.5 && clearFlag === 0) {
+        const shoulderBand =
+          THREE.MathUtils.smoothstep(roadDist, 1.5, 2.2) *
+          (1 - THREE.MathUtils.smoothstep(roadDist, 2.8, 4.5));
+        wPebble = Math.max(wPebble, shoulderBand * 0.85);
+      }
+      const dryGravelPocket =
+        Math.max(0, Math.sin(x * 0.045 + z * 0.038) * Math.cos(x * 0.029 - z * 0.052)) *
+        eastBankBlend *
+        (clearFlag === 0 ? 0.36 : 0);
+      wPebble = Math.max(wPebble, dryGravelPocket);
+
+      const slopeRock = THREE.MathUtils.smoothstep(slope, 0.045, 0.19);
+      const foothillRock = outerFoothillBlend * 0.68 + northSlopeBlend * 0.56;
+      const cliffRock =
+        distLake < 38 && z < GLACIAL_LAKE.z - 8
+          ? THREE.MathUtils.smoothstep(-z + GLACIAL_LAKE.z, 8, 22) * 0.85
+          : 0;
+      wRock = Math.min(1, slopeRock * 0.92 + foothillRock * (0.45 + 0.55 * slopeRock) + cliffRock);
+    }
+
+    const totalPR = wPebble + wRock;
+    if (totalPR > 1.0) {
+      wPebble /= totalPR;
+      wRock /= totalPR;
+    }
+    const wGrass = Math.max(0, 1.0 - wPebble - wRock);
+    const sumW = wGrass + wPebble + wRock || 1;
+    const ng = wGrass / sumW;
+    const np = wPebble / sumW;
+    const nr = wRock / sumW;
+    terrainMix[i * 3] = ng;
+    terrainMix[i * 3 + 1] = np;
+    terrainMix[i * 3 + 2] = nr;
+    snowMaskAttr[i] = 0;
+
+    // Color tint per layer so grass has valley biome warmth while pebble & rock keep clean mineral hues
+    if (clearFlag === 2) {
+      _color.setRGB(0.56, 0.64, 0.64);
     } else if (distRiver < 8.4 || distLake < GLACIAL_LAKE.basinRadius) {
       const shoreT =
         distLake < GLACIAL_LAKE.basinRadius
           ? THREE.MathUtils.smoothstep(distLake, GLACIAL_LAKE.waterRadius * 0.65, GLACIAL_LAKE.basinRadius)
           : THREE.MathUtils.smoothstep(distRiver, 3.2, 8.4);
-      _color.setRGB(
-        THREE.MathUtils.lerp(0.24, 0.5, shoreT),
-        THREE.MathUtils.lerp(0.32, 0.49, shoreT),
-        THREE.MathUtils.lerp(0.34, 0.44, shoreT),
-      );
+      _color.copy(riverWetTint).lerp(riverBankTint, shoreT);
     } else {
       _color.setRGB(
-        THREE.MathUtils.lerp(0.76, 1.06, eastBankBlend),
-        THREE.MathUtils.lerp(0.84, 0.88, eastBankBlend),
-        THREE.MathUtils.lerp(0.68, 0.62, eastBankBlend),
+        THREE.MathUtils.lerp(0.84, 1.08, eastBankBlend),
+        THREE.MathUtils.lerp(0.92, 0.92, eastBankBlend),
+        THREE.MathUtils.lerp(0.75, 0.68, eastBankBlend),
       );
-      if (x >= -324 && x <= -162 && z >= 26 && z <= 174 && !underPeaceCanal && !underWestPeaceWalk) {
+      if (x >= -324 && x <= -162 && z >= 26 && z <= 174 && clearFlag === 0) {
         const parkDx = x < -314 ? -314 - x : x > -168 ? x + 168 : 0;
         const parkDz = z < 34 ? 34 - z : z > 164 ? z - 164 : 0;
         const parkLawnBlend = 1 - THREE.MathUtils.smoothstep(Math.hypot(parkDx, parkDz), 0, 14);
-        _color.lerp(new THREE.Color(0x5f8543), parkLawnBlend * 0.34);
+        _color.lerp(parkTint, parkLawnBlend * 0.34);
       }
-      if (roadDist < 3.6) {
-        const vergeBlend = 1 - THREE.MathUtils.smoothstep(roadDist, 1.8, 3.6);
-        _color.lerp(new THREE.Color(0x666153), vergeBlend * 0.45);
+      if (roadDist < 4.0) {
+        const vergeBlend = 1 - THREE.MathUtils.smoothstep(roadDist, 1.8, 4.0);
+        _color.lerp(vergeTint, vergeBlend * 0.45);
       }
-      if (outerFoothillBlend > 0) {
-        _color.lerp(new THREE.Color(0x52574b), outerFoothillBlend * 0.62);
+      if (nr > 0.05) {
+        _color.lerp(rockSlopeTint, nr * 0.8);
       }
     }
 
@@ -601,18 +1039,21 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
   }
 
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
+  geo.setAttribute('aTerrainMix', new THREE.BufferAttribute(terrainMix, 3));
+  geo.setAttribute('aSnowMask', new THREE.BufferAttribute(snowMaskAttr, 1));
 
   const mat = new THREE.MeshStandardMaterial({
     map: textures.meadowMap,
     normalMap: textures.meadowNormal,
-    normalScale: new THREE.Vector2(0.7, 0.7),
+    normalScale: new THREE.Vector2(0.95, 0.95),
     roughnessMap: textures.meadowRough,
+    aoMap: textures.meadowAo ?? textures.meadowRough,
+    aoMapIntensity: 0.76,
     vertexColors: true,
-    roughness: 0.94,
+    roughness: 0.96,
     metalness: 0.02,
   });
-  applyVolumetricHazeShader(mat);
+  applyTerrainMultiLayerShader(mat, textures, { isHimalayas: false });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -628,6 +1069,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   const group = new THREE.Group();
   group.userData.nonCollidable = true;
   const roadSamples = sampleRoadPoints();
+  const roadGrid = buildRoadSampleGrid(roadSamples, 10);
   const plazas = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 8.5 },
     ...LANDMARKS.map((lm) => ({
@@ -876,7 +1318,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
         return { excluded: true, roadD: 99, distRiver };
       }
     }
-    const roadD = minDistanceToRoads(px, pz, roadSamples);
+    const roadD = minDistanceToRoadsFast(px, pz, roadGrid);
     if (roadD < roadClearDist) return { excluded: true, roadD, distRiver };
     return { excluded: false, roadD, distRiver };
   };
@@ -1221,24 +1663,32 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   waterMesh.userData.nonCollidable = true;
   group.add(waterMesh);
 
-  const stoneGeo = new THREE.IcosahedronGeometry(0.82, 2);
+  const stoneGeo = new THREE.IcosahedronGeometry(0.82, 3);
+  if (stoneGeo.attributes.uv) {
+    stoneGeo.setAttribute('uv1', stoneGeo.attributes.uv.clone());
+  }
   const sPos = stoneGeo.attributes.position;
   for (let i = 0; i < sPos.count; i++) {
     const vx = sPos.getX(i);
     const vy = sPos.getY(i);
     const vz = sPos.getZ(i);
-    const n = 0.82 + 0.24 * Math.sin(vx * 3.1 + vy * 2.4) * Math.cos(vz * 3.5);
+    const n =
+      0.82 +
+      0.22 * Math.sin(vx * 3.1 + vy * 2.4) * Math.cos(vz * 3.5) +
+      0.08 * Math.sin(vx * 7.2 - vz * 6.4);
     sPos.setXYZ(i, vx * n, vy * n * 0.68, vz * n);
   }
   stoneGeo.computeVertexNormals();
 
   const riverStoneMat = new THREE.MeshStandardMaterial({
+    map: textures.rockMap ?? textures.meadowMap,
     normalMap: textures.rockNormal,
     normalScale: new THREE.Vector2(0.95, 0.95),
+    roughnessMap: textures.rockRough ?? textures.meadowRough,
     aoMap: textures.rockAo,
     aoMapIntensity: 0.78,
-    color: 0xffffff,
-    roughness: 0.38,
+    color: 0xbcbab4,
+    roughness: 0.52,
     metalness: 0.04,
   });
 
@@ -2297,22 +2747,32 @@ export function createInstancedFoliage(
   // Real Subdivided Displaced Granite Field Boulders across the 200m valley
   const rockSpots = getWorldBoulderSpots();
 
-  const rockGeo = new THREE.IcosahedronGeometry(0.75, 2);
+  const rockGeo = new THREE.IcosahedronGeometry(0.75, 3);
+  if (rockGeo.attributes.uv) {
+    rockGeo.setAttribute('uv1', rockGeo.attributes.uv.clone());
+  }
   const rPos = rockGeo.attributes.position;
   for (let i = 0; i < rPos.count; i++) {
     const vx = rPos.getX(i);
     const vy = rPos.getY(i);
     const vz = rPos.getZ(i);
-    const crag = 0.78 + 0.26 * Math.sin(vx * 3.4 + vz * 2.1) * Math.cos(vy * 3.9 - vx * 1.4);
+    const crag =
+      0.78 +
+      0.24 * Math.sin(vx * 3.4 + vz * 2.1) * Math.cos(vy * 3.9 - vx * 1.4) +
+      0.08 * Math.sin(vx * 7.8 + vy * 6.5 - vz * 5.2);
     rPos.setXYZ(i, vx * crag, vy * crag, vz * crag);
   }
   rockGeo.computeVertexNormals();
 
   const rockMat = new THREE.MeshStandardMaterial({
+    map: textures.rockMap ?? textures.meadowMap,
     normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(1.0, 1.0),
-    color: 0xffffff,
-    roughness: 0.9,
+    normalScale: new THREE.Vector2(1.05, 1.05),
+    roughnessMap: textures.rockRough ?? textures.meadowRough,
+    aoMap: textures.rockAo,
+    aoMapIntensity: 0.82,
+    color: 0xd6d4ce,
+    roughness: 0.92,
   });
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockSpots.length);
   rocks.castShadow = true;
@@ -2359,10 +2819,14 @@ export function createHimalayanGompaAndLodge(textures: ProceduralTextureSet): TH
   const group = new THREE.Group();
 
   const cragMat = new THREE.MeshStandardMaterial({
+    map: textures.rockMap ?? textures.meadowMap,
     normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(1.0, 1.0),
-    color: 0x3b3f47,
-    roughness: 0.92,
+    normalScale: new THREE.Vector2(1.05, 1.05),
+    roughnessMap: textures.rockRough ?? textures.meadowRough,
+    aoMap: textures.rockAo,
+    aoMapIntensity: 0.8,
+    color: 0x9ea2aa,
+    roughness: 0.94,
   });
   const whiteWallMat = new THREE.MeshStandardMaterial({
     normalMap: textures.sandstoneNormal,
@@ -2532,10 +2996,14 @@ export function createGlacialLakeAndWaterfall(
 
   // 2. Stepped North Rock Cliff & Cascading Waterfall feeding the 26m Glacial Lake
   const cliffMat = new THREE.MeshStandardMaterial({
+    map: textures.rockMap ?? textures.meadowMap,
     normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(0.95, 0.95),
-    color: 0x3b4046,
-    roughness: 0.9,
+    normalScale: new THREE.Vector2(1.0, 1.0),
+    roughnessMap: textures.rockRough ?? textures.meadowRough,
+    aoMap: textures.rockAo,
+    aoMapIntensity: 0.8,
+    color: 0x989ea5,
+    roughness: 0.92,
   });
   const fallWall = new THREE.Mesh(new THREE.BoxGeometry(18.0, 15.5, 7.5), cliffMat);
   fallWall.position.set(-1.5, 5.6, -24.5);

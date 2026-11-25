@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
+  LANDMARK_APPROACH_CUE_SPECS,
   LUMBINI_PEACE_CANAL,
   LUMBINI_PUSHKARINI_POND,
   LUMBINI_SACRED_POND,
@@ -14,15 +15,21 @@ import {
   computeEffectiveLightingState,
   computeIncenseSmokeProfile,
   computeIncenseVentOffsets,
+  computeLandmarkApproachCuePanAndGain,
   computeLumbiniAudioProfile,
+  computeLumbiniFireflyIntensity,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
+  computeWeatherParticleModeProfile,
   decodeWaypointsFromHash,
   encodeWaypointsToHash,
+  findFirstUnexploredLandmarkApproach,
   findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
+  generateLumbiniFireflyPlacements,
   generateLumbiniPondLotusPlacements,
   getFootstepSurfaceKind,
+  getLandmarkApproachCueRadius,
   getLandmarkApproachPoint,
   getRiverCenterX,
   getSurfaceHeightAt,
@@ -1481,8 +1488,425 @@ test('Pilgrim trail walking and rain trigger shader-based pond ripples inside re
   assert.equal(recorded, true, 'triggerWaterRipple must populate shared shader ripple slot');
 });
 
+test('Lumbini pond fireflies appear exclusively during night/twilight presets and hover above both ponds', async () => {
+  const { LumbiniFireflySystem } = await import('./lumbiniFireflies');
 
+  // Intensity stays 0 during bright day and ramps cleanly at night / moonlight vigil
+  assert.equal(computeLumbiniFireflyIntensity('noon', 12.5, 'sanctuary-auto', 'clear', 'Afternoon'), 0);
+  assert.equal(computeLumbiniFireflyIntensity('noon', 11.2, 'bodhi-zen', 'clear', 'Morning'), 0);
+  assert.equal(computeLumbiniFireflyIntensity('night', 22.0, 'sanctuary-auto', 'clear', 'Night'), 1.0);
+  assert.equal(computeLumbiniFireflyIntensity('noon', 22.4, 'moonlight-vigil', 'clear', 'Night'), 1.0);
 
+  const duskVal = computeLumbiniFireflyIntensity('dusk', 18.35, 'sanctuary-auto', 'clear', 'Golden Hour');
+  assert.ok(duskVal > 0.3 && duskVal < 0.95, `Expected twilight firefly ramp, got ${duskVal}`);
+  const rainyNight = computeLumbiniFireflyIntensity('night', 22.0, 'moonlight-vigil', 'rain', 'Night');
+  assert.ok(rainyNight > 0 && rainyNight < 0.5, 'Rain attenuates nighttime fireflies cleanly');
 
+  const placementsA = generateLumbiniFireflyPlacements(260, 202611);
+  const placementsB = generateLumbiniFireflyPlacements(260, 202611);
+  assert.deepEqual(placementsA, placementsB, 'Firefly generator must be deterministic');
+  assert.equal(placementsA.length, 260);
+
+  const pushkariniFlies = placementsA.filter((f) => f.pond === 'pushkarini');
+  const surroundingFlies = placementsA.filter((f) => f.pond === 'surrounding');
+  assert.ok(pushkariniFlies.length >= 80 && surroundingFlies.length >= 140);
+
+  for (const f of pushkariniFlies) {
+    assert.ok(
+      f.x >= LUMBINI_PUSHKARINI_POND.minX - 0.8 && f.x <= LUMBINI_PUSHKARINI_POND.maxX + 0.8,
+      'Pushkarini firefly must hover near Pushkarini pond X bounds',
+    );
+    assert.ok(
+      f.z >= LUMBINI_PUSHKARINI_POND.minZ - 0.8 && f.z <= LUMBINI_PUSHKARINI_POND.maxZ + 0.8,
+      'Pushkarini firefly must hover near Pushkarini pond Z bounds',
+    );
+    assert.ok(f.y > LUMBINI_PUSHKARINI_POND.waterLevel + 0.25);
+  }
+  for (const f of surroundingFlies) {
+    assert.ok(
+      f.x >= LUMBINI_SACRED_POND.outerMinX - 0.5 && f.x <= LUMBINI_SACRED_POND.outerMaxX + 0.5,
+      'Surrounding pond firefly must stay within moat bounds',
+    );
+    assert.ok(f.y > LUMBINI_SACRED_POND.waterLevel + 0.25);
+  }
+
+  const sys = new LumbiniFireflySystem(260, 202611);
+  assert.equal(sys.points.userData.nonCollidable, true);
+  sys.update(4.0, 0, 1.0);
+  assert.equal(sys.points.visible, false);
+  sys.update(4.5, 1.0, 1.0);
+  assert.equal(sys.points.visible, true);
+  assert.equal(sys.material.uniforms.uIntensity.value, 1.0);
+  sys.dispose();
+});
+
+test('Procedural weather particle system switches cleanly between falling sakura petals, rain, and light snow', async () => {
+  const THREE = await import('three');
+  const { WeatherParticleSystem } = await import('./weatherParticles');
+
+  const petals = computeWeatherParticleModeProfile('clear');
+  const rain = computeWeatherParticleModeProfile('rain');
+  const snow = computeWeatherParticleModeProfile('snow');
+  const mist = computeWeatherParticleModeProfile('mist');
+
+  assert.equal(petals.mode, 'petals');
+  assert.equal(rain.mode, 'rain');
+  assert.equal(snow.mode, 'snow');
+  assert.equal(mist.mode, 'mist');
+
+  assert.equal(rain.stretch, 1.0);
+  assert.ok(rain.fallSpeed > 15 && rain.fallSpeed > snow.fallSpeed * 6);
+  assert.ok(snow.fallSpeed > 0.8 && snow.fallSpeed < 2.5);
+  assert.ok(snow.activeRatio < 0.7, 'Light snow keeps airy moderate density');
+  assert.ok(petals.fallSpeed > 0.5 && petals.fallSpeed < 2.2 && petals.tumbleSpeed > 1.5);
+  assert.equal(petals.secondaryColorHex, '#f472b6');
+
+  const sys = new WeatherParticleSystem('clear', 1.0);
+  const anchor = new THREE.Vector3(0, 0.2, 6);
+  assert.equal(sys.currentMode, 'petals');
+  assert.equal(sys.material.uniforms.uMode.value, 0);
+
+  sys.update(0.016, 1.0, 'rain', anchor, 1.0, '#64748b');
+  assert.equal(sys.currentMode, 'rain');
+  assert.equal(sys.material.uniforms.uMode.value, 1);
+  assert.equal(sys.material.uniforms.uActiveFraction.value, 1.0);
+
+  sys.update(0.016, 2.0, 'snow', anchor, 1.0, '#e2e8f0');
+  assert.equal(sys.currentMode, 'snow');
+  assert.equal(sys.material.uniforms.uMode.value, 2);
+  assert.ok(sys.material.uniforms.uActiveFraction.value < 0.7);
+
+  sys.update(0.016, 3.0, 'clear', anchor, 1.0, '#fff4d6');
+  assert.equal(sys.currentMode, 'petals');
+  assert.equal(sys.material.uniforms.uMode.value, 0);
+  sys.dispose();
+});
+
+test('First-time landmark approach cue provides unique per-landmark spatial motifs without retriggering', async () => {
+  assert.equal(Object.keys(LANDMARK_APPROACH_CUE_SPECS).length, LANDMARKS.length);
+  const motifNames = new Set(Object.values(LANDMARK_APPROACH_CUE_SPECS).map((s) => s.motifName));
+  assert.equal(motifNames.size, LANDMARKS.length, 'Every landmark must have a unique motif');
+
+  // Spawn must never falsely trigger any landmark approach cue
+  assert.equal(
+    findFirstUnexploredLandmarkApproach(SPAWN_POSITION.x, SPAWN_POSITION.z, [], []),
+    null,
+  );
+
+  // Approaching unexplored Kathmandu Pagoda within cue radius triggers its motif once
+  const pashupati = LANDMARKS.find((l) => l.id === 'kathmandu-stupa')!;
+  const cueR = getLandmarkApproachCueRadius(pashupati);
+  assert.ok(cueR > pashupati.interactRadius);
+
+  const match = findFirstUnexploredLandmarkApproach(
+    pashupati.position.x,
+    pashupati.position.z + cueR - 2.0,
+    [],
+    [],
+  );
+  assert.ok(match);
+  assert.equal(match.landmark.id, 'kathmandu-stupa');
+  assert.equal(match.spec.motifName, 'Pashupati Bronze Ghanta');
+
+  // Already discovered or already cued landmarks are never triggered again
+  assert.equal(
+    findFirstUnexploredLandmarkApproach(
+      pashupati.position.x,
+      pashupati.position.z + cueR - 2.0,
+      ['kathmandu-stupa'],
+      [],
+    ),
+    null,
+  );
+  assert.equal(
+    findFirstUnexploredLandmarkApproach(
+      pashupati.position.x,
+      pashupati.position.z + cueR - 2.0,
+      [],
+      ['kathmandu-stupa'],
+    ),
+    null,
+  );
+
+  // Spatial stereo pan calculation localizes left vs right relative to forward direction
+  const facingNorthLeft = computeLandmarkApproachCuePanAndGain(0, 0, 0, -1, -18, -10, 27);
+  const facingNorthRight = computeLandmarkApproachCuePanAndGain(0, 0, 0, -1, 18, -10, 27);
+  assert.ok(facingNorthLeft.pan < -0.7, `Expected negative left pan, got ${facingNorthLeft.pan}`);
+  assert.ok(facingNorthRight.pan > 0.7, `Expected positive right pan, got ${facingNorthRight.pan}`);
+
+  // SoundEngine spatial approach cue playback with MockAudioContext
+  const prevWindow = (globalThis as { window?: unknown }).window;
+  let pannerCount = 0;
+  let oscCount = 0;
+  const makeParam = (init = 0) => ({
+    value: init,
+    setValueAtTime(v: number) { this.value = v; },
+    linearRampToValueAtTime(v: number) { this.value = v; },
+    exponentialRampToValueAtTime(v: number) { this.value = v; },
+    setTargetAtTime(v: number) { this.value = v; },
+    cancelScheduledValues() {},
+  });
+  class MockCtx {
+    public sampleRate = 44100;
+    public state = 'running';
+    public currentTime = 1.0;
+    public destination = { connect() {} };
+    public listener = {
+      positionX: makeParam(0), positionY: makeParam(0), positionZ: makeParam(0),
+      forwardX: makeParam(0), forwardY: makeParam(0), forwardZ: makeParam(-1),
+      upX: makeParam(0), upY: makeParam(1), upZ: makeParam(0),
+    };
+    resume() { return Promise.resolve(); }
+    close() { return Promise.resolve(); }
+    createBuffer(_c: number, len: number, sr: number) {
+      return { duration: len / sr, getChannelData: () => new Float32Array(len) };
+    }
+    createBufferSource() {
+      return { buffer: null, loop: false, onended: null, connect() {}, disconnect() {}, start() {}, stop() {} };
+    }
+    createBiquadFilter() {
+      return { type: 'lowpass', frequency: makeParam(400), Q: makeParam(1), connect() {}, disconnect() {} };
+    }
+    createGain() { return { gain: makeParam(1), connect() {}, disconnect() {} }; }
+    createOscillator() {
+      oscCount++;
+      return { type: 'sine', frequency: makeParam(440), onended: null, connect() {}, disconnect() {}, start() {}, stop() {} };
+    }
+    createPanner() {
+      pannerCount++;
+      return {
+        panningModel: 'equalpower', distanceModel: 'inverse', refDistance: 1, maxDistance: 100,
+        rolloffFactor: 1, coneInnerAngle: 360, coneOuterAngle: 360, coneOuterGain: 0,
+        positionX: makeParam(0), positionY: makeParam(0), positionZ: makeParam(0),
+        connect() {}, disconnect() {},
+      };
+    }
+  }
+
+  try {
+    (globalThis as { window?: unknown }).window = { AudioContext: MockCtx };
+    const { soundEngine } = await import('./soundEngine');
+    soundEngine.setEnabled(false);
+    assert.equal(
+      soundEngine.playLandmarkApproachCue('aniflow-studio', { x: -54, y: 2.5, z: -92 }, 27),
+      false,
+    );
+
+    soundEngine.setEnabled(true);
+    const played = soundEngine.playLandmarkApproachCue(
+      'aniflow-studio',
+      { x: -54, y: 2.5, z: -92 },
+      27,
+      { x: -54, y: 1.8, z: -72, forwardX: 0, forwardY: 0, forwardZ: -1 },
+    );
+    assert.equal(played, true);
+    assert.ok(pannerCount >= 1);
+    assert.ok(oscCount >= 8);
+    const status = soundEngine.getApproachCueStatus();
+    assert.equal(status.lastLandmarkId, 'aniflow-studio');
+    assert.equal(status.lastMotifName, 'AniFlow Studio Marimba');
+    assert.equal(status.cueCount, 1);
+
+    soundEngine.setEnabled(false);
+    soundEngine.dispose();
+  } finally {
+    if (prevWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      (globalThis as { window?: unknown }).window = prevWindow;
+    }
+  }
+});
+
+test('Myanmar Golden Pagoda (Lokamani Cula) builds at monumental real-life scale with walkable stone forecourt', async () => {
+  const THREE = await import('three');
+  const { createLumbiniBuddha } = await import('./lumbiniTemple');
+  const { createProceduralTextures } = await import('./proceduralTextures');
+
+  // Minimal Canvas/Document polyfill check: run buildMyanmarGoldenPagoda directly (pure geometry/materials)
+  const { buildMyanmarGoldenPagoda } = await import('./lumbiniMyanmarPagoda');
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf7f5ef });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xf4c85b, metalness: 0.9, roughness: 0.24 });
+  const crimsonMat = new THREE.MeshStandardMaterial({ color: 0x8f221d });
+
+  const pagoda = buildMyanmarGoldenPagoda(whiteMat, goldMat, crimsonMat);
+  assert.equal(pagoda.name, 'MyanmarGoldenPagoda');
+
+  const box = new THREE.Box3().setFromObject(pagoda);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  assert.ok(size.x >= 16.5 && size.x <= 17.5, `Expected ~16.8m forecourt width, got ${size.x.toFixed(2)}m`);
+  assert.ok(size.z >= 16.5 && size.z <= 17.5, `Expected ~16.8m forecourt depth, got ${size.z.toFixed(2)}m`);
+  assert.ok(size.y >= 21.0 && size.y <= 23.0, `Expected ~21.8m monumental pagoda height, got ${size.y.toFixed(2)}m`);
+
+  // Verify walkability & stone footsteps around Lumbini center (-210, 96) + pagoda (-32.2, 41.2) = (-242.2, 137.2)
+  assert.equal(isWalkablePosition(-242.2, 137.2), false, 'Inner sanctuary fenced core must block pass-through');
+  assert.equal(isWalkablePosition(-244.45, 144.46), false, 'South azure offering pedestal must block pass-through');
+  assert.equal(isWalkablePosition(-242.2, 145.0), true, 'South gate stone plaza approach must stay walkable');
+  assert.equal(isWalkablePosition(-226.0, 137.2), true, 'East brick spur walkway into pagoda must stay open');
+  assert.equal(getFootstepSurfaceKind(-242.2, 145.0), 'stone');
+  assert.equal(getFootstepSurfaceKind(-226.0, 137.2), 'stone');
+
+  void createLumbiniBuddha;
+  void createProceduralTextures;
+});
+
+test('High-density terrain and Himalayan meshes expose valid multi-layer blend weights (grass, pebble, rock) and PBR attributes', async () => {
+  const THREE = await import('three');
+  const { createDioramaTerrain, createSculptedHimalayas } = await import('./mountainAndTerrain');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    { meadowMap: tex, meadowNormal: tex, meadowRough: tex },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const grid = terrainMesh.userData.terrainGrid as { size: number; segs: number };
+  assert.ok(grid.segs >= 512, `Expected terrain segs >= 512, got ${grid.segs}`);
+
+  const pos = terrainMesh.geometry.getAttribute('position');
+  const mix = terrainMesh.geometry.getAttribute('aTerrainMix');
+  const snow = terrainMesh.geometry.getAttribute('aSnowMask');
+  const uv1 = terrainMesh.geometry.getAttribute('uv1');
+  const idx = terrainMesh.geometry.getIndex()!;
+  assert.ok(pos.count >= 260_000, `Expected >= 260k terrain vertices, got ${pos.count}`);
+  assert.ok(idx.count / 3 >= 500_000, `Expected >= 500k terrain triangles, got ${idx.count / 3}`);
+  assert.ok(mix && mix.itemSize === 3, 'Expected vec3 aTerrainMix attribute on terrainMesh');
+  assert.ok(snow && snow.itemSize === 1, 'Expected float aSnowMask attribute on terrainMesh');
+  assert.ok(uv1, 'Expected uv1 attribute for terrain AO map');
+
+  let foundRiverPebble = false;
+  let foundValleyGrass = false;
+  let foundRockySlope = false;
+  let foundShoulderMix = false;
+
+  for (let i = 0; i < pos.count; i += 7) {
+    const wg = mix.getX(i);
+    const wp = mix.getY(i);
+    const wr = mix.getZ(i);
+    assert.ok(
+      Number.isFinite(wg) && Number.isFinite(wp) && Number.isFinite(wr),
+      `Non-finite terrainMix at vertex ${i}`,
+    );
+    assert.ok(wg >= -1e-5 && wp >= -1e-5 && wr >= -1e-5, `Negative terrainMix weight at vertex ${i}`);
+    assert.ok(Math.abs(wg + wp + wr - 1.0) < 0.01, `terrainMix weights must sum to 1 at vertex ${i}`);
+
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (Math.abs(x - getRiverCenterX(z)) < 4.5 && wp > 0.65) foundRiverPebble = true;
+    if (Math.abs(x + 40) < 12 && Math.abs(z - 60) < 12 && wg > 0.85) foundValleyGrass = true;
+    if ((z < -170 || r > 395) && wr > 0.45) foundRockySlope = true;
+    if (wp > 0.35 && wg > 0.15) foundShoulderMix = true;
+  }
+
+  assert.equal(foundRiverPebble, true, 'Expected river corridor vertices dominated by pebble layer');
+  assert.equal(foundValleyGrass, true, 'Expected valley meadow vertices dominated by grass layer');
+  assert.equal(foundRockySlope, true, 'Expected foothills/northern slopes dominated by weathered rock layer');
+  assert.equal(foundShoulderMix, true, 'Expected natural grass-pebble transition along shoulders/banks');
+
+  const tMat = terrainMesh.material as import('three').MeshStandardMaterial;
+  assert.ok(tMat.map && tMat.normalMap && tMat.roughnessMap && tMat.aoMap);
+
+  const himalayas = createSculptedHimalayas(mockTextures);
+  const hIdx = himalayas.geometry.getIndex()!;
+  const hMix = himalayas.geometry.getAttribute('aTerrainMix');
+  const hSnow = himalayas.geometry.getAttribute('aSnowMask');
+  const hMat = himalayas.material as import('three').MeshStandardMaterial;
+  assert.ok(hIdx.count / 3 >= 65_000, `Expected >= 65k Himalayan triangles, got ${hIdx.count / 3}`);
+  assert.ok(hMix && hSnow, 'Himalayas must expose aTerrainMix and aSnowMask');
+  assert.equal(himalayas.userData.skipNavMesh, true);
+  assert.ok(hMat.map && hMat.normalMap && hMat.roughnessMap && hMat.aoMap);
+});
+
+test('Procedural texture generator creates grass, pebble, and weathered rock PBR maps with valid sRGB and linear spaces', async () => {
+  const THREE = await import('three');
+  const { createProceduralTextures } = await import('./proceduralTextures');
+
+  const prevDoc = (globalThis as { document?: unknown }).document;
+  const makeMockCtx = (w: number, h: number) => {
+    const grad = { addColorStop() {} };
+    const base: Record<string, unknown> = {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      lineCap: 'butt',
+      lineJoin: 'miter',
+      font: '',
+      textAlign: 'left',
+      textBaseline: 'alphabetic',
+      globalAlpha: 1,
+      shadowColor: 'transparent',
+      shadowBlur: 0,
+      createLinearGradient: () => grad,
+      createRadialGradient: () => grad,
+      createPattern: () => ({}),
+      measureText: (t: string) => ({ width: t.length * 10 }),
+      createImageData: (iw: number, ih: number) => ({
+        width: iw,
+        height: ih,
+        data: new Uint8ClampedArray(iw * ih * 4),
+      }),
+      getImageData: (_sx: number, _sy: number, sw: number, sh: number) => ({
+        width: sw,
+        height: sh,
+        data: new Uint8ClampedArray(sw * sh * 4).fill(128),
+      }),
+      canvas: { width: w, height: h },
+    };
+    return new Proxy(base, {
+      get(target, prop) {
+        if (prop in target) return target[prop as string];
+        return () => {};
+      },
+      set(target, prop, value) {
+        target[prop as string] = value;
+        return true;
+      },
+    });
+  };
+
+  (globalThis as { document?: unknown }).document = {
+    createElement: (tag: string) => {
+      if (tag !== 'canvas') return {};
+      const c = {
+        width: 256,
+        height: 256,
+        getContext: () => makeMockCtx(c.width, c.height),
+      };
+      return c;
+    },
+  };
+
+  try {
+    const pbr = createProceduralTextures(4);
+    for (const colorTex of [pbr.meadowMap, pbr.pebbleMap, pbr.rockMap]) {
+      assert.ok(colorTex, 'Expected terrain albedo texture');
+      assert.equal(colorTex.colorSpace, THREE.SRGBColorSpace);
+    }
+    for (const linearTex of [
+      pbr.meadowNormal,
+      pbr.meadowRough,
+      pbr.meadowAo,
+      pbr.pebbleNormal,
+      pbr.pebbleRough,
+      pbr.pebbleAo,
+      pbr.rockNormal,
+      pbr.rockRough,
+      pbr.rockAo,
+    ]) {
+      assert.ok(linearTex, 'Expected terrain linear normal/roughness/AO texture');
+      assert.equal(linearTex.colorSpace, THREE.NoColorSpace);
+    }
+    pbr.dispose();
+  } finally {
+    if (prevDoc === undefined) {
+      delete (globalThis as { document?: unknown }).document;
+    } else {
+      (globalThis as { document?: unknown }).document = prevDoc;
+    }
+  }
+});
 
 

@@ -5,6 +5,8 @@ import {
   type SpatialAmbienceMix,
   type SpatialEmitterPanGain,
   type WeatherKind,
+  LANDMARK_APPROACH_CUE_SPECS,
+  computeLandmarkApproachCuePanAndGain,
   computeLumbiniAudioProfile,
   computeLumbiniSpatialAudioState,
 } from './worldLogic';
@@ -27,6 +29,13 @@ export interface LumbiniSpatialStatus {
   lastRustleEmitterId: string | null;
   birdEventCount: number;
   rustleEventCount: number;
+}
+
+export interface LandmarkApproachCueStatus {
+  lastLandmarkId: string | null;
+  lastMotifName: string | null;
+  lastPan: number;
+  cueCount: number;
 }
 
 class SoundEngine {
@@ -72,6 +81,10 @@ class SoundEngine {
   private lumbiniBirdEventCount = 0;
   private lumbiniRustleEventCount = 0;
   private pendingLeafBurstEmitter: { id: string; x: number; y: number; z: number } | null = null;
+  private lastApproachCueLandmarkId: string | null = null;
+  private lastApproachCueMotifName: string | null = null;
+  private lastApproachCuePan = 0;
+  private approachCueCount = 0;
 
   public isEnabled(): boolean {
     return this.enabled;
@@ -1146,6 +1159,115 @@ class SoundEngine {
     this.playTone(1056, 0.42, 'sine', 0.018);
   }
 
+  /**
+   * Plays a subtle, unique 3D-spatialized harmonic approach cue when the traveler enters
+   * the outer approach radius of an unexplored landmark for the first time.
+   */
+  public playLandmarkApproachCue(
+    landmarkId: string,
+    targetPos: { x: number; y: number; z: number },
+    cueRadius: number,
+    listener?: SpatialListenerPose,
+  ): boolean {
+    const ctx = this.ensureContext();
+    if (!ctx) return false;
+
+    if (listener) {
+      this.syncListenerPose(ctx, listener);
+    }
+
+    const spec =
+      LANDMARK_APPROACH_CUE_SPECS[landmarkId] ?? LANDMARK_APPROACH_CUE_SPECS['recruiter-beacon'];
+    const panGain = listener
+      ? computeLandmarkApproachCuePanAndGain(
+          listener.x,
+          listener.z,
+          listener.forwardX,
+          listener.forwardZ,
+          targetPos.x,
+          targetPos.z,
+          cueRadius,
+        )
+      : { pan: 0, distanceGain: 0.75, distance: cueRadius * 0.5 };
+
+    const spatialTarget: SpatialEmitterPanGain = {
+      emitter: {
+        id: `approach-${landmarkId}`,
+        kind: 'bird-canopy',
+        label: spec.motifName,
+        x: targetPos.x,
+        y: targetPos.y,
+        z: targetPos.z,
+        refDistance: 8,
+        maxDistance: Math.max(48, cueRadius * 1.5),
+        baseWeight: 1,
+        speciesHint: 'bulbul',
+      },
+      distance: panGain.distance,
+      distanceGain: panGain.distanceGain,
+      pan: panGain.pan,
+      weight: 1,
+    };
+
+    const { out, cleanup } = this.createLocalizedOut(ctx, ctx.destination, spatialTarget);
+    const t = ctx.currentTime;
+    const peakGain = spec.baseGain * (0.65 + panGain.distanceGain * 0.45);
+    let lastOsc: OscillatorNode | null = null;
+
+    for (let i = 0; i < spec.notesHz.length; i++) {
+      const start = t + i * spec.stepSec;
+      const freq = spec.notesHz[i];
+      const dur = spec.noteDurSec;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = spec.waveType;
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.0004, start);
+      gain.gain.linearRampToValueAtTime(peakGain * (1 - i * 0.08), start + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0003, start + dur);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(start);
+      osc.stop(start + dur + 0.04);
+
+      const shimmer = ctx.createOscillator();
+      const shimmerGain = ctx.createGain();
+      shimmer.type = 'sine';
+      shimmer.frequency.setValueAtTime(freq * spec.shimmerRatio, start);
+      shimmerGain.gain.setValueAtTime(0.0003, start);
+      shimmerGain.gain.linearRampToValueAtTime(peakGain * 0.24, start + 0.018);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.0002, start + dur * 0.58);
+      shimmer.connect(shimmerGain);
+      shimmerGain.connect(out);
+      shimmer.start(start);
+      shimmer.stop(start + dur * 0.62);
+
+      lastOsc = osc;
+    }
+
+    if (lastOsc) {
+      lastOsc.onended = cleanup;
+    } else {
+      cleanup();
+    }
+
+    this.lastApproachCueLandmarkId = landmarkId;
+    this.lastApproachCueMotifName = spec.motifName;
+    this.lastApproachCuePan = panGain.pan;
+    this.approachCueCount++;
+    return true;
+  }
+
+  public getApproachCueStatus(): LandmarkApproachCueStatus {
+    return {
+      lastLandmarkId: this.lastApproachCueLandmarkId,
+      lastMotifName: this.lastApproachCueMotifName,
+      lastPan: this.lastApproachCuePan,
+      cueCount: this.approachCueCount,
+    };
+  }
+
   public playClick(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
@@ -1275,6 +1397,10 @@ class SoundEngine {
     this.leafRustleBuffer = null;
     this.lumbiniSpatialState = null;
     this.pendingLeafBurstEmitter = null;
+    this.lastApproachCueLandmarkId = null;
+    this.lastApproachCueMotifName = null;
+    this.lastApproachCuePan = 0;
+    this.approachCueCount = 0;
     this.windStarted = false;
   }
 }
