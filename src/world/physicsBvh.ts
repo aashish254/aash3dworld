@@ -1081,16 +1081,30 @@ export class StaticPhysicsWorld {
 
   private extractMesh(mesh: THREE.Mesh): void {
     if (!mesh.geometry || !isMaterialCollidable(mesh.material)) return;
-    const pos = mesh.geometry.getAttribute('position');
-    if (!pos || pos.count < 3) return;
-
     const isTerrainGrid = Boolean(mesh.userData?.terrainGrid);
     const skipNavMesh = Boolean(mesh.userData?.skipNavMesh);
     const skipNavSubdiv = isTerrainGrid || Boolean(mesh.userData?.skipNavSubdiv);
+    this.extractGeometryTriangles(
+      mesh.geometry,
+      mesh.matrixWorld,
+      isTerrainGrid,
+      skipNavMesh,
+      skipNavSubdiv,
+    );
+  }
 
-    const matWorld = mesh.matrixWorld;
+  private extractGeometryTriangles(
+    geometry: THREE.BufferGeometry,
+    matWorld: THREE.Matrix4,
+    isTerrainGrid: boolean,
+    skipNavMesh: boolean,
+    skipNavSubdiv: boolean,
+  ): void {
+    const pos = geometry.getAttribute('position');
+    if (!pos || pos.count < 3) return;
+
     const detSign = matWorld.determinant() < 0 ? -1 : 1;
-    const index = mesh.geometry.getIndex();
+    const index = geometry.getIndex();
     const triCount = index ? Math.floor(index.count / 3) : Math.floor(pos.count / 3);
     if (triCount <= 0) return;
 
@@ -1145,7 +1159,7 @@ export class StaticPhysicsWorld {
     }
 
     if (isTerrainGrid && !skipNavMesh) {
-      const normAttr = mesh.geometry.getAttribute('normal');
+      const normAttr = geometry.getAttribute('normal');
       for (let vi = 0; vi < pos.count; vi++) {
         const lx = pos.getX(vi);
         const ly = pos.getY(vi);
@@ -1182,6 +1196,8 @@ export class StaticPhysicsWorld {
     const localBb = inst.geometry.boundingBox;
     if (!localBb) return;
 
+    const skipNavMesh = Boolean(inst.userData?.skipNavMesh);
+    const isBoxGeo = inst.geometry.type === 'BoxGeometry';
     const baseRadiusXZ = computeLowTrunkRadiusXZ(inst.geometry, 2.2);
     const localCenterX = (localBb.min.x + localBb.max.x) * 0.5;
     const localCenterZ = (localBb.min.z + localBb.max.z) * 0.5;
@@ -1194,7 +1210,19 @@ export class StaticPhysicsWorld {
       const me = _worldInstMat.elements;
       const sx = Math.hypot(me[0], me[1], me[2]);
       const sz = Math.hypot(me[8], me[9], me[10]);
+      const minScaleXZ = Math.max(1e-4, Math.min(sx, sz));
       const maxScaleXZ = Math.max(sx, sz);
+
+      if (isBoxGeo || maxScaleXZ / minScaleXZ > 1.8) {
+        this.extractGeometryTriangles(
+          inst.geometry,
+          _worldInstMat,
+          false,
+          skipNavMesh,
+          true,
+        );
+        continue;
+      }
 
       _localPos.set(localCenterX, localBb.min.y, localCenterZ);
       _worldPos.copy(_localPos).applyMatrix4(_worldInstMat);

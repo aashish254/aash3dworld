@@ -74,14 +74,14 @@ function makeCanvas(width: number, height: number): [HTMLCanvasElement, CanvasRe
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   return [canvas, ctx];
 }
 
 function heightToNormalCanvas(heightCanvas: HTMLCanvasElement, strength = 2.4): HTMLCanvasElement {
   const w = heightCanvas.width;
   const h = heightCanvas.height;
-  const hCtx = heightCanvas.getContext('2d')!;
+  const hCtx = heightCanvas.getContext('2d', { willReadFrequently: true })!;
   const src = hCtx.getImageData(0, 0, w, h).data;
 
   const [outCanvas, outCtx] = makeCanvas(w, h);
@@ -140,7 +140,7 @@ function heightToAoCanvas(
 ): HTMLCanvasElement {
   const w = heightCanvas.width;
   const h = heightCanvas.height;
-  const hCtx = heightCanvas.getContext('2d')!;
+  const hCtx = heightCanvas.getContext('2d', { willReadFrequently: true })!;
   const src = hCtx.getImageData(0, 0, w, h).data;
 
   const [outCanvas, outCtx] = makeCanvas(w, h);

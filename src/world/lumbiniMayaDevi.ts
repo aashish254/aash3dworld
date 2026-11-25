@@ -104,9 +104,10 @@ export function buildMayaDeviTemple(
     const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH, frameDepth), mats.darkMetalMat);
     jamb.position.set(side * (doorHalfW - 0.05), doorH * 0.5, D * 0.5 - wallT * 0.5);
     group.add(jamb);
-    // Open sliding grille/teak gate leaves tucked against inner jambs
-    const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.12, doorH - 0.18, 1.35), mats.darkMetalMat);
-    doorLeaf.position.set(side * (doorHalfW - 0.16), (doorH - 0.18) * 0.5 + 0.09, D * 0.5 - wallT - 0.72);
+    // Open sliding grille/teak gate leaves tucked flush inside jambs (non-snagging)
+    const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.10, doorH - 0.18, 1.25), mats.darkMetalMat);
+    doorLeaf.position.set(side * (doorHalfW - 0.10), (doorH - 0.18) * 0.5 + 0.09, D * 0.5 - wallT - 0.68);
+    doorLeaf.userData.nonCollidable = true;
     group.add(doorLeaf);
   }
   const headFrame = new THREE.Mesh(new THREE.BoxGeometry(doorHalfW * 2 + 0.18, 0.18, frameDepth), mats.darkMetalMat);
@@ -153,11 +154,13 @@ export function buildMayaDeviTemple(
     }
   }
 
-  // Build piers between window bays + recessed dark reflective glass + grey metal multi-pane mullions
+  // Build piers between window bays + recessed translucent reflective glass + grey metal multi-pane mullions
   const windowGlassMat = new THREE.MeshPhysicalMaterial({
-    color: 0x1c2733,
+    color: 0x203140,
     roughness: 0.14,
-    metalness: 0.25,
+    metalness: 0.22,
+    transparent: true,
+    opacity: 0.44,
     clearcoat: 0.9,
     clearcoatRoughness: 0.08,
     side: THREE.DoubleSide,
@@ -581,8 +584,9 @@ export function buildMayaDeviTemple(
     group.add(crossBeam);
   }
   for (const side of [-1, 1]) {
-    const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.18, doorH - 0.2, 0.24), salBeamMat);
-    innerSalTrim.position.set(side * (doorHalfW + 0.04), (doorH - 0.2) * 0.5, D * 0.5 - wallT - 0.12);
+    const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH - 0.2, 0.22), salBeamMat);
+    innerSalTrim.position.set(side * (doorHalfW + 0.06), (doorH - 0.2) * 0.5, D * 0.5 - wallT - 0.12);
+    innerSalTrim.userData.nonCollidable = true;
     group.add(innerSalTrim);
   }
 
@@ -613,18 +617,43 @@ export function buildMayaDeviTemple(
     group.add(topBar, glassPanel);
   }
 
-  // Sunken 21-Chamber Mauryan / Ashokan Brick Ruins inside the pit (y: -0.35 -> +0.58)
+  // Staggered Archaeological Mauryan / Gupta Multi-Course Brick Chambers inside the sunken pit (y: -0.35 -> +0.58)
   const ruinWalls: THREE.Matrix4[] = [];
-  for (let gx = -7.2; gx <= 7.21; gx += 2.4) {
-    _v3.set(gx, 0.06, 0);
+  const nsWallSegs: Array<[number, number, number, number, number]> = [
+    [-6.6, -2.5, 0.46, 0.94, 4.4],
+    [-6.6, 2.7, 0.46, 0.76, 4.0],
+    [-4.3, -1.8, 0.44, 1.02, 5.2],
+    [-4.3, 3.0, 0.44, 0.72, 3.4],
+    [-2.2, -3.2, 0.42, 0.88, 2.8],
+    [-2.2, 2.6, 0.42, 0.80, 4.2],
+    [2.2, -3.1, 0.42, 0.92, 3.0],
+    [2.2, 2.5, 0.42, 0.84, 4.4],
+    [4.3, -1.9, 0.44, 1.00, 5.0],
+    [4.3, 2.9, 0.44, 0.74, 3.6],
+    [6.6, -2.4, 0.46, 0.90, 4.6],
+    [6.6, 2.8, 0.46, 0.78, 3.8],
+  ];
+  for (const [rx, rz, rw, rh, rd] of nsWallSegs) {
+    _v3.set(rx, -0.35 + rh * 0.5, rz);
     _q.identity();
-    _s.set(0.42, 0.86, 9.6);
+    _s.set(rw, rh, rd);
     ruinWalls.push(new THREE.Matrix4().compose(_v3, _q, _s));
   }
-  for (let gz = -4.2; gz <= 4.21; gz += 2.1) {
-    _v3.set(0, 0.02, gz);
+  const ewWallSegs: Array<[number, number, number, number, number]> = [
+    [-5.5, -4.1, 2.8, 0.86, 0.44],
+    [5.5, -4.1, 2.8, 0.88, 0.44],
+    [-5.4, -1.2, 2.6, 0.92, 0.42],
+    [5.4, -1.2, 2.6, 0.94, 0.42],
+    [-5.6, 1.6, 2.9, 0.78, 0.44],
+    [5.6, 1.6, 2.9, 0.82, 0.44],
+    [-4.8, 4.1, 4.4, 0.70, 0.46],
+    [4.8, 4.1, 4.4, 0.74, 0.46],
+    [0.0, 2.8, 4.6, 0.64, 0.42],
+  ];
+  for (const [rx, rz, rw, rh, rd] of ewWallSegs) {
+    _v3.set(rx, -0.35 + rh * 0.5, rz);
     _q.identity();
-    _s.set(15.2, 0.78, 0.42);
+    _s.set(rw, rh, rd);
     ruinWalls.push(new THREE.Matrix4().compose(_v3, _q, _s));
   }
   const ruinInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinWalls.length);
@@ -633,6 +662,7 @@ export function buildMayaDeviTemple(
   ruinInst.computeBoundingSphere();
   ruinInst.castShadow = true;
   ruinInst.receiveShadow = true;
+  ruinInst.userData.nonCollidable = true;
   group.add(ruinInst);
 
   // Sacred Marker Stone (conglomerate stone slab under bulletproof glass shrine in pit center!)
@@ -685,18 +715,18 @@ export function buildMayaDeviTemple(
   reliefAltar.add(altarPlinth, reliefBacking, reliefPanel, innerSiddhartha, diyoL, diyoR);
   group.add(reliefAltar);
 
-  // 4 Corner Sukunda Brass Butter Lamps along inner viewing boardwalk corners with gentle flicker
+  // 4 Corner Sukunda Brass Butter Lamps along inner viewing boardwalk corners with pooled flicker metadata
   const cornerLampRig = new THREE.Group();
   cornerLampRig.userData.noMerge = true;
   cornerLampRig.userData.nonCollidable = true;
-  const cornerLampLights: THREE.PointLight[] = [];
   const cornerLamps: THREE.Object3D[] = [];
-  for (const [lx, lz] of [
+  const cornerSpecs: Array<[number, number]> = [
     [-8.4, -4.9],
     [8.4, -4.9],
     [-8.4, 4.9],
     [8.4, 4.9],
-  ] as Array<[number, number]>) {
+  ];
+  cornerSpecs.forEach(([lx, lz], idx) => {
     const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.21, 0.34, 10), mats.warmBronzeMat);
     ped.position.set(lx, walkY + 0.17, lz);
     const lamp = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.62, true);
@@ -704,21 +734,20 @@ export function buildMayaDeviTemple(
     lamp.userData.nonCollidable = true;
     cornerLampRig.add(ped, lamp);
     cornerLamps.push(lamp);
-    if (lz > 0) {
-      const lgt = new THREE.PointLight(0xffb454, 1.35, 11.0, 1.5);
-      lgt.position.set(lx, walkY + 0.72, lz);
-      beaconLights.push(lgt);
-      cornerLampRig.add(lgt);
-      cornerLampLights.push(lgt);
-    }
-  }
+
+    const lgt = new THREE.PointLight(0xffb454, 1.45, 11.5, 1.45);
+    lgt.position.set(lx, walkY + 0.72, lz);
+    lgt.userData.flickerPhase = idx * 1.65;
+    lgt.userData.flickerAmp = 0.22;
+    lgt.userData.intensityScale = 1.45;
+    lgt.userData.warmFlicker = true;
+    lgt.userData.interiorSanctum = true;
+    beaconLights.push(lgt);
+    cornerLampRig.add(lgt);
+  });
   cornerLampRig.userData.onFlickerUpdate = (t: number) => {
-    for (let i = 0; i < cornerLampLights.length; i++) {
-      const pulse = Math.sin(t * 7.2 + i * 2.1) * 0.16 + Math.sin(t * 13.7 + i) * 0.08;
-      cornerLampLights[i].intensity = 1.25 + pulse;
-    }
     for (let i = 0; i < cornerLamps.length; i++) {
-      const s = 0.61 + Math.sin(t * 8.4 + i * 1.9) * 0.025;
+      const s = 0.61 + Math.sin(t * 8.4 + i * 1.9) * 0.03 + Math.sin(t * 14.3 + i) * 0.014;
       cornerLamps[i].scale.set(0.62, s, 0.62);
     }
   };
@@ -788,9 +817,27 @@ export function buildMayaDeviTemple(
   group.add(dustMotes);
   animatedNodes.push(dustMotes);
 
+  // Soft Volumetric Golden Skylight Beams descending onto the Marker Stone sanctum
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffdf9e,
+    transparent: true,
+    opacity: 0.055,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const skylightCone = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 4.6, 6.2, 20, 1, true), beamMat);
+  skylightCone.position.set(0, 3.6, -0.35);
+  skylightCone.userData.nonCollidable = true;
+  group.add(skylightCone);
+
   // Warm Architectural Sanctuary Spotlight illuminating the Marker Stone & sunken Mauryan ruins
   const sanctumLight = new THREE.PointLight(0xffcf87, 4.2, 25, 1.15);
   sanctumLight.position.set(0, 5.4, -0.6);
+  sanctumLight.userData.intensityScale = 2.4;
+  sanctumLight.userData.flickerAmp = 0.06;
+  sanctumLight.userData.warmFlicker = true;
+  sanctumLight.userData.interiorSanctum = true;
   beaconLights.push(sanctumLight);
   group.add(sanctumLight);
 

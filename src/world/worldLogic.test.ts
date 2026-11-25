@@ -2181,5 +2181,125 @@ test('SoundEngine triggers localized 3D forest bird chirps and Lumbini pond cric
   }
 });
 
+test('Lumbini StaticPhysicsWorld BVH allows uninterrupted walk from South Bridge through Torana around Baby Buddha up ramp and around Maya Devi interior boardwalk', async () => {
+  const THREE = await import('three');
+  const { createLumbiniBuddha } = await import('./lumbiniTemple');
+  const { StaticPhysicsWorld } = await import('./physicsBvh');
+  const {
+    createDioramaTerrain,
+    createLumbiniPeaceParkland,
+  } = await import('./mountainAndTerrain');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    {
+      meadowMap: tex,
+      meadowNormal: tex,
+      meadowRough: tex,
+      createSignTexture: () => tex,
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const built = createLumbiniBuddha(mockTextures, true);
+  built.group.position.set(-210, 0, 96);
+  const parkland = createLumbiniPeaceParkland(mockTextures);
+
+  const root = new THREE.Group();
+  root.add(terrainMesh, built.group, parkland.group);
+  root.updateMatrixWorld(true);
+
+  const bvh = new StaticPhysicsWorld();
+  bvh.buildFromScene(root);
+
+  // Verify no hedge or thin box InstancedMesh created a giant > 3m radius circular collider near South Torana
+  const waypoints: Array<[number, number]> = [
+    [-210.0, 152.0], // South Sacred Bridge
+    [-210.0, 146.0], // Through South Torana gate
+    [-210.0, 140.5], // South Axial Forecourt
+    [-215.5, 138.0], // Around Baby Buddha monument West flank
+    [-215.5, 112.5], // Pushkarini Overlook Causeway
+    [-210.0, 100.0], // Cross Promenade -> Maya Devi Forecourt
+    [-210.0, 94.0],  // Base of Maya Devi South Ramp
+    [-210.0, 82.0],  // Inside Maya Devi South Gallery
+    [-222.5, 82.0],  // SW Interior corner
+    [-222.5, 65.5],  // NW Interior corner
+    [-210.0, 65.5],  // North Nativity Relief overlook
+    [-197.5, 65.5],  // NE Interior corner
+    [-197.5, 82.0],  // SE Interior corner
+  ];
+
+  let px = -210.0;
+  let pz = 158.5;
+  let py = getSurfaceHeightAt(px, pz);
+
+  for (const [tx, tz] of waypoints) {
+    for (let step = 0; step < 60; step++) {
+      const dx = tx - px;
+      const dz = tz - pz;
+      const dist = Math.hypot(dx, dz);
+      if (dist <= 0.45) break;
+      const moveLen = Math.min(0.45, dist);
+      const nx = px + (dx / dist) * moveLen;
+      const nz = pz + (dz / dist) * moveLen;
+      const clamped = clampToWalkable(px, pz, nx, nz);
+      const resolved = bvh.resolveHorizontalCollision(px, pz, clamped.x, clamped.z, py, 1.75, 0.4, 0.26);
+      px = resolved.x;
+      pz = resolved.z;
+      const bvhY = bvh.sampleFloorHeight(px, pz, py + 0.34);
+      py = Math.max(getSurfaceHeightAt(px, pz), bvhY ?? 0);
+    }
+    const err = Math.hypot(tx - px, tz - pz);
+    assert.ok(err <= 0.65, `Failed to reach waypoint (${tx}, ${tz}), stopped at (${px.toFixed(2)}, ${pz.toFixed(2)}), err=${err.toFixed(2)}`);
+  }
+  assert.ok(py >= 1.20, `Expected interior boardwalk elevation >= 1.20m, got ${py.toFixed(2)}`);
+});
+
+test('Footprint decal ring-buffer pool and meditation butterfly flocking update deterministically', async () => {
+  const {
+    createFootprintDecalPool,
+    recordFootprintDecal,
+    computeFootprintDecalAlpha,
+    stepFootprintDecalPool,
+    createMeditationButterflyStates,
+    stepMeditationButterflies,
+  } = await import('./worldLogic');
+
+  const pool = createFootprintDecalPool(8);
+  assert.equal(pool.slots.length, 8);
+  for (let i = 0; i < 10; i++) {
+    recordFootprintDecal(pool, -210, 0.35, 112 - i * 0.6, Math.PI, i % 2 === 0 ? 1 : -1, 'stone');
+  }
+  assert.equal(pool.totalSpawned, 10);
+  const activeBefore = stepFootprintDecalPool(pool, 0.5);
+  assert.equal(activeBefore, 8);
+  const sampleAlpha = computeFootprintDecalAlpha(0.5, 8.2);
+  assert.ok(sampleAlpha > 0.5 && sampleAlpha <= 0.66);
+  const expiredAlpha = computeFootprintDecalAlpha(9.0, 8.2);
+  assert.equal(expiredAlpha, 0);
+  const activeAfterExpire = stepFootprintDecalPool(pool, 9.0);
+  assert.equal(activeAfterExpire, 0);
+
+  const butterflies = createMeditationButterflyStates(16);
+  assert.equal(butterflies.length, 16);
+  const medX = -234.0;
+  const medY = 0.55;
+  const medZ = 112.5;
+  const avgDistBefore =
+    butterflies.reduce((sum, b) => sum + Math.hypot(b.x - medX, b.z - medZ), 0) / butterflies.length;
+  for (let s = 0; s < 45; s++) {
+    stepMeditationButterflies(butterflies, 0.05, s * 0.05, true, medX, medY, medZ);
+  }
+  const avgDistAfter =
+    butterflies.reduce((sum, b) => sum + Math.hypot(b.x - medX, b.z - medZ), 0) / butterflies.length;
+  assert.ok(
+    avgDistAfter < avgDistBefore * 0.55 && avgDistAfter < 3.5,
+    `Expected butterflies to flock around meditating player (${avgDistBefore.toFixed(1)} -> ${avgDistAfter.toFixed(1)})`,
+  );
+});
+
+
 
 

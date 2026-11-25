@@ -1109,7 +1109,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
 
       // 3. 2003 Maya Devi Temple (center 0, -22.0, 36m x 24m): outer walls & sunken pit blocked; South ramp, doorway & interior boardwalk loop open
       if (Math.abs(ldx) <= 18.6 && ldz >= -34.6 && ldz <= -9.4) {
-        const inDoorway = Math.abs(ldx) <= 1.55 && ldz >= -12.8 && ldz <= -9.3;
+        const inDoorway = Math.abs(ldx) <= 1.65 && ldz >= -12.8 && ldz <= -9.3;
         const inBoardwalk =
           Math.abs(ldx) <= 16.85 &&
           ldz >= -32.85 &&
@@ -4804,3 +4804,187 @@ export function computeContextualWorldAction(
 
   return null;
 }
+
+export interface FootprintDecalSlot {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  side: -1 | 1;
+  age: number;
+  maxAge: number;
+  surfaceKind: FootstepSurfaceKind;
+  active: boolean;
+}
+
+export interface FootprintDecalPoolState {
+  slots: FootprintDecalSlot[];
+  cursor: number;
+  totalSpawned: number;
+}
+
+export function createFootprintDecalPool(capacity = 48): FootprintDecalPoolState {
+  const safeCap = Math.max(8, Math.floor(capacity));
+  const slots: FootprintDecalSlot[] = Array.from({ length: safeCap }, () => ({
+    x: 0,
+    y: -999,
+    z: 0,
+    yaw: 0,
+    side: 1,
+    age: 0,
+    maxAge: 7.5,
+    surfaceKind: 'stone' as FootstepSurfaceKind,
+    active: false,
+  }));
+  return { slots, cursor: 0, totalSpawned: 0 };
+}
+
+export function recordFootprintDecal(
+  pool: FootprintDecalPoolState,
+  playerX: number,
+  playerY: number,
+  playerZ: number,
+  playerYaw: number,
+  side: -1 | 1,
+  surfaceKind: FootstepSurfaceKind,
+): FootprintDecalSlot {
+  const cosY = Math.cos(playerYaw);
+  const sinY = Math.sin(playerYaw);
+  const lateralOffset = side * 0.16;
+  const idx = pool.cursor;
+  pool.cursor = (pool.cursor + 1) % pool.slots.length;
+  pool.totalSpawned += 1;
+
+  const slot = pool.slots[idx];
+  slot.x = playerX + cosY * lateralOffset;
+  slot.y = playerY + 0.015;
+  slot.z = playerZ - sinY * lateralOffset;
+  slot.yaw = playerYaw;
+  slot.side = side;
+  slot.age = 0;
+  slot.maxAge = surfaceKind === 'wood' ? 4.8 : surfaceKind === 'grass' ? 6.8 : 8.2;
+  slot.surfaceKind = surfaceKind;
+  slot.active = true;
+  return slot;
+}
+
+export function computeFootprintDecalAlpha(age: number, maxAge: number): number {
+  if (maxAge <= 0 || age >= maxAge || age < 0) return 0;
+  const t = age / maxAge;
+  const holdFade = t < 0.28 ? 1 : 1 - (t - 0.28) / 0.72;
+  return Math.max(0, Math.min(1, holdFade * holdFade * 0.66));
+}
+
+export function stepFootprintDecalPool(
+  pool: FootprintDecalPoolState,
+  dt: number,
+): number {
+  let activeCount = 0;
+  for (let i = 0; i < pool.slots.length; i++) {
+    const slot = pool.slots[i];
+    if (!slot.active) continue;
+    slot.age += dt;
+    if (slot.age >= slot.maxAge) {
+      slot.active = false;
+      slot.y = -999;
+      continue;
+    }
+    activeCount += 1;
+  }
+  return activeCount;
+}
+
+export interface MeditationButterflyState {
+  homeX: number;
+  homeY: number;
+  homeZ: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  flapPhase: number;
+  flapRate: number;
+  orbitRadius: number;
+  orbitAngle: number;
+  orbitSpeed: number;
+  colorIndex: number;
+}
+
+const LUMBINI_BUTTERFLY_ANCHORS: ReadonlyArray<[number, number, number]> = [
+  [-234.0, 1.8, 112.5], // Bodhi Tree Chautara
+  [-210.0, 2.0, 128.0], // South Forecourt & Marigold Beds
+  [-200.0, 1.5, 112.5], // Pushkarini Sacred Pond edge
+  [-210.0, 2.2, 87.5], // Maya Devi South Promenade & Forecourt
+  [-184.0, 1.9, 116.0], // Eternal Peace Flame garden
+];
+
+export function createMeditationButterflyStates(
+  count = 28,
+): MeditationButterflyState[] {
+  const safeCount = Math.max(4, Math.floor(count));
+  const out: MeditationButterflyState[] = [];
+  for (let i = 0; i < safeCount; i++) {
+    const anchor = LUMBINI_BUTTERFLY_ANCHORS[i % LUMBINI_BUTTERFLY_ANCHORS.length];
+    const angle = (i * 2.399963) % (Math.PI * 2);
+    const orbitRadius = 1.15 + ((i * 19) % 100) / 34;
+    const homeY = anchor[1] + ((i * 29) % 100) / 85;
+    const x = anchor[0] + Math.cos(angle) * orbitRadius;
+    const z = anchor[2] + Math.sin(angle) * orbitRadius;
+    out.push({
+      homeX: anchor[0],
+      homeY,
+      homeZ: anchor[2],
+      x,
+      y: homeY,
+      z,
+      yaw: angle + Math.PI * 0.5,
+      flapPhase: (i * 0.91) % (Math.PI * 2),
+      flapRate: 8.6 + ((i * 13) % 10) * 0.45,
+      orbitRadius,
+      orbitAngle: angle,
+      orbitSpeed: (0.48 + ((i * 7) % 11) * 0.055) * (i % 2 === 0 ? 1 : -1),
+      colorIndex: i % 5,
+    });
+  }
+  return out;
+}
+
+export function stepMeditationButterflies(
+  states: MeditationButterflyState[],
+  dt: number,
+  elapsed: number,
+  isMeditating: boolean,
+  meditateX: number,
+  meditateY: number,
+  meditateZ: number,
+): void {
+  const clampedDt = Math.min(0.08, Math.max(0.001, dt));
+  const lerpAlpha = 1 - Math.exp(-(isMeditating ? 2.1 : 1.35) * clampedDt);
+  for (let i = 0; i < states.length; i++) {
+    const b = states[i];
+    b.orbitAngle += b.orbitSpeed * (isMeditating ? 1.35 : 1.0) * clampedDt;
+    b.flapPhase += b.flapRate * (isMeditating ? 1.15 : 1.0) * clampedDt;
+
+    const ringRadius = isMeditating ? 0.95 + (i % 5) * 0.44 : b.orbitRadius;
+    const centerX = isMeditating ? meditateX : b.homeX;
+    const centerY = isMeditating
+      ? meditateY + 0.95 + (i % 4) * 0.36 + Math.sin(elapsed * 1.9 + i) * 0.24
+      : b.homeY + Math.sin(elapsed * 1.6 + i * 1.1) * 0.34;
+    const centerZ = isMeditating ? meditateZ : b.homeZ;
+
+    const targetX = centerX + Math.cos(b.orbitAngle) * ringRadius;
+    const targetZ = centerZ + Math.sin(b.orbitAngle) * ringRadius;
+    const dx = targetX - b.x;
+    const dz = targetZ - b.z;
+    b.x += dx * lerpAlpha;
+    b.y += (centerY - b.y) * lerpAlpha;
+    b.z += dz * lerpAlpha;
+
+    if (Math.hypot(dx, dz) > 0.002) {
+      const targetYaw = Math.atan2(dx, dz);
+      const yawDiff = Math.atan2(Math.sin(targetYaw - b.yaw), Math.cos(targetYaw - b.yaw));
+      b.yaw += yawDiff * (1 - Math.exp(-8 * clampedDt));
+    }
+  }
+}
+

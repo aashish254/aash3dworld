@@ -86,7 +86,7 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  return [c, c.getContext('2d')!];
+  return [c, c.getContext('2d', { willReadFrequently: true })!];
 }
 
 function seededNoise(x: number, y: number, seed = 17): number {
@@ -97,7 +97,7 @@ function seededNoise(x: number, y: number, seed = 17): number {
 function heightCanvasToNormal(heightCanvas: HTMLCanvasElement, strength = 2.4): HTMLCanvasElement {
   const w = heightCanvas.width;
   const h = heightCanvas.height;
-  const src = heightCanvas.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const src = heightCanvas.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h).data;
   const [out, outCtx] = makeCanvas(w, h);
   const img = outCtx.createImageData(w, h);
   const dst = img.data;
@@ -136,7 +136,7 @@ function heightCanvasToNormal(heightCanvas: HTMLCanvasElement, strength = 2.4): 
 function heightCanvasToAo(heightCanvas: HTMLCanvasElement, radius = 3, strength = 1.6, floorMin = 92): HTMLCanvasElement {
   const w = heightCanvas.width;
   const h = heightCanvas.height;
-  const src = heightCanvas.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const src = heightCanvas.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h).data;
   const [out, outCtx] = makeCanvas(w, h);
   const img = outCtx.createImageData(w, h);
   const dst = img.data;
@@ -172,18 +172,19 @@ function toTex(
   repX = 1,
   repY = 1,
   clamp = false,
+  maxAnisotropy = 4,
 ): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   tex.wrapS = clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
   tex.wrapT = clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
   tex.repeat.set(repX, repY);
-  tex.anisotropy = 4;
+  tex.anisotropy = Math.min(16, Math.max(1, maxAnisotropy));
   tex.needsUpdate = true;
   return tex;
 }
 
-export function createLumbiniTextures(): LumbiniTextureSet {
+export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   // 1. Weathered Maurya Archaeological Terracotta Brick (Ruins, Foundation Plinths, Pushkarini Stepped Ghats)
   const [brickC, brickCtx] = makeCanvas(512, 512);
   const [brickH, brickHCtx] = makeCanvas(512, 512);
@@ -839,6 +840,11 @@ export function createLumbiniTextures(): LumbiniTextureSet {
   const salWoodNormal = toTex(heightCanvasToNormal(swH, 1.85), false, 2, 2);
   const salWoodRough = toTex(swR, false, 2, 2);
   allTex.push(salWoodMap, salWoodNormal, salWoodRough);
+
+  const clampedAniso = Math.min(16, Math.max(1, maxAnisotropy));
+  for (const t of allTex) {
+    t.anisotropy = clampedAniso;
+  }
 
   return {
     mauryaBrickMap,

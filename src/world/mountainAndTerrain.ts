@@ -2414,7 +2414,7 @@ export function createInstancedFoliage(
           .replace(
             '#include <color_fragment>',
             `#include <color_fragment>
-             float crownGrad = mix(0.68, 1.22, smoothstep(0.0, 1.0, vCanopyHeight));
+             float crownGrad = mix(0.86, 1.24, smoothstep(0.0, 1.0, vCanopyHeight));
              diffuseColor.rgb *= crownGrad;
              diffuseColor.rgb += vec3(0.04, 0.03, 0.01) * vCanopyHeight;`,
           );

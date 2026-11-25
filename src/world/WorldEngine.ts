@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -10,11 +11,13 @@ import {
   ContextualWorldAction,
   CustomWaypoint,
   FootstepSurfaceKind,
+  FootprintDecalPoolState,
   GLACIAL_LAKE,
   GraphicsQualityPreset,
   LUMBINI_PEACE_CANAL,
   LUMBINI_SACRED_POND,
   LumbiniAmbiencePreset,
+  MeditationButterflyState,
   OUTER_TEMPLE_ARTIFACT_SPOTS,
   OuterTempleArtifactSpot,
   SPAWN_POSITION,
@@ -27,10 +30,13 @@ import {
   computeAtmosphereParticleProfile,
   computeContextualWorldAction,
   computeEffectiveLightingState,
+  computeFootprintDecalAlpha,
   computeLumbiniAudioProfile,
   computeLumbiniFireflyIntensity,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
+  createFootprintDecalPool,
+  createMeditationButterflyStates,
   findFirstUnexploredLandmarkApproach,
   findNearestLandmark,
   findWaterEdgeRippleOrigin,
@@ -46,6 +52,9 @@ import {
   isOnBridgeDeck,
   isOnLumbiniCanalBridge,
   isOnLumbiniSacredBridge,
+  recordFootprintDecal,
+  stepFootprintDecalPool,
+  stepMeditationButterflies,
   stepPrayerWheelSpin,
 } from './worldLogic';
 import { LumbiniFireflySystem } from './lumbiniFireflies';
@@ -188,11 +197,14 @@ export class WorldEngine {
   private callbacks: WorldEngineCallbacks;
   private renderer!: THREE.WebGLRenderer;
   private composer: EffectComposer | null = null;
+  private composerDepthTex: THREE.DepthTexture | null = null;
+  private gtaoPass: GTAOPass | null = null;
   private bloomPass: UnrealBloomPass | null = null;
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private textures!: ProceduralTextureSet;
   private isSoftwareGl = false;
+  private renderFrameCount = 0;
   private emissiveRegistry: Array<{ mat: THREE.MeshStandardMaterial; baseIntensity: number }> = [];
 
   private sunLight!: THREE.DirectionalLight;
@@ -228,6 +240,7 @@ export class WorldEngine {
     flickerAmp: number;
     intensityScale: number;
     warmFlicker: boolean;
+    interiorSanctum: boolean;
   }> = [];
   private pooledPointLights: THREE.PointLight[] = [];
   private animatedLandmarkNodes: THREE.Object3D[] = [];
@@ -283,6 +296,22 @@ export class WorldEngine {
   private fsActive = false;
   private footstepBurstCount = 0;
   private lastFootstepStrideIdx = -1;
+
+  private footprintPool: FootprintDecalPoolState = createFootprintDecalPool(48);
+  private footprintInst!: THREE.InstancedMesh;
+  private footprintGeo!: THREE.PlaneGeometry;
+  private footprintMat!: THREE.MeshBasicMaterial;
+  private footprintTex!: THREE.CanvasTexture;
+  private footprintDummy = new THREE.Object3D();
+  private footprintColorTmp = new THREE.Color();
+
+  private butterflyStates: MeditationButterflyState[] = createMeditationButterflyStates(28);
+  private butterflyWingInst!: THREE.InstancedMesh;
+  private butterflyWingGeo!: THREE.BufferGeometry;
+  private butterflyWingMat!: THREE.MeshStandardMaterial;
+  private butterflyRootDummy = new THREE.Object3D();
+  private butterflyWingDummy = new THREE.Object3D();
+  private butterflyMat4Tmp = new THREE.Matrix4();
 
   private worldBurstPoints!: THREE.Points;
   private worldBurstGeo!: THREE.BufferGeometry;
@@ -399,6 +428,8 @@ export class WorldEngine {
     this.lumbiniFireflies = new LumbiniFireflySystem();
     this.scene.add(this.lumbiniFireflies.points);
     this.buildFootstepParticles();
+    this.buildFootprintDecals();
+    this.buildMeditationButterflies();
     this.buildWorldBurstParticles();
     this.buildCharacter();
     this.buildPhysicsBvhAndSnapAssets();
@@ -430,6 +461,7 @@ export class WorldEngine {
         flickerAmp: typeof light.userData.flickerAmp === 'number' ? light.userData.flickerAmp : 0,
         intensityScale: typeof light.userData.intensityScale === 'number' ? light.userData.intensityScale : 1,
         warmFlicker: Boolean(light.userData.warmFlicker),
+        interiorSanctum: Boolean(light.userData.interiorSanctum),
       });
       light.parent?.remove(light);
       light.dispose();
@@ -474,9 +506,28 @@ export class WorldEngine {
       this.skyDomeMesh.position.copy(this.camera.position);
     }
     if (!this.isSoftwareGl && this.composer) {
+      if (this.gtaoPass && this.composer.readBuffer?.depthTexture) {
+        const depthTex = this.composer.readBuffer.depthTexture;
+        const gtaoAny = this.gtaoPass as unknown as {
+          depthTexture?: THREE.DepthTexture;
+          gtaoMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
+          pdMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
+          depthRenderMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
+        };
+        if (gtaoAny.depthTexture !== depthTex) {
+          gtaoAny.depthTexture = depthTex;
+          if (gtaoAny.gtaoMaterial?.uniforms?.tDepth) gtaoAny.gtaoMaterial.uniforms.tDepth.value = depthTex;
+          if (gtaoAny.pdMaterial?.uniforms?.tDepth) gtaoAny.pdMaterial.uniforms.tDepth.value = depthTex;
+          if (gtaoAny.depthRenderMaterial?.uniforms?.tDepth) gtaoAny.depthRenderMaterial.uniforms.tDepth.value = depthTex;
+        }
+      }
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
+    }
+    this.renderFrameCount++;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.renderFrame = String(this.renderFrameCount);
     }
   }
 
@@ -561,10 +612,39 @@ export class WorldEngine {
     );
 
     if (!this.isSoftwareGl) {
-      this.composer = new EffectComposer(this.renderer);
-      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      const pr = this.renderer.getPixelRatio();
+      const rtW = Math.max(1, Math.floor(width * pr));
+      const rtH = Math.max(1, Math.floor(height * pr));
+      this.composerDepthTex = new THREE.DepthTexture(rtW, rtH);
+      this.composerDepthTex.format = THREE.DepthStencilFormat;
+      this.composerDepthTex.type = THREE.UnsignedInt248Type;
+      const composerRt = new THREE.WebGLRenderTarget(rtW, rtH, {
+        type: THREE.HalfFloatType,
+        depthTexture: this.composerDepthTex,
+      });
+
+      this.composer = new EffectComposer(this.renderer, composerRt);
+      this.composer.setPixelRatio(pr);
       this.composer.setSize(width, height);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+      this.gtaoPass = new GTAOPass(
+        this.scene,
+        this.camera,
+        width,
+        height,
+        { depthTexture: this.composer.renderTarget2.depthTexture ?? undefined },
+      );
+      this.gtaoPass.updateGtaoMaterial({
+        radius: 1.65,
+        distanceExponent: 1.75,
+        thickness: 1.15,
+        samples: 12,
+        scale: 1.0,
+      });
+      this.gtaoPass.output = GTAOPass.OUTPUT.Default;
+      this.gtaoPass.blendIntensity = 0.48;
+      this.composer.addPass(this.gtaoPass);
 
       const initialBloom = computeTimeLightingState(
         getPresetHour(this.timePreset),
@@ -1698,9 +1778,194 @@ export class WorldEngine {
     }
     this.fsActive = true;
     this.footstepBurstCount += 1;
+    recordFootprintDecal(
+      this.footprintPool,
+      this.playerPos.x,
+      this.playerPos.y,
+      this.playerPos.z,
+      this.playerYaw,
+      stepSide === 0 ? 1 : (stepSide > 0 ? 1 : -1),
+      surface,
+    );
     if (this.renderer?.domElement) {
       this.renderer.domElement.dataset.footstepCount = String(this.footstepBurstCount);
       this.renderer.domElement.dataset.footstepActive = 'true';
+      this.renderer.domElement.dataset.footprintDecals = String(this.footprintPool.totalSpawned);
+    }
+  }
+
+  private buildFootprintDecals(): void {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 64, 128);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      // Soft sole oval + heel oval silhouette
+      ctx.beginPath();
+      ctx.ellipse(32, 42, 16, 26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(32, 92, 12.5, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    this.footprintTex = new THREE.CanvasTexture(c);
+    this.footprintTex.colorSpace = THREE.SRGBColorSpace;
+    this.footprintGeo = new THREE.PlaneGeometry(0.18, 0.34);
+    this.footprintGeo.rotateX(-Math.PI / 2);
+    this.footprintMat = new THREE.MeshBasicMaterial({
+      map: this.footprintTex,
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    const cap = this.footprintPool.slots.length;
+    this.footprintInst = new THREE.InstancedMesh(this.footprintGeo, this.footprintMat, cap);
+    this.footprintInst.frustumCulled = false;
+    this.footprintInst.renderOrder = 1;
+    this.footprintInst.userData.nonCollidable = true;
+    const hideScale = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < cap; i++) {
+      this.footprintInst.setMatrixAt(i, hideScale);
+      this.footprintInst.setColorAt(i, this.footprintColorTmp.setHex(0x6e5a44));
+    }
+    this.footprintInst.instanceMatrix.needsUpdate = true;
+    if (this.footprintInst.instanceColor) this.footprintInst.instanceColor.needsUpdate = true;
+    this.scene.add(this.footprintInst);
+  }
+
+  private updateFootprintDecals(dt: number): void {
+    if (!this.footprintInst) return;
+    const activeCount = stepFootprintDecalPool(this.footprintPool, dt);
+    const slots = this.footprintPool.slots;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (!s.active) {
+        this.footprintDummy.position.set(0, -999, 0);
+        this.footprintDummy.scale.setScalar(0);
+        this.footprintDummy.updateMatrix();
+        this.footprintInst.setMatrixAt(i, this.footprintDummy.matrix);
+        continue;
+      }
+      const fade = computeFootprintDecalAlpha(s.age, s.maxAge);
+      this.footprintDummy.position.set(s.x, s.y, s.z);
+      this.footprintDummy.rotation.set(0, s.yaw, 0);
+      const scaleMul = 0.78 + fade * 0.35;
+      this.footprintDummy.scale.set(scaleMul * s.side, 1, scaleMul);
+      this.footprintDummy.updateMatrix();
+      this.footprintInst.setMatrixAt(i, this.footprintDummy.matrix);
+
+      // Tint subtly darker on stone/wood and earthy olive-brown on grass/dirt
+      const baseShade =
+        s.surfaceKind === 'grass' ? 0x3b4926 : s.surfaceKind === 'wood' ? 0x422a18 : 0x5c4b39;
+      this.footprintColorTmp.setHex(baseShade).multiplyScalar(0.55 + fade * 0.65);
+      this.footprintInst.setColorAt(i, this.footprintColorTmp);
+    }
+    this.footprintInst.instanceMatrix.needsUpdate = true;
+    if (this.footprintInst.instanceColor) this.footprintInst.instanceColor.needsUpdate = true;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.activeFootprints = String(activeCount);
+    }
+  }
+
+  private buildMeditationButterflies(): void {
+    // Wing hinged along x=0 extending to +x so mirroring scale.x = -1 forms paired wings in 1 InstancedMesh
+    const wingPos = new Float32Array([
+      // Forewing upper triangle
+      0.0, 0.0, 0.02,
+      0.16, 0.01, 0.11,
+      0.13, 0.01, -0.02,
+      // Hindwing lower triangle
+      0.0, 0.0, 0.01,
+      0.13, 0.01, -0.02,
+      0.09, 0.0, -0.11,
+    ]);
+    this.butterflyWingGeo = new THREE.BufferGeometry();
+    this.butterflyWingGeo.setAttribute('position', new THREE.BufferAttribute(wingPos, 3));
+    this.butterflyWingGeo.computeVertexNormals();
+
+    this.butterflyWingMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.42,
+      metalness: 0.08,
+      emissive: 0x261a08,
+      emissiveIntensity: 0.22,
+      side: THREE.DoubleSide,
+    });
+
+    const wingCount = this.butterflyStates.length * 2;
+    this.butterflyWingInst = new THREE.InstancedMesh(
+      this.butterflyWingGeo,
+      this.butterflyWingMat,
+      wingCount,
+    );
+    this.butterflyWingInst.frustumCulled = false;
+    this.butterflyWingInst.userData.nonCollidable = true;
+
+    const palette = [0xf59e28, 0x38bdf8, 0xfacc15, 0xf472b6, 0xa7f3d0];
+    const tmpCol = new THREE.Color();
+    for (let i = 0; i < this.butterflyStates.length; i++) {
+      tmpCol.setHex(palette[this.butterflyStates[i].colorIndex % palette.length]);
+      this.butterflyWingInst.setColorAt(i * 2, tmpCol);
+      this.butterflyWingInst.setColorAt(i * 2 + 1, tmpCol);
+    }
+    if (this.butterflyWingInst.instanceColor) {
+      this.butterflyWingInst.instanceColor.needsUpdate = true;
+    }
+    this.scene.add(this.butterflyWingInst);
+    this.updateMeditationButterflies(0.016, 0);
+  }
+
+  private updateMeditationButterflies(dt: number, elapsed: number): void {
+    if (!this.butterflyWingInst) return;
+    stepMeditationButterflies(
+      this.butterflyStates,
+      dt,
+      elapsed,
+      this.isMeditating,
+      this.playerPos.x,
+      this.playerPos.y,
+      this.playerPos.z,
+    );
+
+    for (let i = 0; i < this.butterflyStates.length; i++) {
+      const b = this.butterflyStates[i];
+      this.butterflyRootDummy.position.set(b.x, b.y, b.z);
+      this.butterflyRootDummy.rotation.set(0, b.yaw, 0);
+      this.butterflyRootDummy.scale.setScalar(1);
+      this.butterflyRootDummy.updateMatrix();
+
+      const flap = Math.sin(b.flapPhase) * 0.92 + 0.18;
+      // Right wing (+X)
+      this.butterflyWingDummy.position.set(0, 0, 0);
+      this.butterflyWingDummy.rotation.set(0, 0, flap);
+      this.butterflyWingDummy.scale.set(1, 1, 1);
+      this.butterflyWingDummy.updateMatrix();
+      this.butterflyMat4Tmp.multiplyMatrices(
+        this.butterflyRootDummy.matrix,
+        this.butterflyWingDummy.matrix,
+      );
+      this.butterflyWingInst.setMatrixAt(i * 2, this.butterflyMat4Tmp);
+
+      // Left wing (-X mirrored)
+      this.butterflyWingDummy.rotation.set(0, 0, -flap);
+      this.butterflyWingDummy.scale.set(-1, 1, 1);
+      this.butterflyWingDummy.updateMatrix();
+      this.butterflyMat4Tmp.multiplyMatrices(
+        this.butterflyRootDummy.matrix,
+        this.butterflyWingDummy.matrix,
+      );
+      this.butterflyWingInst.setMatrixAt(i * 2 + 1, this.butterflyMat4Tmp);
+    }
+    this.butterflyWingInst.instanceMatrix.needsUpdate = true;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.butterflyCount = String(this.butterflyStates.length);
+      this.renderer.domElement.dataset.butterflyFlockActive = this.isMeditating ? 'true' : 'false';
     }
   }
 
@@ -2597,6 +2862,9 @@ export class WorldEngine {
         this.composer.setPixelRatio(this.renderer.getPixelRatio());
         this.composer.setSize(w, h);
       }
+      if (this.gtaoPass) {
+        this.gtaoPass.setSize(w, h);
+      }
       if (this.bloomPass) {
         this.bloomPass.resolution.set(w, h);
       }
@@ -3122,6 +3390,10 @@ export class WorldEngine {
     this.character.root.position.copy(this.playerPos);
     if (Math.hypot(safe.x - prevX, safe.z - prevZ) > 8) {
       this.justTeleported = true;
+      this.playerYaw = Math.PI;
+      this.cameraYaw = 0;
+      this.cameraPitch = 0.45;
+      this.character.root.rotation.y = this.playerYaw;
       const inCourtyard =
         (Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6) ||
         (Math.abs(safe.x + 210) <= 17.2 && safe.z >= 62.8 && safe.z <= 85.2);
@@ -3278,14 +3550,16 @@ export class WorldEngine {
       this.milkyWayPoints.rotation.y = elapsed * 0.0025;
     }
 
-    if (state.lanternIntensity <= 0.02 || this.beaconPoolDescs.length === 0) {
+    if (this.beaconPoolDescs.length === 0) {
       for (let i = 0; i < this.pooledPointLights.length; i++) {
         this.pooledPointLights[i].intensity = 0;
       }
     } else {
       const chosen: Array<{ idx: number; distSq: number }> = [];
       for (let i = 0; i < this.beaconPoolDescs.length; i++) {
-        const p = this.beaconPoolDescs[i].pos;
+        const desc = this.beaconPoolDescs[i];
+        if (state.lanternIntensity <= 0.02 && !desc.interiorSanctum) continue;
+        const p = desc.pos;
         const dx = p.x - lx;
         const dz = p.z - lz;
         const distSq = dx * dx + dz * dz;
@@ -3308,7 +3582,10 @@ export class WorldEngine {
         pl.position.copy(desc.pos);
         pl.distance = desc.distance;
         pl.decay = desc.decay;
-        const baseInt = state.lanternIntensity * desc.intensityScale;
+        const effectiveLantern = desc.interiorSanctum
+          ? Math.max(0.75, state.lanternIntensity)
+          : state.lanternIntensity;
+        const baseInt = effectiveLantern * desc.intensityScale;
         if (desc.flickerAmp > 0) {
           const wave =
             0.55 * Math.sin(elapsed * 6.4 + desc.flickerPhase) +
@@ -3401,10 +3678,18 @@ export class WorldEngine {
       canvas.dataset.cameraFar = String(Math.round(this.camera.far));
       canvas.dataset.bloomStrength = state.bloomStrength.toFixed(2);
       canvas.dataset.bloomThreshold = state.bloomThreshold.toFixed(2);
-      canvas.dataset.postprocessing = this.composer ? 'bloom' : 'direct';
+      canvas.dataset.postprocessing = this.composer
+        ? this.gtaoPass
+          ? 'gtao+bloom'
+          : 'bloom'
+        : 'direct';
       canvas.dataset.lotusCount = String(this.lumbiniLotusCount);
       canvas.dataset.pondRainRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value.toFixed(2);
       canvas.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
+      canvas.dataset.playerX = this.playerPos.x.toFixed(1);
+      canvas.dataset.playerZ = this.playerPos.z.toFixed(1);
+      canvas.dataset.distanceWalked = String(Math.round(this.distanceWalked));
+      canvas.dataset.cameraMode = this.cameraMode;
     }
   }
 
@@ -3414,10 +3699,19 @@ export class WorldEngine {
       const now = performance.now();
       const rawDt = (now - this.lastFrameMs) / 1000;
       this.lastFrameMs = now;
-      const dt = Math.min(Math.max(rawDt, 0.001), 0.05);
       const elapsed = (now - this.startTimeMs) / 1000;
 
-      this.updateSimulation(dt, elapsed);
+      if (this.isSoftwareGl) {
+        const clamped = Math.min(Math.max(rawDt, 0.016), 0.2);
+        const subSteps = Math.max(1, Math.min(4, Math.ceil(clamped / 0.05)));
+        const subDt = clamped / subSteps;
+        for (let s = 0; s < subSteps; s++) {
+          this.updateSimulation(subDt, elapsed);
+        }
+      } else {
+        const dt = Math.min(Math.max(rawDt, 0.001), 0.05);
+        this.updateSimulation(dt, elapsed);
+      }
       this.renderScene();
 
       if (this.isSoftwareGl) {
@@ -3561,6 +3855,8 @@ export class WorldEngine {
     );
     this.updateAtmosphereParticles(dt, elapsed);
     this.updateFootstepParticles(dt);
+    this.updateFootprintDecals(dt);
+    this.updateMeditationButterflies(dt, elapsed);
     this.updateWorldBurstParticles(dt);
     if (this.sakuraPetalsMat) {
       this.sakuraPetalsMat.uniforms.uTime.value = elapsed;
@@ -4504,11 +4800,14 @@ export class WorldEngine {
         }
       }
     });
+    this.footprintTex?.dispose();
     this.tossedPebbleGeo?.dispose();
     this.tossedPebbleMat?.dispose();
     this.weatherParticles?.dispose();
     this.lumbiniFireflies?.dispose();
     this.textures?.dispose();
+    this.gtaoPass?.dispose();
+    this.composerDepthTex?.dispose();
     this.composer?.dispose();
     this.renderer?.dispose();
     if (this.renderer?.domElement?.parentElement === this.container) {

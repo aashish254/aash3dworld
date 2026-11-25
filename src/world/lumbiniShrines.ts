@@ -610,9 +610,10 @@ export function buildPushkariniPond(
     nRim.position.set(0, cy, -d * 0.5 + rimT * 0.5);
     const sRim = new THREE.Mesh(new THREE.BoxGeometry(w, h + 0.82, rimT), mat);
     sRim.position.set(0, cy, d * 0.5 - rimT * 0.5);
-    const wRim = new THREE.Mesh(new THREE.BoxGeometry(rimT, h + 0.82, d - rimT * 1.9), mat);
+    const sideLen = Math.max(0.2, d - rimT * 2.004);
+    const wRim = new THREE.Mesh(new THREE.BoxGeometry(rimT, h + 0.82, sideLen), mat);
     wRim.position.set(-w * 0.5 + rimT * 0.5, cy, 0);
-    const eRim = new THREE.Mesh(new THREE.BoxGeometry(rimT, h + 0.82, d - rimT * 1.9), mat);
+    const eRim = new THREE.Mesh(new THREE.BoxGeometry(rimT, h + 0.82, sideLen), mat);
     eRim.position.set(w * 0.5 - rimT * 0.5, cy, 0);
     [nRim, sRim, wRim, eRim].forEach((m) => {
       m.castShadow = true;
@@ -638,7 +639,7 @@ export function buildPushkariniPond(
     textureSize: isSoftwareGl ? 256 : 512,
     deepTint: 0x092b2d,
     shallowTint: 0x206762,
-    reflectivity: 0.88,
+    reflectivity: 0.80,
     rippleStrength: 0.020,
     anchorWorldPos: new THREE.Vector3(-200, 0.21, 112.5),
   });
@@ -1325,6 +1326,8 @@ function appendWaterChannelStrip(
   const baseVert = positions.length / 3;
   const y0 = -z1;
   const y1 = -z0;
+  const isNSChannel = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+  const chanWidth = Math.max(1.0, isNSChannel ? Math.abs(z1 - z0) : Math.abs(x1 - x0));
   for (let iz = 0; iz <= segZ; iz++) {
     const v = iz / segZ;
     const vy = THREE.MathUtils.lerp(y0, y1, v);
@@ -1332,7 +1335,13 @@ function appendWaterChannelStrip(
       const u = ix / segX;
       const vx = THREE.MathUtils.lerp(x0, x1, u);
       positions.push(vx, vy, 0);
-      uvs.push(vx * 0.04, vy * 0.04);
+      if (isNSChannel) {
+        const endDist = Math.min(Math.abs(vx - x0), Math.abs(x1 - vx));
+        const uvU = THREE.MathUtils.clamp(endDist / chanWidth, 0, 0.5);
+        uvs.push(uvU, v);
+      } else {
+        uvs.push(u, 0.5);
+      }
     }
   }
   const stride = segX + 1;
@@ -1401,7 +1410,7 @@ export function buildSacredGardenSurroundingPond(
     g.add(m);
   };
 
-  // Inner island ghat skirt (split cleanly around cardinal gates/bridges)
+  // Inner island ghat skirt (split cleanly around cardinal gates/bridges & corners)
   // South & North inner banks (skip bridge mouth |ldx| <= 3.4)
   for (const [z0, z1] of [[inMaxZ - 0.65, inMaxZ + 0.15], [inMinZ - 0.15, inMinZ + 0.65]] as Array<[number, number]>) {
     addBankWall(inMinX, -3.4, z0, z1, 0.08, -1.02, brickMat);
@@ -1409,12 +1418,12 @@ export function buildSacredGardenSurroundingPond(
     addBankWall(inMinX, -3.4, z0 - 0.28, z1 + 0.28, -0.28, -1.02, brickMat);
     addBankWall(3.4, inMaxX, z0 - 0.28, z1 + 0.28, -0.28, -1.02, brickMat);
   }
-  // West & East inner banks (skip bridge mouth ldz in [1.2, 6.8])
+  // West & East inner banks (trimmed clear of N/S bank corners; skip bridge mouth ldz in [1.2, 6.8])
   for (const [x0, x1] of [[inMinX - 0.15, inMinX + 0.65], [inMaxX - 0.65, inMaxX + 0.15]] as Array<[number, number]>) {
-    addBankWall(x0, x1, inMinZ, 1.2, 0.08, -1.02, brickMat);
-    addBankWall(x0, x1, 6.8, inMaxZ, 0.08, -1.02, brickMat);
-    addBankWall(x0 - 0.28, x1 + 0.28, inMinZ, 1.2, -0.28, -1.02, brickMat);
-    addBankWall(x0 - 0.28, x1 + 0.28, 6.8, inMaxZ, -0.28, -1.02, brickMat);
+    addBankWall(x0, x1, inMinZ + 0.654, 1.2, 0.08, -1.02, brickMat);
+    addBankWall(x0, x1, 6.8, inMaxZ - 0.654, 0.08, -1.02, brickMat);
+    addBankWall(x0 - 0.28, x1 + 0.28, inMinZ + 0.934, 1.2, -0.28, -1.02, brickMat);
+    addBankWall(x0 - 0.28, x1 + 0.28, 6.8, inMaxZ - 0.934, -0.28, -1.02, brickMat);
   }
 
   // Outer pond retaining wall + stepped submerged ghat ledge + Chunar sandstone coping
@@ -1427,12 +1436,12 @@ export function buildSacredGardenSurroundingPond(
     addBankWall(3.4, outMaxX, stepZ0, stepZ1, -0.28, -1.02, brickMat);
   }
   for (const [x0, x1] of [[outMinX - 0.55, outMinX + 0.1], [outMaxX - 0.1, outMaxX + 0.55]] as Array<[number, number]>) {
-    addBankWall(x0, x1, outMinZ, 1.2, 0.09, -1.02, chunarMat);
-    addBankWall(x0, x1, 6.8, outMaxZ, 0.09, -1.02, chunarMat);
+    addBankWall(x0, x1, outMinZ + 0.104, 1.2, 0.09, -1.02, chunarMat);
+    addBankWall(x0, x1, 6.8, outMaxZ - 0.104, 0.09, -1.02, chunarMat);
     const stepX0 = x0 < 0 ? x1 : x0 - 0.6;
     const stepX1 = x0 < 0 ? x1 + 0.6 : x0;
-    addBankWall(stepX0, stepX1, outMinZ, 1.2, -0.28, -1.02, brickMat);
-    addBankWall(stepX0, stepX1, 6.8, outMaxZ, -0.28, -1.02, brickMat);
+    addBankWall(stepX0, stepX1, outMinZ + 0.604, 1.2, -0.28, -1.02, brickMat);
+    addBankWall(stepX0, stepX1, 6.8, outMaxZ - 0.604, -0.28, -1.02, brickMat);
   }
 
   // 3. Outer Sacred Pond Pilgrim Promenades (top at ly = +0.09 -> world +0.34m)
@@ -1478,7 +1487,7 @@ export function buildSacredGardenSurroundingPond(
     textureSize: isSoftwareGl ? 256 : 512,
     deepTint: 0x08272b,
     shallowTint: 0x1c5c5a,
-    reflectivity: 0.90,
+    reflectivity: 0.78,
     rippleStrength: 0.018,
     anchorWorldPos: new THREE.Vector3(-210, LUMBINI_SACRED_POND.waterLevel, 96),
   });

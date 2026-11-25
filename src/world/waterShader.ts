@@ -237,26 +237,36 @@ export function createReflectivePondSurface(
         vec3 V = toCam / max(camDist, 0.0001);
 
         float ndv = clamp(dot(N, V), 0.0, 1.0);
-        float fresnel = 0.22 + 0.78 * pow(1.0 - ndv, 2.8);
+        float fresnel = 0.08 + 0.86 * pow(1.0 - ndv, 3.6);
+
+        // Edge-distance parameter from UV perimeter for brick-step depth gradient & lacy shoreline foam
+        float edgeDist = clamp(min(min(vPondUv.x, 1.0 - vPondUv.x), min(vPondUv.y, 1.0 - vPondUv.y)), 0.0, 0.5);
+        float shallowMask = 1.0 - smoothstep(0.0, 0.14, edgeDist);
 
         // Projective planar reflection lookup with calm temple-pond ripple distortion
         vec4 reflUv = vProjUv;
         float projW = max(reflUv.w, 0.001);
-        vec2 rippleDisp = vec2(gx, gz) * (uRippleStrength * 11.5) * projW;
+        vec2 rippleDisp = vec2(gx, gz) * (uRippleStrength * 12.0) * projW;
         reflUv.xy += rippleDisp;
         vec2 safeNd = clamp(reflUv.xy / projW, 0.003, 0.997);
         reflUv.xy = safeNd * projW;
         vec3 planarRefl = texture2DProj(tDiffuse, reflUv).rgb;
 
-        // Subtle underwater stone caustic tint + deep emerald absorption
+        // Subtle underwater stone caustic tint + turquoise-to-deep-jade depth absorption
         float caustic = smoothstep(0.45, 0.95, (w1 * w2 + w3 * w4) * 0.25 + 0.5);
-        vec3 waterBody = mix(uDeepColor, uShallowColor, 0.34 + 0.26 * (1.0 - ndv));
-        waterBody += vec3(0.03, 0.08, 0.075) * caustic;
+        float depthMix = clamp(0.18 + 0.22 * (1.0 - ndv) + shallowMask * 0.46, 0.0, 1.0);
+        vec3 waterBody = mix(uDeepColor, uShallowColor, depthMix);
+        waterBody += vec3(0.030, 0.095, 0.085) * caustic * (0.55 + shallowMask * 0.45);
 
         // Blend water body with live planar reflection & soft sky bounce
-        vec3 envReflect = mix(planarRefl * color, uSkyColor * 0.95, 0.06 + rainAmt * 0.12);
-        float reflWeight = clamp(fresnel * uReflectivity + 0.32 - rainAmt * 0.08, 0.28, 0.94);
+        vec3 envReflect = mix(planarRefl * color * 0.90, uSkyColor * 0.82, 0.04 + rainAmt * 0.10);
+        float reflWeight = clamp(fresnel * uReflectivity * 0.78 + 0.06 - rainAmt * 0.06, 0.14, 0.82);
         vec3 col = mix(waterBody, envReflect, reflWeight);
+
+        // Delicate animated shoreline foam hugging the submerged brick steps
+        float shoreWave = sin(edgeDist * 140.0 - uWaterTime * 1.9 + w1 * 1.4 + w2 * 1.1);
+        float shoreFoam = (1.0 - smoothstep(0.0, 0.032, edgeDist)) * smoothstep(0.28, 0.88, shoreWave * 0.5 + 0.5) * 0.34;
+        shoreFoam += (1.0 - smoothstep(0.0, 0.011, edgeDist)) * 0.22;
 
         // Crisp sun specular sparkle on wave & raindrop crests
         vec3 L = normalize(uSunDir);
@@ -265,8 +275,8 @@ export function createReflectivePondSurface(
         float spec = pow(max(dot(N, H), 0.0), 140.0) * sunHeight;
         col += uSunColor * spec * 0.85;
 
-        // Interactive splash & raindrop ring foam highlights
-        col = mix(col, vec3(0.92, 0.97, 0.96), clamp(interactiveFoam, 0.0, 0.82));
+        // Interactive splash, shoreline & raindrop ring foam highlights
+        col = mix(col, vec3(0.92, 0.97, 0.96), clamp(interactiveFoam + shoreFoam, 0.0, 0.84));
 
         // Match scene exponential squared fog
         float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * camDist * camDist);

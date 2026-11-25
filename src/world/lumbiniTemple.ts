@@ -51,7 +51,7 @@ export function createLumbiniBuddha(
   const cameraOccluders: THREE.Object3D[] = [];
   const templeBells: THREE.Group[] = [];
 
-  const lTex = createLumbiniTextures();
+  const lTex = createLumbiniTextures(Math.max(4, textures.meadowMap?.anisotropy || 4));
   const jTex = textures.janaki;
   const extraDisposers: Array<() => void> = [() => lTex.dispose()];
   group.userData.disposeExtraTextures = () => {
@@ -80,7 +80,7 @@ export function createLumbiniBuddha(
     roughnessMap: lTex.mauryaBrickRough,
     aoMap: lTex.mauryaBrickAo,
     aoMapIntensity: 0.86,
-    color: 0xc26e4a,
+    color: 0xba6a49,
     roughness: 0.92,
     metalness: 0.02,
   });
@@ -90,14 +90,14 @@ export function createLumbiniBuddha(
     normalMap: lTex.terracottaPaverNormal,
     normalScale: new THREE.Vector2(0.78, 0.78),
     roughnessMap: lTex.terracottaPaverRough,
-    color: 0xcc6b52,
-    roughness: 0.86,
+    color: 0xb66852,
+    roughness: 0.88,
     metalness: 0.03,
   });
 
   const terracottaCapMat = new THREE.MeshStandardMaterial({
-    color: 0xb63f2e,
-    roughness: 0.72,
+    color: 0xa83e2f,
+    roughness: 0.74,
     metalness: 0.04,
   });
 
@@ -106,7 +106,7 @@ export function createLumbiniBuddha(
     normalMap: lTex.gardenLawnNormal,
     normalScale: new THREE.Vector2(0.65, 0.65),
     roughnessMap: lTex.gardenLawnRough,
-    color: 0x6cb442,
+    color: 0x5c8b3f,
     roughness: 0.94,
     metalness: 0.01,
   });
@@ -115,8 +115,8 @@ export function createLumbiniBuddha(
     map: lTex.hedgeLeafMap,
     normalMap: lTex.hedgeLeafNormal,
     normalScale: new THREE.Vector2(0.85, 0.85),
-    color: 0x5ca430,
-    roughness: 0.88,
+    color: 0x4c7c33,
+    roughness: 0.89,
     metalness: 0.02,
   });
 
@@ -260,21 +260,23 @@ export function createLumbiniBuddha(
     walk.receiveShadow = true;
     group.add(walk);
   };
+  // Non-overlapping Terracotta Red-Brick Ceremonial Walkways (y = +0.10 top surface -> world +0.35m)
   addBrickWalk(-8.5, 8.5, 28.0, 52.0); // Grand South Axial Forecourt (around Baby Buddha)
   addBrickWalk(-8.5, -3.2, 6.0, 28.0); // Continuous Pushkarini West Overlook Causeway -> Temple Forecourt
-  addBrickWalk(-5.8, 5.8, -10.0, 2.0); // Expanded Maya Devi South Temple Forecourt
+  addBrickWalk(-5.8, 5.8, -10.0, 2.0); // Expanded Maya Devi South Temple Forecourt & Axial Ramp Approach
   addBrickWalk(-44.0, 44.0, 2.0, 6.0); // Grand East-West Cross Promenade between West & East Gates
-  addBrickWalk(-3.4, 3.4, -2.5, 2.0); // Axial Temple Ramp Approach Spur
-  addBrickWalk(-22.4, -19.2, -42.5, 30.8); // West Brick Garden Walk
-  addBrickWalk(24.2, 27.2, -42.5, 30.8); // East Brick Garden Walk
-  addBrickWalk(-19.2, 27.2, 27.2, 30.8); // South Pushkarini Pond Promenade
-  addBrickWalk(-22.4, 27.2, -42.5, -38.5); // North Gate Cross Walk
+  addBrickWalk(-22.4, -19.2, -42.5, 2.0); // West Brick Garden Walk (North segment)
+  addBrickWalk(-22.4, -19.2, 6.0, 30.8); // West Brick Garden Walk (South segment)
+  addBrickWalk(24.2, 27.2, -42.5, 2.0); // East Brick Garden Walk (North segment)
+  addBrickWalk(24.2, 27.2, 6.0, 30.8); // East Brick Garden Walk (South segment)
+  addBrickWalk(-19.2, 24.2, 27.2, 30.8); // South Pushkarini Pond Promenade
+  addBrickWalk(-19.2, 24.2, -42.5, -38.5); // North Gate Cross Walk
   addBrickWalk(-3.4, 3.4, -44.0, -42.5); // North Torana Gate Threshold Spur
   addBrickWalk(-27.0, -22.4, -22.8, -19.2); // Ashoka Pillar Viewing Spur
-  addBrickWalk(-20.4, 20.4, -36.8, -34.2); // Maya Devi North Circumambulation Walk
+  addBrickWalk(-19.2, 20.4, -36.8, -34.2); // Maya Devi North Circumambulation Walk
   // Monument Shrine Spur Trails connecting every pavilion cleanly to the main network
   addBrickWalk(-23.85, -8.5, 39.4, 43.0); // Myanmar Golden Pagoda spur aligned with East Pyatthat gate axis
-  addBrickWalk(-19.2, -8.5, 28.8, 32.2); // Peace Bell Pavilion spur
+  addBrickWalk(-19.2, -8.5, 30.8, 32.2); // Peace Bell Pavilion spur
   addBrickWalk(-25.6, -22.4, 14.8, 18.2); // Sacred Bodhi Chautara spur
   addBrickWalk(27.2, 32.4, 22.4, 25.6); // Eternal Peace Flame spur
   addBrickWalk(27.2, 30.0, -23.8, -20.2); // Royal Thai Sanctuary spur
@@ -465,7 +467,7 @@ export function createLumbiniBuddha(
     group.add(stele);
   }
 
-  // Trimmed Vibrant Green Hedges bordering red-brick garden paths (InstancedMesh)
+  // Trimmed Multi-Tiered Boxwood Hedges bordering red-brick garden paths (InstancedMesh)
   const hedgeCoords: Array<[number, number, number, number]> = [
     // [cx, cz, sx, sz]
     [-22.8, -9.2, 0.68, 17.5],
@@ -485,16 +487,27 @@ export function createLumbiniBuddha(
   const hedgeInst = new THREE.InstancedMesh(unitBoxGeo, hedgeMat, hedgeCoords.length);
   hedgeInst.castShadow = true;
   hedgeInst.receiveShadow = true;
+  const hedgeCrownInst = new THREE.InstancedMesh(unitBoxGeo, hedgeMat, hedgeCoords.length);
+  hedgeCrownInst.castShadow = true;
+  hedgeCrownInst.receiveShadow = true;
+  hedgeCrownInst.userData.nonCollidable = true;
   hedgeCoords.forEach(([hx, hz, sx, sz], idx) => {
-    _v3.set(hx, 0.34, hz);
+    _v3.set(hx, 0.28, hz);
     _q.identity();
-    _s.set(sx, 0.66, sz);
+    _s.set(sx, 0.52, sz);
     _m4.compose(_v3, _q, _s);
     hedgeInst.setMatrixAt(idx, _m4);
+
+    _v3.set(hx, 0.60, hz);
+    _s.set(Math.max(0.42, sx - 0.14), 0.16, Math.max(0.42, sz - 0.14));
+    _m4.compose(_v3, _q, _s);
+    hedgeCrownInst.setMatrixAt(idx, _m4);
   });
   hedgeInst.instanceMatrix.needsUpdate = true;
   hedgeInst.computeBoundingSphere();
-  group.add(hedgeInst);
+  hedgeCrownInst.instanceMatrix.needsUpdate = true;
+  hedgeCrownInst.computeBoundingSphere();
+  group.add(hedgeInst, hedgeCrownInst);
 
   // =========================================================================
   // 3. PERIMETER GARDEN BRICK WALL (88m x 96m) & 4 CARDINAL GATES
