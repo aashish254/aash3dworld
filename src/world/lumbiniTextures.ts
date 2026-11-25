@@ -37,6 +37,23 @@ export interface LumbiniTextureSet {
   salWoodMap: THREE.CanvasTexture;
   salWoodNormal: THREE.CanvasTexture;
   salWoodRough: THREE.CanvasTexture;
+  trenchEarthMap: THREE.CanvasTexture;
+  trenchEarthNormal: THREE.CanvasTexture;
+  trenchEarthRough: THREE.CanvasTexture;
+  cofferTimberMap: THREE.CanvasTexture;
+  cofferTimberNormal: THREE.CanvasTexture;
+  cofferTimberRough: THREE.CanvasTexture;
+  cushionFabricMap: THREE.CanvasTexture;
+  cushionFabricNormal: THREE.CanvasTexture;
+  altarBrocadeMap: THREE.CanvasTexture;
+  altarBrocadeNormal: THREE.CanvasTexture;
+  khataSilkMap: THREE.CanvasTexture;
+  markerStoneMap: THREE.CanvasTexture;
+  markerStoneNormal: THREE.CanvasTexture;
+  markerStoneRough: THREE.CanvasTexture;
+  plaqueMarkerMap: THREE.CanvasTexture;
+  plaqueChambersMap: THREE.CanvasTexture;
+  plaqueNativityMap: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -224,12 +241,19 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
       brickRCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
 
       // Archaeological dampness & mossy patina along lower brick courses
-      if (row >= rows - 4 && n > 0.35) {
-        brickCtx.fillStyle = `rgba(68, 92, 46, ${0.14 + n * 0.16})`;
-        brickCtx.fillRect(bx + 2, by + bh * 0.45, bw - 4, bh * 0.55);
-        const dampR = Math.max(96, rVal - 68);
+      if (row >= rows - 5 && n > 0.28) {
+        brickCtx.fillStyle = `rgba(54, 78, 36, ${0.18 + n * 0.22})`;
+        brickCtx.fillRect(bx + 2, by + bh * 0.35, bw - 4, bh * 0.65);
+        const dampR = Math.max(82, rVal - 78);
         brickRCtx.fillStyle = `rgb(${dampR},${dampR},${dampR})`;
-        brickRCtx.fillRect(bx + 2, by + bh * 0.45, bw - 4, bh * 0.55);
+        brickRCtx.fillRect(bx + 2, by + bh * 0.35, bw - 4, bh * 0.65);
+      }
+      // Subtle chipped brick pitting
+      if (n2 > 0.62) {
+        brickCtx.fillStyle = 'rgba(42, 22, 14, 0.26)';
+        brickCtx.fillRect(bx + 6 + n * 18, by + 5 + n2 * 10, 6, 4);
+        brickHCtx.fillStyle = '#5a5a5a';
+        brickHCtx.fillRect(bx + 6 + n * 18, by + 5 + n2 * 10, 6, 4);
       }
     }
   }
@@ -656,68 +680,117 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   const brahmiEdictMap = toTex(brC, true, 1, 1, true);
   const brahmiEdictNormal = toTex(heightCanvasToNormal(brH, 2.2), false, 1, 1, true);
 
-  // 11. Carved 4th-century CE Gupta Sandstone Nativity Bas-Relief (Maya Devi grasping Sal tree branch)
+  // 11. Carved 4th-century CE Gupta Sandstone Nativity Bas-Relief Backing
   const [natC, natCtx] = makeCanvas(512, 640);
   const [natH, natHCtx] = makeCanvas(512, 640);
   const natGrad = natCtx.createLinearGradient(0, 0, 0, 640);
-  natGrad.addColorStop(0, '#b59268');
-  natGrad.addColorStop(0.5, '#c7a479');
-  natGrad.addColorStop(1, '#9c7b54');
+  natGrad.addColorStop(0, '#785c3d');
+  natGrad.addColorStop(0.42, '#9a7954');
+  natGrad.addColorStop(1, '#684d31');
   natCtx.fillStyle = natGrad;
   natCtx.fillRect(0, 0, 512, 640);
-  natHCtx.fillStyle = '#606060';
+  natHCtx.fillStyle = '#525252';
   natHCtx.fillRect(0, 0, 512, 640);
 
-  // Recessed stone stele frame & carved Sal-leaf arch
-  natCtx.strokeStyle = '#6f5333';
-  natCtx.lineWidth = 18;
-  natCtx.strokeRect(20, 20, 472, 600);
-  natHCtx.strokeStyle = '#c8c8c8';
-  natHCtx.lineWidth = 18;
-  natHCtx.strokeRect(20, 20, 472, 600);
+  // Fine Chunar sandstone sedimentary grain, chisel tooling marks & weathered mineral patina
+  for (let i = 0; i < 3000; i++) {
+    const x = seededNoise(i, 7, 173) * 512;
+    const y = seededNoise(i, 11, 179) * 640;
+    const tone = seededNoise(i, 13, 181);
+    natCtx.fillStyle = tone > 0.5 ? 'rgba(222, 192, 152, 0.11)' : 'rgba(54, 38, 22, 0.14)';
+    natCtx.fillRect(x, y, 5 + tone * 14, 1.5);
+    const hv = Math.round(70 + tone * 48);
+    natHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.24)`;
+    natHCtx.fillRect(x, y, 5 + tone * 14, 1.5);
+  }
 
-  for (const [ctx, fillMain, fillAccent] of [
-    [natCtx, '#d8b78b', '#e7cb9f'],
-    [natHCtx, '#c4c4c4', '#ececec'],
-  ] as Array<[CanvasRenderingContext2D, string, string]>) {
-    // Sal tree bough arching across top
-    ctx.strokeStyle = fillMain;
-    ctx.lineWidth = 20;
-    ctx.beginPath();
-    ctx.moveTo(76, 220);
-    ctx.quadraticCurveTo(256, 70, 434, 154);
-    ctx.stroke();
-    // Carved lotus pedestal
-    ctx.fillStyle = fillMain;
-    ctx.fillRect(108, 522, 296, 36);
-    // Queen Maya Devi sculpted relief silhouette (head, torso, hip sway, raised right arm grasping branch)
-    ctx.beginPath();
-    ctx.arc(248, 224, 34, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(252, 346, 52, 86, 0.08, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillRect(216, 405, 72, 118);
-    // Raised right arm to Sal bough
-    ctx.lineWidth = 22;
-    ctx.beginPath();
-    ctx.moveTo(286, 280);
-    ctx.lineTo(328, 174);
-    ctx.stroke();
-    // Halo behind Maya Devi & newborn Prince Siddhartha beside her
-    ctx.strokeStyle = fillAccent;
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(248, 224, 58, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = fillAccent;
-    ctx.beginPath();
-    ctx.arc(348, 444, 18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillRect(334, 462, 28, 58);
+  // Carved double border molding, scalloped Prabhamandala halo, flying Gandharvas & attendant reliefs
+  for (const [ctx, strokeA, strokeB, isHeight] of [
+    [natCtx, '#523a22', '#cfb082', false],
+    [natHCtx, '#9c9c9c', '#dedede', true],
+  ] as Array<[CanvasRenderingContext2D, string, string, boolean]>) {
+    ctx.strokeStyle = strokeA;
+    ctx.lineWidth = 16;
+    ctx.strokeRect(16, 16, 480, 608);
+    ctx.strokeStyle = strokeB;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(32, 32, 448, 576);
+
+    // Carved beaded pearl-and-lotus arch halo behind Maya Devi
+    ctx.fillStyle = strokeB;
+    for (let p = 0; p < 22; p++) {
+      const a = Math.PI + (p / 21) * Math.PI;
+      const px = 256 + Math.cos(a) * 188;
+      const py = 236 + Math.sin(a) * 188;
+      ctx.beginPath();
+      ctx.arc(px, py, 8.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Scalloped double Prabhamandala lotus petals behind central figures
+    ctx.strokeStyle = strokeB;
+    ctx.lineWidth = 4;
+    for (let r = 0; r < 3; r++) {
+      ctx.beginPath();
+      ctx.arc(246, 228, 76 + r * 28, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = isHeight ? '#c8c8c8' : '#b7966a';
+    ctx.lineWidth = 2.5;
+    for (let ray = 0; ray < 15; ray++) {
+      const ra = Math.PI * 1.08 + (ray / 14) * Math.PI * 0.84;
+      ctx.beginPath();
+      ctx.moveTo(246 + Math.cos(ra) * 76, 228 + Math.sin(ra) * 76);
+      ctx.lineTo(246 + Math.cos(ra) * 136, 228 + Math.sin(ra) * 136);
+      ctx.stroke();
+    }
+
+    // Carved flying celestial Vidyadhara / Gandharva figures holding garlands in upper corners
+    for (const side of [-1, 1]) {
+      const gx = 256 + side * 144;
+      const gy = 98;
+      ctx.fillStyle = isHeight ? '#c0c0c0' : '#a8875d';
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, 32, 14, side * -0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(gx - side * 26, gy - 6, 11, 0, Math.PI * 2);
+      ctx.fill();
+      // Trailing celestial scarf scroll
+      ctx.strokeStyle = strokeB;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(gx + side * 10, gy + 4);
+      ctx.quadraticCurveTo(gx + side * 44, gy - 14, gx + side * 56, gy + 16);
+      ctx.stroke();
+    }
+
+    // Shallow bas-relief kneeling Brahma & Indra attendant silhouettes flanking pedestal
+    for (const side of [-1, 1]) {
+      const ax = 256 + side * 158;
+      const ay = 474;
+      ctx.fillStyle = isHeight ? '#aeaeae' : '#96764f';
+      ctx.beginPath();
+      ctx.ellipse(ax, ay, 24, 38, side * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ax - side * 4, ay - 46, 13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Carved stepped lotus frieze along bottom register
+    ctx.fillStyle = strokeA;
+    ctx.fillRect(46, 534, 420, 48);
+    ctx.fillStyle = strokeB;
+    for (let lx = 66; lx <= 446; lx += 30) {
+      ctx.beginPath();
+      ctx.moveTo(lx - 12, 576);
+      ctx.quadraticCurveTo(lx, 540, lx + 12, 576);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
   const nativityReliefMap = toTex(natC, true, 1, 1, true);
-  const nativityReliefNormal = toTex(heightCanvasToNormal(natH, 2.4), false, 1, 1, true);
+  const nativityReliefNormal = toTex(heightCanvasToNormal(natH, 3.1), false, 1, 1, true);
 
   // 12. Heritage Shilalekh Monument Plaque (LUMBINI · MAYA DEVI TEMPLE · UNESCO WORLD HERITAGE)
   const [sgC, sgCtx] = makeCanvas(1024, 512);
@@ -841,6 +914,432 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   const salWoodRough = toTex(swR, false, 2, 2);
   allTex.push(salWoodMap, salWoodNormal, salWoodRough);
 
+  // 14. Excavated Sandy-Earth Trench Bed (Maya Devi Archaeological Pit Floor)
+  const [teC, teCtx] = makeCanvas(512, 512);
+  const [teH, teHCtx] = makeCanvas(512, 512);
+  const [teR, teRCtx] = makeCanvas(512, 512);
+  teCtx.fillStyle = '#5c4936';
+  teCtx.fillRect(0, 0, 512, 512);
+  teHCtx.fillStyle = '#787878';
+  teHCtx.fillRect(0, 0, 512, 512);
+  teRCtx.fillStyle = '#dcdcdc';
+  teRCtx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 2400; i++) {
+    const x = seededNoise(i, 3, 601) * 512;
+    const y = seededNoise(i, 5, 607) * 512;
+    const sz = 1.5 + seededNoise(i, 11, 613) * 5.5;
+    const tone = seededNoise(i, 13, 619);
+    if (tone > 0.78) {
+      teCtx.fillStyle = 'rgba(138, 114, 84, 0.34)';
+      teHCtx.fillStyle = '#a6a6a6';
+    } else if (tone < 0.25) {
+      teCtx.fillStyle = 'rgba(54, 42, 30, 0.38)';
+      teHCtx.fillStyle = '#525252';
+      teRCtx.fillStyle = '#a4a4a4';
+      teRCtx.fillRect(x, y, sz * 1.6, sz * 1.2);
+    } else {
+      teCtx.fillStyle = 'rgba(106, 86, 64, 0.28)';
+      teHCtx.fillStyle = '#828282';
+    }
+    teCtx.fillRect(x, y, sz, sz * 0.72);
+    teHCtx.fillRect(x, y, sz, sz * 0.72);
+  }
+  teCtx.strokeStyle = 'rgba(66, 52, 38, 0.22)';
+  teCtx.lineWidth = 2;
+  for (let r = 0; r < 14; r++) {
+    const ry = r * 38 + 12;
+    teCtx.beginPath();
+    teCtx.moveTo(0, ry);
+    teCtx.quadraticCurveTo(256, ry + (r % 2 === 0 ? 12 : -12), 512, ry);
+    teCtx.stroke();
+  }
+  const trenchEarthMap = toTex(teC, true, 9, 6);
+  const trenchEarthNormal = toTex(heightCanvasToNormal(teH, 2.5), false, 9, 6);
+  const trenchEarthRough = toTex(teR, false, 9, 6);
+  allTex.push(trenchEarthMap, trenchEarthNormal, trenchEarthRough);
+
+  // 15. Dark Coffered Museum Timber & Acoustic Ceiling Panels
+  const [ctC, ctCtx] = makeCanvas(512, 512);
+  const [ctH, ctHCtx] = makeCanvas(512, 512);
+  const [ctR, ctRCtx] = makeCanvas(512, 512);
+  ctCtx.fillStyle = '#382215';
+  ctCtx.fillRect(0, 0, 512, 512);
+  ctHCtx.fillStyle = '#888888';
+  ctHCtx.fillRect(0, 0, 512, 512);
+  ctRCtx.fillStyle = '#b6b6b6';
+  ctRCtx.fillRect(0, 0, 512, 512);
+  for (let s = 0; s < 16; s++) {
+    const sy = s * 32;
+    const tn = seededNoise(s, 9, 701);
+    ctCtx.fillStyle = `rgb(${Math.round(54 + tn * 22)},${Math.round(32 + tn * 14)},${Math.round(19 + tn * 9)})`;
+    ctCtx.fillRect(0, sy + 2, 512, 28);
+    ctCtx.fillStyle = 'rgba(14, 8, 4, 0.85)';
+    ctCtx.fillRect(0, sy, 512, 2.5);
+    ctHCtx.fillStyle = '#242424';
+    ctHCtx.fillRect(0, sy, 512, 2.5);
+    ctRCtx.fillStyle = '#dedede';
+    ctRCtx.fillRect(0, sy, 512, 2.5);
+  }
+  const cofferTimberMap = toTex(ctC, true, 2, 2);
+  const cofferTimberNormal = toTex(heightCanvasToNormal(ctH, 2.0), false, 2, 2);
+  const cofferTimberRough = toTex(ctR, false, 2, 2);
+  allTex.push(cofferTimberMap, cofferTimberNormal, cofferTimberRough);
+
+  // 16. Quilted Himalayan Tibetan Silk Brocade Prayer Cushion Texture + Tactile Normal Map
+  const [cfC, cfCtx] = makeCanvas(512, 512);
+  const [cfH, cfHCtx] = makeCanvas(512, 512);
+  const cfGrad = cfCtx.createRadialGradient(256, 256, 28, 256, 256, 330);
+  cfGrad.addColorStop(0, '#8f242b');
+  cfGrad.addColorStop(0.7, '#751b22');
+  cfGrad.addColorStop(1, '#581218');
+  cfCtx.fillStyle = cfGrad;
+  cfCtx.fillRect(0, 0, 512, 512);
+  cfHCtx.fillStyle = '#b8b8b8';
+  cfHCtx.fillRect(0, 0, 512, 512);
+
+  // Fine woven silk slub threads (cross-hatch weave)
+  for (let i = 0; i < 512; i += 4) {
+    const shade = (i % 8 === 0) ? 1 : 0;
+    cfCtx.fillStyle = shade ? 'rgba(255, 224, 160, 0.05)' : 'rgba(28, 4, 8, 0.11)';
+    cfCtx.fillRect(0, i, 512, 2);
+    cfCtx.fillRect(i, 0, 2, 512);
+    cfHCtx.fillStyle = shade ? '#c4c4c4' : '#9c9c9c';
+    cfHCtx.fillRect(0, i, 512, 2);
+    cfHCtx.fillRect(i, 0, 2, 512);
+  }
+  // Golden Tibetan Endless Knot & Lotus Rosette Brocade Medallions in tiled lattice
+  for (let gy = 64; gy < 512; gy += 128) {
+    for (let gx = 64; gx < 512; gx += 128) {
+      for (const [ctx, colGold, colSaffron] of [
+        [cfCtx, 'rgba(229, 174, 62, 0.68)', 'rgba(246, 206, 108, 0.45)'],
+        [cfHCtx, '#e6e6e6', '#d4d4d4'],
+      ] as Array<[CanvasRenderingContext2D, string, string]>) {
+        ctx.save();
+        ctx.translate(gx, gy);
+        ctx.strokeStyle = colGold;
+        ctx.lineWidth = 3;
+        // Outer 8-petal lotus ring
+        for (let p = 0; p < 8; p++) {
+          const a = (p / 8) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * 26, Math.sin(a) * 26, 11, 6, a, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        // Central Endless Knot lattice
+        ctx.strokeStyle = colSaffron;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(-14, -14, 28, 28);
+        ctx.beginPath();
+        ctx.moveTo(-20, -6);
+        ctx.lineTo(20, -6);
+        ctx.moveTo(-20, 6);
+        ctx.lineTo(20, 6);
+        ctx.moveTo(-6, -20);
+        ctx.lineTo(-6, 20);
+        ctx.moveTo(6, -20);
+        ctx.lineTo(6, 20);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+  // Quilted channel seams + tufted diamond pockets & double gold piping border
+  for (let q = 0; q <= 512; q += 128) {
+    cfCtx.strokeStyle = 'rgba(34, 6, 9, 0.48)';
+    cfCtx.lineWidth = 4;
+    cfCtx.beginPath();
+    cfCtx.moveTo(q, 0);
+    cfCtx.lineTo(q, 512);
+    cfCtx.moveTo(0, q);
+    cfCtx.lineTo(512, q);
+    cfCtx.stroke();
+
+    cfHCtx.strokeStyle = '#383838';
+    cfHCtx.lineWidth = 6;
+    cfHCtx.beginPath();
+    cfHCtx.moveTo(q, 0);
+    cfHCtx.lineTo(q, 512);
+    cfHCtx.moveTo(0, q);
+    cfHCtx.lineTo(512, q);
+    cfHCtx.stroke();
+  }
+  cfCtx.strokeStyle = '#eab347';
+  cfCtx.lineWidth = 14;
+  cfCtx.strokeRect(12, 12, 488, 488);
+  cfCtx.strokeStyle = '#c87f24';
+  cfCtx.lineWidth = 4;
+  cfCtx.strokeRect(24, 24, 464, 464);
+
+  const cushionFabricMap = toTex(cfC, true, 1, 1);
+  const cushionFabricNormal = toTex(heightCanvasToNormal(cfH, 2.3), false, 1, 1);
+  allTex.push(cushionFabricMap, cushionFabricNormal);
+
+  // 16B. Crimson & Gold Pleated Tibetan Silk Altar Skirt Brocade (Choe-sham Offering Table)
+  const [abC, abCtx] = makeCanvas(512, 256);
+  const [abH, abHCtx] = makeCanvas(512, 256);
+  abCtx.fillStyle = '#6f1419';
+  abCtx.fillRect(0, 0, 512, 256);
+  abHCtx.fillStyle = '#909090';
+  abHCtx.fillRect(0, 0, 512, 256);
+  // Vertical fabric pleat folds across skirt width
+  for (let x = 0; x < 512; x += 32) {
+    const fg = abCtx.createLinearGradient(x, 0, x + 32, 0);
+    fg.addColorStop(0, 'rgba(26, 4, 6, 0.45)');
+    fg.addColorStop(0.35, 'rgba(155, 36, 42, 0.25)');
+    fg.addColorStop(0.65, 'rgba(210, 74, 62, 0.16)');
+    fg.addColorStop(1, 'rgba(26, 4, 6, 0.45)');
+    abCtx.fillStyle = fg;
+    abCtx.fillRect(x, 0, 32, 256);
+
+    const hg = abHCtx.createLinearGradient(x, 0, x + 32, 0);
+    hg.addColorStop(0, '#3e3e3e');
+    hg.addColorStop(0.5, '#d8d8d8');
+    hg.addColorStop(1, '#3e3e3e');
+    abHCtx.fillStyle = hg;
+    abHCtx.fillRect(x, 0, 32, 256);
+  }
+  // Upper Saffron-Gold Tibetan Valance Band & Embroidered Cloud/Lotus Trim
+  abCtx.fillStyle = '#c88b26';
+  abCtx.fillRect(0, 0, 512, 54);
+  abCtx.fillStyle = '#29406c';
+  abCtx.fillRect(0, 54, 512, 18);
+  abCtx.fillStyle = '#eab64c';
+  abCtx.fillRect(0, 224, 512, 32);
+  // Embroidered golden lotus medallions per pleat & fringe tassels along bottom
+  for (let mx = 48; mx < 512; mx += 96) {
+    abCtx.strokeStyle = '#f5ca64';
+    abCtx.lineWidth = 3;
+    abCtx.beginPath();
+    abCtx.arc(mx, 146, 26, 0, Math.PI * 2);
+    abCtx.stroke();
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      abCtx.beginPath();
+      abCtx.moveTo(mx + Math.cos(a) * 8, 146 + Math.sin(a) * 8);
+      abCtx.lineTo(mx + Math.cos(a) * 23, 146 + Math.sin(a) * 23);
+      abCtx.stroke();
+    }
+    abHCtx.strokeStyle = '#ffffff';
+    abHCtx.lineWidth = 3;
+    abHCtx.beginPath();
+    abHCtx.arc(mx, 146, 26, 0, Math.PI * 2);
+    abHCtx.stroke();
+  }
+  for (let tx = 4; tx < 512; tx += 8) {
+    abCtx.fillStyle = tx % 16 === 0 ? '#f6d272' : '#d2932e';
+    abCtx.fillRect(tx, 232, 4, 24);
+  }
+  const altarBrocadeMap = toTex(abC, true, 1, 1, true);
+  const altarBrocadeNormal = toTex(heightCanvasToNormal(abH, 2.2), false, 1, 1, true);
+  allTex.push(altarBrocadeMap, altarBrocadeNormal);
+
+  // 16C. Ivory-Gold Ceremonial Khata Silk Scarf Texture
+  const [khC, khCtx] = makeCanvas(256, 512);
+  khCtx.fillStyle = '#f3ebd8';
+  khCtx.fillRect(0, 0, 256, 512);
+  for (let y = 0; y < 512; y += 6) {
+    khCtx.fillStyle = y % 12 === 0 ? 'rgba(218, 185, 114, 0.14)' : 'rgba(255, 255, 255, 0.14)';
+    khCtx.fillRect(0, y, 256, 2);
+  }
+  khCtx.fillStyle = 'rgba(212, 166, 62, 0.55)';
+  khCtx.fillRect(10, 0, 12, 512);
+  khCtx.fillRect(234, 0, 12, 512);
+  khCtx.strokeStyle = 'rgba(205, 160, 64, 0.36)';
+  khCtx.lineWidth = 2;
+  for (let my = 48; my < 512; my += 96) {
+    khCtx.strokeRect(108, my - 16, 40, 32);
+    khCtx.beginPath();
+    khCtx.arc(128, my, 24, 0, Math.PI * 2);
+    khCtx.stroke();
+  }
+  const khataSilkMap = toTex(khC, true, 1, 2);
+  allTex.push(khataSilkMap);
+
+  // 17. Three Museum History Plaques along the Observation Railing
+  const makePlaqueTex = (eyebrow: string, title: string, line1: string, line2: string) => {
+    const [pc, pCtx] = makeCanvas(512, 320);
+    const bg = pCtx.createLinearGradient(0, 0, 0, 320);
+    bg.addColorStop(0, '#18202c');
+    bg.addColorStop(1, '#0d131b');
+    pCtx.fillStyle = bg;
+    pCtx.fillRect(0, 0, 512, 320);
+    pCtx.strokeStyle = '#d4a342';
+    pCtx.lineWidth = 8;
+    pCtx.strokeRect(12, 12, 488, 296);
+    pCtx.strokeStyle = 'rgba(212, 163, 66, 0.42)';
+    pCtx.lineWidth = 2;
+    pCtx.strokeRect(24, 24, 464, 272);
+    pCtx.fillStyle = '#eab354';
+    pCtx.font = 'bold 17px Georgia, serif';
+    pCtx.textAlign = 'center';
+    pCtx.fillText(eyebrow.toUpperCase(), 256, 68);
+    pCtx.fillStyle = '#f8f2e4';
+    pCtx.font = 'bold 28px Georgia, serif';
+    pCtx.fillText(title, 256, 118);
+    pCtx.fillStyle = '#d4a342';
+    pCtx.fillRect(140, 142, 232, 2);
+    pCtx.fillStyle = '#cbd5e1';
+    pCtx.font = '18px Georgia, serif';
+    pCtx.fillText(line1, 256, 194);
+    pCtx.fillText(line2, 256, 226);
+    pCtx.fillStyle = '#f59e0b';
+    pCtx.font = 'bold 15px sans-serif';
+    pCtx.fillText('PRESS E OR CLICK TO INSPECT', 256, 272);
+    const t = toTex(pc, true, 1, 1, true);
+    allTex.push(t);
+    return t;
+  };
+  const plaqueMarkerMap = makePlaqueTex(
+    'Birthplace Sanctum · Core',
+    'The Sacred Marker Stone',
+    'Conglomerate stone marking the exact',
+    'birthplace of Siddhartha Gautama.',
+  );
+  const plaqueChambersMap = makePlaqueTex(
+    'Archaeological Trench · -1.6m',
+    'Mauryan Brick Chambers',
+    'Stepped Mauryan, Sunga & Kushan brick',
+    'sanctuary foundations (3rd c. BCE).',
+  );
+  const plaqueNativityMap = makePlaqueTex(
+    '4th-Century Sandstone Stele',
+    'The Nativity Sculpture',
+    'Queen Maya Devi grasping a Sal tree',
+    'branch as Prince Siddhartha stands.',
+  );
+
+  // 20. Sacred Marker Stone Weathered River-Cobble Conglomerate PBR Maps
+  const [msC, msCtx] = makeCanvas(512, 512);
+  const [msH, msHCtx] = makeCanvas(512, 512);
+  const [msR, msRCtx] = makeCanvas(512, 512);
+  const msGrad = msCtx.createRadialGradient(256, 256, 40, 256, 256, 320);
+  msGrad.addColorStop(0, '#a68967');
+  msGrad.addColorStop(0.58, '#876d50');
+  msGrad.addColorStop(1, '#5e4b37');
+  msCtx.fillStyle = msGrad;
+  msCtx.fillRect(0, 0, 512, 512);
+  msHCtx.fillStyle = '#787878';
+  msHCtx.fillRect(0, 0, 512, 512);
+  msRCtx.fillStyle = '#cccccc';
+  msRCtx.fillRect(0, 0, 512, 512);
+
+  // Fine mineral sand matrix
+  for (let i = 0; i < 2400; i++) {
+    const x = seededNoise(i, 3, 911) * 512;
+    const y = seededNoise(i, 7, 919) * 512;
+    const t = seededNoise(i, 11, 929);
+    msCtx.fillStyle = t > 0.5 ? 'rgba(188, 162, 128, 0.16)' : 'rgba(54, 42, 30, 0.18)';
+    msCtx.fillRect(x, y, 2 + t * 3, 2 + t * 3);
+    const hv = Math.round(98 + t * 50);
+    msHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.35)`;
+    msHCtx.fillRect(x, y, 3, 3);
+  }
+
+  // Embedded rounded river pebbles / quartz & basalt clasts characteristic of Lumbini conglomerate rock
+  const cobblePalettes = [
+    ['#d7c5ab', '#a99375'],
+    ['#8f7b68', '#625243'],
+    ['#b98a64', '#855c3c'],
+    ['#68635d', '#44403c'],
+    ['#e4d8c5', '#b8a58c'],
+  ];
+  for (let c = 0; c < 360; c++) {
+    const cx = 18 + seededNoise(c, 5, 937) * 476;
+    const cy = 18 + seededNoise(c, 9, 941) * 476;
+    const rx = 5 + seededNoise(c, 13, 947) * 16;
+    const ry = rx * (0.58 + seededNoise(c, 17, 953) * 0.42);
+    const ang = seededNoise(c, 21, 967) * Math.PI;
+    const pal = cobblePalettes[Math.floor(seededNoise(c, 25, 971) * cobblePalettes.length)];
+
+    // Dark recessed cement socket around pebble
+    msCtx.save();
+    msCtx.translate(cx, cy);
+    msCtx.rotate(ang);
+    msCtx.fillStyle = 'rgba(38, 28, 20, 0.48)';
+    msCtx.beginPath();
+    msCtx.ellipse(0, 0, rx + 2.2, ry + 2.2, 0, 0, Math.PI * 2);
+    msCtx.fill();
+    const cg = msCtx.createRadialGradient(-rx * 0.25, -ry * 0.25, 1, 0, 0, rx);
+    cg.addColorStop(0, pal[0]);
+    cg.addColorStop(1, pal[1]);
+    msCtx.fillStyle = cg;
+    msCtx.beginPath();
+    msCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    msCtx.fill();
+    msCtx.restore();
+
+    // Raised cobble bump on height map + smoother quartz specular on roughness map
+    msHCtx.save();
+    msHCtx.translate(cx, cy);
+    msHCtx.rotate(ang);
+    msHCtx.fillStyle = '#3c3c3c';
+    msHCtx.beginPath();
+    msHCtx.ellipse(0, 0, rx + 2.2, ry + 2.2, 0, 0, Math.PI * 2);
+    msHCtx.fill();
+    const hg = msHCtx.createRadialGradient(-rx * 0.2, -ry * 0.2, 1, 0, 0, rx);
+    hg.addColorStop(0, '#f2f2f2');
+    hg.addColorStop(1, '#929292');
+    msHCtx.fillStyle = hg;
+    msHCtx.beginPath();
+    msHCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    msHCtx.fill();
+    msHCtx.restore();
+
+    msRCtx.save();
+    msRCtx.translate(cx, cy);
+    msRCtx.rotate(ang);
+    const rv = Math.round(92 + seededNoise(c, 31, 977) * 76);
+    msRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
+    msRCtx.beginPath();
+    msRCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    msRCtx.fill();
+    msRCtx.restore();
+  }
+
+  // Natural geological fracture veins across the rock slab
+  msCtx.strokeStyle = 'rgba(42, 30, 20, 0.52)';
+  msHCtx.strokeStyle = '#222222';
+  msCtx.lineWidth = 2.0;
+  msHCtx.lineWidth = 2.6;
+  for (let f = 0; f < 9; f++) {
+    let fx = seededNoise(f, 3, 983) * 512;
+    let fy = seededNoise(f, 7, 991) * 512;
+    msCtx.beginPath();
+    msHCtx.beginPath();
+    msCtx.moveTo(fx, fy);
+    msHCtx.moveTo(fx, fy);
+    for (let s = 0; s < 6; s++) {
+      fx += (seededNoise(f, s + 11, 997) - 0.35) * 44;
+      fy += (seededNoise(f, s + 17, 1009) - 0.5) * 38;
+      msCtx.lineTo(fx, fy);
+      msHCtx.lineTo(fx, fy);
+    }
+    msCtx.stroke();
+    msHCtx.stroke();
+  }
+
+  // Subtle ritual worship traces on the center stone face (saffron/vermilion kumkum & flecks of gold varq)
+  for (let w = 0; w < 28; w++) {
+    const wx = 128 + seededNoise(w, 2, 1013) * 256;
+    const wy = 144 + seededNoise(w, 5, 1019) * 224;
+    const wr = 6 + seededNoise(w, 9, 1021) * 18;
+    const isGold = w % 5 === 0;
+    msCtx.fillStyle = isGold ? 'rgba(235, 185, 58, 0.38)' : w % 2 === 0 ? 'rgba(186, 56, 22, 0.22)' : 'rgba(214, 134, 24, 0.20)';
+    msCtx.beginPath();
+    msCtx.arc(wx, wy, wr, 0, Math.PI * 2);
+    msCtx.fill();
+    if (isGold) {
+      msRCtx.fillStyle = '#484848';
+      msRCtx.beginPath();
+      msRCtx.arc(wx, wy, wr * 0.7, 0, Math.PI * 2);
+      msRCtx.fill();
+    }
+  }
+  const markerStoneMap = toTex(msC, true, 1, 1, true);
+  const markerStoneNormal = toTex(heightCanvasToNormal(msH, 3.4), false, 1, 1, true);
+  const markerStoneRough = toTex(msR, false, 1, 1, true);
+  allTex.push(markerStoneMap, markerStoneNormal, markerStoneRough);
+
   const clampedAniso = Math.min(16, Math.max(1, maxAnisotropy));
   for (const t of allTex) {
     t.anisotropy = clampedAniso;
@@ -883,6 +1382,23 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     salWoodMap,
     salWoodNormal,
     salWoodRough,
+    trenchEarthMap,
+    trenchEarthNormal,
+    trenchEarthRough,
+    cofferTimberMap,
+    cofferTimberNormal,
+    cofferTimberRough,
+    cushionFabricMap,
+    cushionFabricNormal,
+    altarBrocadeMap,
+    altarBrocadeNormal,
+    khataSilkMap,
+    markerStoneMap,
+    markerStoneNormal,
+    markerStoneRough,
+    plaqueMarkerMap,
+    plaqueChambersMap,
+    plaqueNativityMap,
     dispose: () => {
       for (const t of allTex) t.dispose();
     },

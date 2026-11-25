@@ -4653,8 +4653,93 @@ export function stepPrayerWheelSpin(
   };
 }
 
+export const CAMERA_LOOK_DOWN_MAX_RAD = (80 * Math.PI) / 180;
+export const CAMERA_LOOK_UP_MAX_RAD = (85 * Math.PI) / 180;
+
+/**
+ * Clamps orbital camera pitch so the player can freely look from -80 deg (straight down into ruins)
+ * up to +85 deg (straight up at ceiling trusses and sky).
+ * Orbital convention: positive pitch places camera above target looking down; negative pitch places
+ * camera below target looking upward.
+ */
+export function clampCameraPitch(pitchRad: number): number {
+  return Math.max(-CAMERA_LOOK_UP_MAX_RAD, Math.min(CAMERA_LOOK_DOWN_MAX_RAD, pitchRad));
+}
+
+/**
+ * Converts shared camera orbit pitch into first-person look pitch (+85 deg up, -80 deg down).
+ */
+export function computeFirstPersonLookPitch(orbitPitchRad: number): number {
+  return Math.max(-CAMERA_LOOK_DOWN_MAX_RAD, Math.min(CAMERA_LOOK_UP_MAX_RAD, -orbitPitchRad));
+}
+
+/**
+ * Frame-rate independent exponential camera damping for weighty rotational & zoom inertia.
+ */
+export function dampCameraValue(current: number, target: number, lambda: number, dt: number): number {
+  const safeDt = Math.max(0, Math.min(0.1, dt));
+  return current + (target - current) * (1 - Math.exp(-lambda * safeDt));
+}
+
+/**
+ * Prevents the third-person camera boom from clipping below boardwalks or terrain when looking upward.
+ * Samples surface height along the look-target -> camera ray and slides the camera smoothly toward
+ * the player's shoulder whenever the boom dips below surfaceY + floorMargin.
+ */
+export function resolveThirdPersonCameraFloorClearance(
+  targetX: number,
+  targetY: number,
+  targetZ: number,
+  camX: number,
+  camY: number,
+  camZ: number,
+  minClearDist: number,
+  floorMargin: number,
+  sampleSurfaceY: (x: number, z: number) => number,
+): { x: number; y: number; z: number; clipped: boolean } {
+  const dx = camX - targetX;
+  const dy = camY - targetY;
+  const dz = camZ - targetZ;
+  const totalDist = Math.hypot(dx, dy, dz);
+  if (totalDist <= 0.001) {
+    return { x: camX, y: camY, z: camZ, clipped: false };
+  }
+
+  let bestT = 1.0;
+  let clipped = false;
+  if (dy < -0.02) {
+    const tMin = Math.min(1.0, Math.max(0.05, minClearDist / totalDist));
+    for (const frac of [0.55, 0.78, 1.0]) {
+      const t = Math.max(tMin, frac);
+      const sx = targetX + dx * t;
+      const sz = targetZ + dz * t;
+      const minY = sampleSurfaceY(sx, sz) + floorMargin;
+      const sy = targetY + dy * t;
+      if (sy < minY) {
+        const hitT = (minY - targetY) / dy;
+        const clampedT = Math.max(tMin, Math.min(1.0, hitT));
+        if (clampedT < bestT) {
+          bestT = clampedT;
+          clipped = true;
+        }
+      }
+    }
+  }
+
+  const outX = targetX + dx * bestT;
+  const outZ = targetZ + dz * bestT;
+  const floorMinY = sampleSurfaceY(outX, outZ) + floorMargin;
+  const rawOutY = targetY + dy * bestT;
+  const outY = Math.max(floorMinY, rawOutY);
+  if (rawOutY < floorMinY) {
+    clipped = true;
+  }
+  return { x: outX, y: outY, z: outZ, clipped };
+}
+
 export type ContextualWorldActionKind =
   | 'inspect-marker-stone'
+  | 'inspect-mauryan-chambers'
   | 'inspect-nativity-relief'
   | 'spin-prayer-wheel'
   | 'ring-temple-bell'
@@ -4671,9 +4756,35 @@ export interface ContextualWorldAction {
   landmark?: (typeof LANDMARKS)[number];
 }
 
+export const MAYA_DEVI_PLAQUE_SPOTS: ReadonlyArray<{
+  kind: 'inspect-marker-stone' | 'inspect-mauryan-chambers' | 'inspect-nativity-relief';
+  label: string;
+  x: number;
+  z: number;
+}> = [
+  {
+    kind: 'inspect-marker-stone',
+    label: 'Inspect Sacred Marker Stone',
+    x: -210.0,
+    z: 79.68,
+  },
+  {
+    kind: 'inspect-mauryan-chambers',
+    label: 'Inspect Mauryan Brick Chambers (3rd Century BCE)',
+    x: -200.92,
+    z: 74.0,
+  },
+  {
+    kind: 'inspect-nativity-relief',
+    label: 'Inspect The Nativity Sculpture',
+    x: -210.0,
+    z: 68.32,
+  },
+];
+
 /**
  * Determines the highest-priority [E] contextual world interaction around the player:
- * Maya Devi Marker Stone / Nativity Bas-Relief inside the temple, nearby Prayer Wheel,
+ * Maya Devi museum plaques inside the temple, nearby Prayer Wheel,
  * Temple Bell, Pushkarini/Sacred Pond Pebble Toss, Bodhi Chautara Meditation, or nearest Landmark.
  */
 export function computeContextualWorldAction(
@@ -4685,28 +4796,33 @@ export function computeContextualWorldAction(
   pebbleSpots: ReadonlyArray<{ x: number; z: number; pondX: number; pondZ: number; label: string }>,
   meditationSpots: ReadonlyArray<{ x: number; z: number; lookX: number; lookZ: number; label: string }>,
 ): ContextualWorldAction | null {
-  // 1. Inside Maya Devi Sanctuary boardwalk -> prioritize Marker Stone & Nativity Bas-Relief
+  // 1. Inside Maya Devi Sanctuary boardwalk -> pick nearest of the 3 museum plaques (Marker Stone, Mauryan Chambers, Nativity Sculpture)
   const inMayaDeviBoardwalk =
     playerX >= -227.5 && playerX <= -192.5 && playerZ >= 62.5 && playerZ <= 85.4;
   if (inMayaDeviBoardwalk) {
-    const dMarker = Math.hypot(playerX - (-210.0), playerZ - 74.0);
-    const dNativity = Math.hypot(playerX - (-210.0), playerZ - 70.2);
-    if (playerZ <= 69.2 && dNativity <= 8.5) {
+    let bestPlaque = MAYA_DEVI_PLAQUE_SPOTS[0];
+    let bestDist = Infinity;
+    for (const spot of MAYA_DEVI_PLAQUE_SPOTS) {
+      const d = Math.hypot(playerX - spot.x, playerZ - spot.z);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPlaque = spot;
+      }
+    }
+    if (bestDist <= 6.2) {
       return {
-        kind: 'inspect-nativity-relief',
-        label: 'Inspect Nativity Bas-Relief',
-        targetX: -210.0,
-        targetZ: 70.2,
+        kind: bestPlaque.kind,
+        label: bestPlaque.label,
+        targetX: bestPlaque.x,
+        targetZ: bestPlaque.z,
       };
     }
-    if (dMarker <= 14.5) {
-      return {
-        kind: 'inspect-marker-stone',
-        label: 'Inspect Sacred Marker Stone',
-        targetX: -210.0,
-        targetZ: 74.0,
-      };
-    }
+    return {
+      kind: 'inspect-marker-stone',
+      label: 'Inspect Sacred Marker Stone',
+      targetX: -210.0,
+      targetZ: 74.0,
+    };
   }
 
   // 2. Nearest Mani Prayer Wheel within reach

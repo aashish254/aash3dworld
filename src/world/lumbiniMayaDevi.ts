@@ -1,7 +1,16 @@
 import * as THREE from 'three';
-import { createDetailedBrassSukundaDiyo, createDetailedGajurSpire } from './janakiMandirCraft';
-import { BuddhaMaterials, createNativitySiddharthaStatue } from './lumbiniBuddhaSculpt';
+import {
+  createDetailedBrassSukundaDiyo,
+  createDetailedGajurSpire,
+} from './janakiMandirCraft';
+import { BuddhaMaterials } from './lumbiniBuddhaSculpt';
 import { LumbiniTextureSet } from './lumbiniTextures';
+import {
+  buildDetailedButterLampAltar,
+  buildDetailedDhupauroIncenseBurner,
+  buildDetailedNativitySteleEnsemble,
+  buildMeditationGalleryEnsemble,
+} from './mayaDeviSanctuaryCraft';
 import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 
 const _m4 = new THREE.Matrix4();
@@ -10,11 +19,80 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _e = new THREE.Euler();
 
+export interface MayaDeviHighlightInfo {
+  title: string;
+  subtitle: string;
+  description: string;
+  localPos: [number, number, number];
+}
+
+export interface MayaDeviPlaqueHitTarget {
+  mesh: THREE.Mesh;
+  highlightKey: 'markerStone' | 'mauryanChambers' | 'nativityRelief';
+}
+
 export interface MayaDeviBuildResult {
   group: THREE.Group;
   beaconLights: THREE.PointLight[];
   animatedNodes: THREE.Object3D[];
   cameraOccluders: THREE.Object3D[];
+  plaqueHitTargets: MayaDeviPlaqueHitTarget[];
+}
+
+function createVolumetricGodRayMaterial(
+  colorHex: number,
+  baseOpacity: number,
+  edgePower = 2.4,
+): {
+  material: THREE.ShaderMaterial;
+  uniforms: { uTime: { value: number }; uColor: { value: THREE.Color }; uOpacity: { value: number } };
+} {
+  const uniforms = {
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(colorHex) },
+    uOpacity: { value: baseOpacity },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        float ndotv = abs(dot(normalize(vWorldNormal), viewDir));
+        float edgeFade = pow(clamp(ndotv, 0.0, 1.0), ${edgePower.toFixed(2)});
+        float verticalFade = smoothstep(0.0, 0.24, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
+        float topStrength = mix(0.36, 1.0, vUv.y);
+        float streaks = 0.80
+          + 0.12 * sin(vUv.x * 37.699 + uTime * 0.22)
+          + 0.08 * cos(vUv.x * 62.831 - uTime * 0.17 + vUv.y * 2.5);
+        float alpha = uOpacity * edgeFade * verticalFade * topStrength * streaks;
+        if (alpha < 0.0015) discard;
+        gl_FragColor = vec4(uColor, alpha);
+      }
+    `,
+  });
+  return { material, uniforms };
 }
 
 /**
@@ -520,68 +598,547 @@ export function buildMayaDeviTemple(
     group.add(topRail);
   }
 
+  const plaqueHitTargets: MayaDeviPlaqueHitTarget[] = [];
+
   // =========================================================================
-  // 6. WALKABLE INTERIOR ARCHAEOLOGICAL GALLERY & SUNKEN MAURYAN RUINS
+  // 6. MULTI-TIERED ARCHAEOLOGICAL EXCAVATION RUINS (MAURYAN / SUNGA / KUSHAN)
   // =========================================================================
-  // Sunken excavation pit floor slab (y = -0.35 -> world -0.10m)
+  // Deep excavated sandy-earth trench floor (-1.60m below walkY = 1.00m -> local y = -0.60m)
+  const trenchFloorY = -0.60;
+  const earthTrenchMat = new THREE.MeshStandardMaterial({
+    map: lTex.trenchEarthMap,
+    normalMap: lTex.trenchEarthNormal,
+    normalScale: new THREE.Vector2(1.25, 1.25),
+    roughnessMap: lTex.trenchEarthRough,
+    color: 0x9b7e5e,
+    roughness: 0.96,
+    metalness: 0.01,
+  });
   const pitFloor = new THREE.Mesh(
     new THREE.BoxGeometry(W - wallT * 2, 0.16, D - wallT * 2),
-    mats.brickMat,
+    earthTrenchMat,
   );
-  pitFloor.position.set(0, -0.43, 0);
+  pitFloor.position.set(0, trenchFloorY - 0.08, 0);
   pitFloor.receiveShadow = true;
   group.add(pitFloor);
 
-  // Suspended Carved Nepali Sal Wood & Steel Boardwalk Loop at y = 1.00m (clear inner pit: |x|<=9.0, |z|<=5.6)
+  // Sub-trench recessed earth sump pits between brick chamber corridors (depth contrast with crisp stone curbs)
+  const sumpMat = new THREE.MeshStandardMaterial({
+    map: lTex.trenchEarthMap,
+    normalMap: lTex.trenchEarthNormal,
+    color: 0x624c36,
+    roughness: 0.98,
+  });
   const pitHalfW = 9.0;
   const pitHalfD = 5.6;
   const walkY = 1.00;
-  const deckMat = new THREE.MeshStandardMaterial({
-    map: lTex.salWoodMap,
-    normalMap: lTex.salWoodNormal,
-    normalScale: new THREE.Vector2(1.05, 1.05),
-    roughnessMap: lTex.salWoodRough,
-    roughness: 0.72,
-    metalness: 0.06,
+  for (const [sx, sz, sw, sd] of [
+    [-5.4, 0, 2.2, 6.4],
+    [5.4, 0, 2.2, 6.4],
+    [-3.1, 2.8, 1.7, 2.6],
+    [3.1, 2.8, 1.7, 2.6],
+    [-7.6, -2.1, 1.4, 3.8],
+    [7.6, -2.1, 1.4, 3.8],
+  ] as Array<[number, number, number, number]>) {
+    const sump = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.06, sd), sumpMat);
+    sump.position.set(sx, trenchFloorY + 0.025, sz);
+    sump.receiveShadow = true;
+    sump.userData.nonCollidable = true;
+    group.add(sump);
+  }
+
+  // Stepped brick chamber foundations (Mauryan dark damp base -> Sunga/Kushan mid-tier -> eroded upper brick courses)
+  const deepBrickMat = new THREE.MeshStandardMaterial({
+    map: lTex.mauryaBrickMap,
+    normalMap: lTex.mauryaBrickNormal,
+    normalScale: new THREE.Vector2(1.1, 1.1),
+    roughnessMap: lTex.mauryaBrickRough,
+    aoMap: lTex.mauryaBrickAo,
+    color: 0x7c4330,
+    roughness: 0.88,
+    metalness: 0.03,
   });
-  const salBeamMat = new THREE.MeshStandardMaterial({
+  const ruinFootings: THREE.Matrix4[] = [];
+  const ruinWalls: THREE.Matrix4[] = [];
+  const ruinCaps: THREE.Matrix4[] = [];
+  const addBrickSegment = (cx: number, cz: number, w: number, h: number, d: number, rotY = 0) => {
+    // Wide lower Mauryan footing step resting on trenchFloorY (-0.60m -> -0.34m)
+    _q.setFromEuler(_e.set(0, rotY, 0));
+    _v3.set(cx, trenchFloorY + 0.14, cz);
+    _s.set(w + 0.22, 0.28, d + 0.22);
+    _m4.compose(_v3, _q, _s);
+    ruinFootings.push(_m4.clone());
+
+    // Main weathered terracotta brick wall rising from footing (-0.34m -> -0.34 + h)
+    _v3.set(cx, trenchFloorY + 0.26 + h * 0.5, cz);
+    _s.set(w, h, d);
+    _m4.compose(_v3, _q, _s);
+    ruinWalls.push(_m4.clone());
+
+    // Eroded stepped upper brick course on taller chambers
+    if (h >= 0.72) {
+      const capFactor = Math.abs(Math.sin(cx * 3.1 + cz * 1.7)) * 0.35 + 0.45;
+      _v3.set(cx + (w > d ? (cx > 0 ? -0.15 : 0.15) : 0), trenchFloorY + 0.26 + h + 0.08, cz);
+      _s.set(w > d ? w * capFactor : w * 0.88, 0.16, d > w ? d * capFactor : d * 0.88);
+      _m4.compose(_v3, _q, _s);
+      ruinCaps.push(_m4.clone());
+    }
+  };
+
+  // Intersecting N-S and E-W Kushan / Sunga / Mauryan chamber walls (-0.4m to -1.6m below boardwalk)
+  const nsWallSegs: Array<[number, number, number, number, number]> = [
+    [-7.9, -2.5, 0.46, 0.86, 4.4],
+    [-7.9, 2.7, 0.46, 0.68, 3.8],
+    [-5.8, -1.8, 0.44, 0.94, 5.0],
+    [-5.8, 3.0, 0.44, 0.64, 3.4],
+    [-3.7, -2.8, 0.44, 0.88, 3.8],
+    [-3.7, 2.4, 0.44, 0.76, 4.2],
+    [-1.95, -2.3, 0.42, 0.92, 3.2],
+    [-1.95, 2.7, 0.42, 0.78, 3.8],
+    [1.95, -2.3, 0.42, 0.94, 3.2],
+    [1.95, 2.7, 0.42, 0.80, 3.8],
+    [3.7, -2.8, 0.44, 0.90, 3.8],
+    [3.7, 2.4, 0.44, 0.76, 4.2],
+    [5.8, -1.8, 0.44, 0.92, 5.0],
+    [5.8, 3.0, 0.44, 0.66, 3.4],
+    [7.9, -2.5, 0.46, 0.84, 4.4],
+    [7.9, 2.7, 0.46, 0.70, 3.8],
+  ];
+  for (const [rx, rz, rw, rh, rd] of nsWallSegs) {
+    addBrickSegment(rx, rz, rw, rh, rd);
+  }
+  const ewWallSegs: Array<[number, number, number, number, number]> = [
+    [-5.8, -4.4, 4.2, 0.84, 0.46],
+    [5.8, -4.4, 4.2, 0.86, 0.46],
+    [-5.8, -1.4, 4.0, 0.90, 0.44],
+    [5.8, -1.4, 4.0, 0.92, 0.44],
+    [-5.8, 1.5, 4.0, 0.74, 0.44],
+    [5.8, 1.5, 4.0, 0.78, 0.44],
+    [-5.2, 4.3, 5.2, 0.66, 0.46],
+    [5.2, 4.3, 5.2, 0.70, 0.46],
+    [0.0, 3.2, 4.1, 0.68, 0.44],
+    [-2.85, -0.1, 1.8, 0.78, 0.42],
+    [2.85, -0.1, 1.8, 0.78, 0.42],
+  ];
+  for (const [rx, rz, rw, rh, rd] of ewWallSegs) {
+    addBrickSegment(rx, rz, rw, rh, rd);
+  }
+
+  // Recessed Apsidal Brick Chambers (authentic 3rd-c. BCE Mauryan apsidal caitya plan on West & East wings)
+  for (const side of [-1, 1]) {
+    const apseCx = side * 6.85;
+    const apseCz = 0.05;
+    const apseR = 1.65;
+    const arcCount = 9;
+    for (let i = 0; i < arcCount; i++) {
+      const ang = -Math.PI * 0.46 + (i / (arcCount - 1)) * Math.PI * 0.92;
+      const rx = apseCx + side * Math.cos(ang) * apseR;
+      const rz = apseCz + Math.sin(ang) * apseR;
+      const segH = 0.74 + Math.sin((i / (arcCount - 1)) * Math.PI) * 0.24;
+      addBrickSegment(rx, rz, 0.42, segH, 0.68, side * ang);
+    }
+  }
+
+  const footingInst = new THREE.InstancedMesh(unitBoxGeo, deepBrickMat, ruinFootings.length);
+  ruinFootings.forEach((m, idx) => footingInst.setMatrixAt(idx, m));
+  footingInst.instanceMatrix.needsUpdate = true;
+  footingInst.computeBoundingSphere();
+  footingInst.receiveShadow = true;
+  footingInst.userData.nonCollidable = true;
+
+  const ruinInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinWalls.length);
+  ruinWalls.forEach((m, idx) => ruinInst.setMatrixAt(idx, m));
+  ruinInst.instanceMatrix.needsUpdate = true;
+  ruinInst.computeBoundingSphere();
+  ruinInst.castShadow = true;
+  ruinInst.receiveShadow = true;
+  ruinInst.userData.nonCollidable = true;
+
+  const ruinCapInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinCaps.length);
+  ruinCaps.forEach((m, idx) => ruinCapInst.setMatrixAt(idx, m));
+  ruinCapInst.instanceMatrix.needsUpdate = true;
+  ruinCapInst.computeBoundingSphere();
+  ruinCapInst.castShadow = true;
+  ruinCapInst.receiveShadow = true;
+  ruinCapInst.userData.nonCollidable = true;
+  group.add(footingInst, ruinInst, ruinCapInst);
+
+  // 12 Square Carved Chunar Sandstone Pillar Plinth Bases seated inside the excavated trench grid
+  const pillarBasePositions: Array<[number, number]> = [
+    [-6.9, -3.0], [-4.8, -3.0], [-2.85, -3.0], [2.85, -3.0], [4.8, -3.0], [6.9, -3.0],
+    [-6.9, 3.0], [-4.8, 3.0], [-2.85, 3.0], [2.85, 3.0], [4.8, 3.0], [6.9, 3.0],
+  ];
+  const pillarBaseLowInst = new THREE.InstancedMesh(unitBoxGeo, mats.chunarStoneMat, pillarBasePositions.length);
+  const pillarBaseTopInst = new THREE.InstancedMesh(unitBoxGeo, mats.chunarStoneMat, pillarBasePositions.length);
+  pillarBasePositions.forEach(([px, pz], idx) => {
+    _q.identity();
+    _v3.set(px, trenchFloorY + 0.12, pz);
+    _s.set(0.68, 0.24, 0.68);
+    _m4.compose(_v3, _q, _s);
+    pillarBaseLowInst.setMatrixAt(idx, _m4);
+
+    _v3.set(px, trenchFloorY + 0.30, pz);
+    _s.set(0.46, 0.14, 0.46);
+    _m4.compose(_v3, _q, _s);
+    pillarBaseTopInst.setMatrixAt(idx, _m4);
+  });
+  pillarBaseLowInst.instanceMatrix.needsUpdate = true;
+  pillarBaseTopInst.instanceMatrix.needsUpdate = true;
+  pillarBaseLowInst.computeBoundingSphere();
+  pillarBaseTopInst.computeBoundingSphere();
+  pillarBaseLowInst.castShadow = true;
+  pillarBaseLowInst.receiveShadow = true;
+  pillarBaseLowInst.userData.nonCollidable = true;
+  pillarBaseTopInst.userData.nonCollidable = true;
+  group.add(pillarBaseLowInst, pillarBaseTopInst);
+
+  // Excavated brick fragment scatter on trench beds
+  const rubbleCount = 36;
+  const rubbleInst = new THREE.InstancedMesh(unitBoxGeo, deepBrickMat, rubbleCount);
+  for (let i = 0; i < rubbleCount; i++) {
+    const h1 = Math.sin(i * 19.7 + 1.3) * 43758.5453;
+    const r1 = h1 - Math.floor(h1);
+    const h2 = Math.sin(i * 53.1 + 7.9) * 43758.5453;
+    const r2 = h2 - Math.floor(h2);
+    const rx = (r1 - 0.5) * 15.2;
+    const rz = (r2 - 0.5) * 9.2;
+    if (Math.abs(rx) < 2.2 && Math.abs(rz) < 2.5) {
+      _v3.set(5.4 + (r1 - 0.5) * 1.4, trenchFloorY + 0.04, rz);
+    } else {
+      _v3.set(rx, trenchFloorY + 0.04, rz);
+    }
+    _q.setFromEuler(_e.set(0, r1 * Math.PI, (r2 - 0.5) * 0.15));
+    _s.set(0.24 + r1 * 0.16, 0.08, 0.14 + r2 * 0.08);
+    _m4.compose(_v3, _q, _s);
+    rubbleInst.setMatrixAt(i, _m4);
+  }
+  rubbleInst.instanceMatrix.needsUpdate = true;
+  rubbleInst.computeBoundingSphere();
+  rubbleInst.userData.nonCollidable = true;
+  group.add(rubbleInst);
+
+  // =========================================================================
+  // 7. DUAL-FOCUS CENTRAL SANCTUM: RECESSED MARKER STONE + 3D NATIVITY STELE
+  // =========================================================================
+  // 7A. Sunken Sacred Marker Stone (x = 0, z = +0.65) in Ancient Brick Chamber Floor + Frameless Glass Enclosure
+  const markerSanctum = new THREE.Group();
+  markerSanctum.position.set(0, 0, 0.65);
+
+  const markerOuterChamber = new THREE.Mesh(new THREE.BoxGeometry(3.35, 0.62, 2.75), deepBrickMat);
+  markerOuterChamber.position.set(0, trenchFloorY + 0.31, 0);
+  markerOuterChamber.receiveShadow = true;
+  const markerBrickRim = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.34, 2.20), mats.brickMat);
+  markerBrickRim.position.set(0, 0.10, 0);
+  markerBrickRim.receiveShadow = true;
+  const markerSunkenWell = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.12, 1.42), sumpMat);
+  markerSunkenWell.position.set(0, 0.24, 0);
+  markerSunkenWell.receiveShadow = true;
+
+  // Conglomerate Sacred Marker Stone slab + golden lotus border frame + hammered gold offering bowls
+  const markerStone = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.16, 0.68), mats.chunarStoneMat);
+  markerStone.position.set(0, 0.33, 0);
+  markerStone.castShadow = true;
+  markerStone.receiveShadow = true;
+  const markerGoldBorder = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.05, 0.80), mats.giltGoldMat);
+  markerGoldBorder.position.set(0, 0.28, 0);
+
+  for (const [ox, oz] of [[-0.68, 0.44], [0.68, 0.44], [-0.68, -0.44], [0.68, -0.44]] as Array<[number, number]>) {
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.065, 0.08, 12), mats.giltGoldMat);
+    bowl.position.set(ox, 0.34, oz);
+    markerSanctum.add(bowl);
+  }
+
+  // Fresh Orange & Saffron Marigold Flower Garlands framing the Marker Stone (InstancedMesh)
+  const marigoldGeo = new THREE.DodecahedronGeometry(0.055, 0);
+  const marigoldOrangeMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.64 });
+  const marigoldGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.62 });
+  const marigoldCount = 44;
+  const marigoldOrangeInst = new THREE.InstancedMesh(marigoldGeo, marigoldOrangeMat, marigoldCount);
+  const marigoldGoldInst = new THREE.InstancedMesh(marigoldGeo, marigoldGoldMat, marigoldCount);
+  for (let i = 0; i < marigoldCount; i++) {
+    const t = (i / marigoldCount) * Math.PI * 2;
+    const gx = Math.cos(t) * 0.78;
+    const gz = Math.sin(t) * 0.54;
+    const gy = 0.33 + Math.abs(Math.sin(t * 6)) * 0.02;
+    _v3.set(gx, gy, gz);
+    _q.setFromEuler(_e.set(t, t * 2, 0));
+    _s.set(1.05, 0.78, 1.05);
+    _m4.compose(_v3, _q, _s);
+    if (i % 2 === 0) {
+      marigoldOrangeInst.setMatrixAt(i, _m4);
+      _s.set(0.001, 0.001, 0.001);
+      _m4.compose(_v3, _q, _s);
+      marigoldGoldInst.setMatrixAt(i, _m4);
+    } else {
+      marigoldGoldInst.setMatrixAt(i, _m4);
+      _s.set(0.001, 0.001, 0.001);
+      _m4.compose(_v3, _q, _s);
+      marigoldOrangeInst.setMatrixAt(i, _m4);
+    }
+  }
+  marigoldOrangeInst.instanceMatrix.needsUpdate = true;
+  marigoldGoldInst.instanceMatrix.needsUpdate = true;
+  marigoldOrangeInst.userData.nonCollidable = true;
+  marigoldGoldInst.userData.nonCollidable = true;
+
+  // Frameless Tempered-Glass Protective Barrier with Brushed Brass Corner Posts & Warm Interior Display Light
+  const barrierW = 2.46;
+  const barrierD = 1.94;
+  const barrierH = 1.12;
+  const barrierY = 0.27 + barrierH * 0.5;
+  const temperedGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xdff5ff,
+    transparent: true,
+    opacity: 0.22,
+    roughness: 0.06,
+    metalness: 0.08,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  for (const [px, pz, pw, pd] of [
+    [0, -barrierD * 0.5, barrierW, 0.025],
+    [0, barrierD * 0.5, barrierW, 0.025],
+    [-barrierW * 0.5, 0, 0.025, barrierD],
+    [barrierW * 0.5, 0, 0.025, barrierD],
+  ] as Array<[number, number, number, number]>) {
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(pw, barrierH, pd), temperedGlassMat);
+    pane.position.set(px, barrierY, pz);
+    pane.userData.nonCollidable = true;
+    markerSanctum.add(pane);
+  }
+  // Brushed brass corner posts, clamps & warm base interior display LED strips
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, barrierH + 0.08, 10), mats.giltGoldMat);
+      post.position.set(sx * barrierW * 0.5, barrierY, sz * barrierD * 0.5);
+      const finial = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), mats.giltGoldMat);
+      finial.position.set(sx * barrierW * 0.5, barrierY + barrierH * 0.5 + 0.06, sz * barrierD * 0.5);
+      markerSanctum.add(post, finial);
+    }
+  }
+  const caseDisplayLedMat = new THREE.MeshStandardMaterial({
+    color: 0xffe4ad,
+    emissive: 0xffb84d,
+    emissiveIntensity: 1.75,
+    roughness: 0.3,
+  });
+  for (const [lx, lz, lsx, lsz] of [
+    [0, -barrierD * 0.5 + 0.05, barrierW - 0.16, 0.04],
+    [0, barrierD * 0.5 - 0.05, barrierW - 0.16, 0.04],
+  ] as Array<[number, number, number, number]>) {
+    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(lsx, 0.03, lsz), caseDisplayLedMat);
+    ledStrip.position.set(lx, 0.31, lz);
+    markerSanctum.add(ledStrip);
+  }
+  markerSanctum.add(
+    markerOuterChamber,
+    markerBrickRim,
+    markerSunkenWell,
+    markerGoldBorder,
+    markerStone,
+    marigoldOrangeInst,
+    marigoldGoldInst,
+  );
+  group.add(markerSanctum);
+
+  // 7B. Museum-Grade Carved 3D Nativity Stele Ensemble (x = 0, z = -3.45)
+  const craftMats = {
+    chunarStoneMat: mats.chunarStoneMat,
+    giltGoldMat: mats.giltGoldMat,
+    warmBronzeMat: mats.warmBronzeMat,
+    darkMetalMat: mats.darkMetalMat,
+    timberMat: mats.timberMat,
+    brickMat: mats.brickMat,
+    flameGlowMat: mats.flameGlowMat,
+  };
+  const reliefAltar = buildDetailedNativitySteleEnsemble(lTex, craftMats);
+  reliefAltar.position.set(0, 0.0, -3.45);
+  reliefAltar.scale.setScalar(1.16);
+  const diyoL = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.68, true);
+  diyoL.position.set(-1.26, 0.87, 0.34);
+  const diyoR = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.68, true);
+  diyoR.position.set(1.26, 0.87, 0.34);
+  reliefAltar.add(diyoL, diyoR);
+  group.add(reliefAltar);
+
+  // =========================================================================
+  // 8. DETAILED WOODEN OBSERVATION BOARDWALK, PILINGS, RAILINGS & 3 PLAQUES
+  // =========================================================================
+  const deckMat = new THREE.MeshStandardMaterial({
     map: lTex.salWoodMap,
     normalMap: lTex.salWoodNormal,
     normalScale: new THREE.Vector2(1.15, 1.15),
     roughnessMap: lTex.salWoodRough,
     roughness: 0.68,
+    metalness: 0.06,
+  });
+  const salBeamMat = new THREE.MeshStandardMaterial({
+    map: lTex.cofferTimberMap,
+    normalMap: lTex.cofferTimberNormal,
+    normalScale: new THREE.Vector2(1.2, 1.2),
+    roughnessMap: lTex.cofferTimberRough,
+    color: 0x5c3c24,
+    roughness: 0.68,
     metalness: 0.05,
   });
+
   const addBoardwalkSlab = (cx: number, cz: number, sx: number, sz: number) => {
     const slab = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.18, sz), deckMat);
     slab.position.set(cx, walkY - 0.09, cz);
     slab.receiveShadow = true;
     slab.castShadow = true;
     group.add(slab);
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(sx - 0.1, 0.14, sz - 0.1), mats.darkMetalMat);
-    beam.position.set(cx, walkY - 0.25, cz);
+    cameraOccluders.push(slab);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(sx - 0.12, 0.16, sz - 0.12), salBeamMat);
+    beam.position.set(cx, walkY - 0.26, cz);
+    beam.userData.nonCollidable = true;
     group.add(beam);
   };
   const innerSpanW = W - wallT * 2;
   const innerSpanD = D - wallT * 2;
-  const aisleX = innerSpanW * 0.5 - pitHalfW; // 8.20m wide east & west galleries
-  const aisleZ = innerSpanD * 0.5 - pitHalfD; // 5.60m wide north & south galleries
+  const aisleX = innerSpanW * 0.5 - pitHalfW;
+  const aisleZ = innerSpanD * 0.5 - pitHalfD;
   addBoardwalkSlab(0, -(pitHalfD + aisleZ * 0.5), innerSpanW, aisleZ);
   addBoardwalkSlab(0, pitHalfD + aisleZ * 0.5, innerSpanW, aisleZ);
   addBoardwalkSlab(-(pitHalfW + aisleX * 0.5), 0, aisleX, pitHalfD * 2);
   addBoardwalkSlab(pitHalfW + aisleX * 0.5, 0, aisleX, pitHalfD * 2);
 
-  // Carved Sal Wood interior ceiling tie-beams & South doorway inner casing
-  for (const bx of [-13.5, -9.2, 9.2, 13.5]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.36, innerSpanD - 0.4), salBeamMat);
-    beam.position.set(bx, 6.08, 0);
-    beam.castShadow = true;
-    group.add(beam);
+  // Heavy Timber Support Pilings + Sandstone Footings descending from boardwalk to trenchFloorY (-0.60m)
+  const pilingPositions: Array<[number, number]> = [
+    [-pitHalfW, -pitHalfD],
+    [-4.5, -pitHalfD],
+    [0, -pitHalfD],
+    [4.5, -pitHalfD],
+    [pitHalfW, -pitHalfD],
+    [-pitHalfW, pitHalfD],
+    [-4.5, pitHalfD],
+    [0, pitHalfD],
+    [4.5, pitHalfD],
+    [pitHalfW, pitHalfD],
+    [-pitHalfW, 0],
+    [pitHalfW, 0],
+  ];
+  const pilingH = walkY - 0.18 - trenchFloorY;
+  const pilingGeo = new THREE.BoxGeometry(0.24, pilingH, 0.24);
+  const footingGeo = new THREE.BoxGeometry(0.42, 0.18, 0.42);
+  const pilingInst = new THREE.InstancedMesh(pilingGeo, salBeamMat, pilingPositions.length);
+  const pilingFootInst = new THREE.InstancedMesh(footingGeo, mats.chunarStoneMat, pilingPositions.length);
+  pilingPositions.forEach(([px, pz], idx) => {
+    _q.identity();
+    _s.setScalar(1);
+    _v3.set(px, trenchFloorY + pilingH * 0.5, pz);
+    _m4.compose(_v3, _q, _s);
+    pilingInst.setMatrixAt(idx, _m4);
+
+    _v3.set(px, trenchFloorY + 0.09, pz);
+    _m4.compose(_v3, _q, _s);
+    pilingFootInst.setMatrixAt(idx, _m4);
+  });
+  pilingInst.instanceMatrix.needsUpdate = true;
+  pilingFootInst.instanceMatrix.needsUpdate = true;
+  pilingInst.castShadow = true;
+  pilingInst.userData.nonCollidable = true;
+  pilingFootInst.userData.nonCollidable = true;
+  group.add(pilingInst, pilingFootInst);
+
+  // Beveled boardwalk edge trim + warm concealed under-rail LED accent strips illuminating the brick pit
+  const underRailLedMat = new THREE.MeshStandardMaterial({
+    color: 0xffe8bd,
+    emissive: 0xffb347,
+    emissiveIntensity: 1.55,
+    roughness: 0.35,
+  });
+  const railHeight = 0.90;
+  for (const [cx, cz, sx, sz] of [
+    [0, -pitHalfD, pitHalfW * 2, 0.12],
+    [0, pitHalfD, pitHalfW * 2, 0.12],
+    [-pitHalfW, 0, 0.12, pitHalfD * 2 - 0.14],
+    [pitHalfW, 0, 0.12, pitHalfD * 2 - 0.14],
+  ] as Array<[number, number, number, number]>) {
+    const topBar = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.075, sz), mats.warmBronzeMat);
+    topBar.position.set(cx, walkY + railHeight, cz);
+    const botTrim = new THREE.Mesh(new THREE.BoxGeometry(sx + (sx > 0.5 ? 0.04 : 0), 0.07, sz + (sz > 0.5 ? 0.02 : 0.04)), salBeamMat);
+    botTrim.position.set(cx, walkY + 0.035, cz);
+    const glassPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(sx > 0.5 ? sx - 0.1 : 0.035, railHeight - 0.14, sz > 0.5 ? sz - 0.1 : 0.035),
+      temperedGlassMat,
+    );
+    glassPanel.position.set(cx, walkY + railHeight * 0.5, cz);
+    glassPanel.userData.nonCollidable = true;
+    const ledUnder = new THREE.Mesh(
+      new THREE.BoxGeometry(sx > 0.5 ? sx - 0.25 : 0.06, 0.03, sz > 0.5 ? sz - 0.25 : 0.06),
+      underRailLedMat,
+    );
+    ledUnder.position.set(cx, walkY - 0.14, cz);
+    ledUnder.userData.nonCollidable = true;
+    group.add(topBar, botTrim, glassPanel, ledUnder);
   }
-  for (const bz of [-8.8, 8.8]) {
-    const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(innerSpanW - 0.4, 0.28, 0.32), salBeamMat);
-    crossBeam.position.set(0, 6.12, bz);
-    group.add(crossBeam);
+  // Railing brass stanchions
+  for (const [px, pz] of [
+    ...[-9, -6, -3, 0, 3, 6, 9].map((x): [number, number] => [x, -pitHalfD]),
+    ...[-9, -6, -3, 0, 3, 6, 9].map((x): [number, number] => [x, pitHalfD]),
+    ...[-2.8, 0, 2.8].map((z): [number, number] => [-pitHalfW, z]),
+    ...[-2.8, 0, 2.8].map((z): [number, number] => [pitHalfW, z]),
+  ]) {
+    const stanchion = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, railHeight, 8), mats.warmBronzeMat);
+    stanchion.position.set(px, walkY + railHeight * 0.5, pz);
+    stanchion.userData.nonCollidable = true;
+    group.add(stanchion);
+  }
+
+  // Interior Gallery Wall Articulation: warm sanctuary cream plaster above wood dado + pilasters + wall sconces
+  const wallInnerX = W * 0.5 - wallT;
+  const wallInnerZ = D * 0.5 - wallT;
+  const warmPlasterMat = new THREE.MeshStandardMaterial({
+    map: lTex.stuccoWhiteMap,
+    normalMap: lTex.stuccoWhiteNormal,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    color: 0xeadbc4,
+    roughness: 0.90,
+    metalness: 0.01,
+  });
+  for (const [dx, dz, dsx, dsz] of [
+    [0, -wallInnerZ + 0.04, innerSpanW, 0.08],
+    [-(doorHalfW + (innerSpanW * 0.5 - doorHalfW) * 0.5), wallInnerZ - 0.04, innerSpanW * 0.5 - doorHalfW, 0.08],
+    [doorHalfW + (innerSpanW * 0.5 - doorHalfW) * 0.5, wallInnerZ - 0.04, innerSpanW * 0.5 - doorHalfW, 0.08],
+    [-wallInnerX + 0.04, 0, 0.08, innerSpanD],
+    [wallInnerX - 0.04, 0, 0.08, innerSpanD],
+  ] as Array<[number, number, number, number]>) {
+    const dado = new THREE.Mesh(new THREE.BoxGeometry(dsx, 1.38, dsz), salBeamMat);
+    dado.position.set(dx, walkY + 0.69, dz);
+    dado.receiveShadow = true;
+    dado.userData.nonCollidable = true;
+
+    const plaster = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        dsx > dsz ? dsx : 0.04,
+        2.72,
+        dsz > dsx ? dsz : 0.04,
+      ),
+      warmPlasterMat,
+    );
+    plaster.position.set(
+      dx === -wallInnerX + 0.04 ? dx - 0.015 : dx === wallInnerX - 0.04 ? dx + 0.015 : dx,
+      walkY + 1.38 + 1.36,
+      dz === -wallInnerZ + 0.04 ? dz - 0.015 : dz === wallInnerZ - 0.04 ? dz + 0.015 : dz,
+    );
+    plaster.receiveShadow = true;
+    plaster.userData.nonCollidable = true;
+    group.add(dado, plaster);
+  }
+  for (const px of [-12.0, -6.0, 0, 6.0, 12.0]) {
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.25, 0.14), mats.stuccoWhiteMat);
+    pil.position.set(px, walkY + 1.62, -wallInnerZ + 0.06);
+    pil.userData.nonCollidable = true;
+    const sconce = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.06, 0.24, 10), mats.warmBronzeMat);
+    sconce.position.set(px, walkY + 2.15, -wallInnerZ + 0.16);
+    const sconceGlow = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), mats.flameGlowMat);
+    sconceGlow.position.set(px, walkY + 2.28, -wallInnerZ + 0.16);
+    sconce.userData.nonCollidable = true;
+    sconceGlow.userData.nonCollidable = true;
+    group.add(pil, sconce, sconceGlow);
   }
   for (const side of [-1, 1]) {
     const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH - 0.2, 0.22), salBeamMat);
@@ -590,132 +1147,56 @@ export function buildMayaDeviTemple(
     group.add(innerSalTrim);
   }
 
-  // Steel support piers beneath boardwalk + interior viewing balustrade around sunken pit
-  for (const px of [-pitHalfW, 0, pitHalfW]) {
-    for (const pz of [-pitHalfD, 0, pitHalfD]) {
-      if (px === 0 && pz === 0) continue;
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.35, 10), mats.darkMetalMat);
-      col.position.set(px, 0.30, pz);
-      group.add(col);
-    }
-  }
-  const railHeight = 0.88;
-  for (const [cx, cz, sx, sz] of [
-    [0, -pitHalfD, pitHalfW * 2, 0.12],
-    [0, pitHalfD, pitHalfW * 2, 0.12],
-    [-pitHalfW, 0, 0.12, pitHalfD * 2],
-    [pitHalfW, 0, 0.12, pitHalfD * 2],
-  ] as Array<[number, number, number, number]>) {
-    const topBar = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.08, sz), mats.warmBronzeMat);
-    topBar.position.set(cx, walkY + railHeight, cz);
-    const glassPanel = new THREE.Mesh(
-      new THREE.BoxGeometry(sx > 0.5 ? sx : 0.04, railHeight - 0.12, sz > 0.5 ? sz : 0.04),
-      windowGlassMat,
+  // 3 Interactive Museum History Plaques along the Observation Railing
+  const createMuseumPlaquePedestal = (
+    lx: number,
+    lz: number,
+    rotY: number,
+    plaqueTex: THREE.CanvasTexture,
+    highlightKey: 'markerStone' | 'mauryanChambers' | 'nativityRelief',
+  ) => {
+    const pGroup = new THREE.Group();
+    pGroup.position.set(lx, walkY, lz);
+    pGroup.rotation.y = rotY;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.055, 0.96, 10), mats.warmBronzeMat);
+    post.position.y = 0.48;
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.06, 12), mats.warmBronzeMat);
+    collar.position.y = 0.03;
+
+    const frameGroup = new THREE.Group();
+    frameGroup.position.set(0, 1.00, 0);
+    frameGroup.rotation.x = -0.58;
+    const backing = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.56, 0.05), mats.giltGoldMat);
+    const faceMat = new THREE.MeshStandardMaterial({
+      map: plaqueTex,
+      roughness: 0.36,
+      metalness: 0.18,
+      emissive: 0x1e1608,
+      emissiveIntensity: 0.32,
+    });
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.49), faceMat);
+    face.position.z = 0.028;
+
+    const hitTarget = new THREE.Mesh(
+      new THREE.BoxGeometry(0.98, 0.72, 0.32),
+      new THREE.MeshBasicMaterial({ visible: false }),
     );
-    glassPanel.position.set(cx, walkY + railHeight * 0.5, cz);
-    glassPanel.userData.nonCollidable = true;
-    group.add(topBar, glassPanel);
-  }
+    hitTarget.layers.set(2);
+    hitTarget.userData.mayaDeviPlaqueKey = highlightKey;
+    hitTarget.userData.nonCollidable = true;
+    plaqueHitTargets.push({ mesh: hitTarget, highlightKey });
 
-  // Staggered Archaeological Mauryan / Gupta Multi-Course Brick Chambers inside the sunken pit (y: -0.35 -> +0.58)
-  const ruinWalls: THREE.Matrix4[] = [];
-  const nsWallSegs: Array<[number, number, number, number, number]> = [
-    [-6.6, -2.5, 0.46, 0.94, 4.4],
-    [-6.6, 2.7, 0.46, 0.76, 4.0],
-    [-4.3, -1.8, 0.44, 1.02, 5.2],
-    [-4.3, 3.0, 0.44, 0.72, 3.4],
-    [-2.2, -3.2, 0.42, 0.88, 2.8],
-    [-2.2, 2.6, 0.42, 0.80, 4.2],
-    [2.2, -3.1, 0.42, 0.92, 3.0],
-    [2.2, 2.5, 0.42, 0.84, 4.4],
-    [4.3, -1.9, 0.44, 1.00, 5.0],
-    [4.3, 2.9, 0.44, 0.74, 3.6],
-    [6.6, -2.4, 0.46, 0.90, 4.6],
-    [6.6, 2.8, 0.46, 0.78, 3.8],
-  ];
-  for (const [rx, rz, rw, rh, rd] of nsWallSegs) {
-    _v3.set(rx, -0.35 + rh * 0.5, rz);
-    _q.identity();
-    _s.set(rw, rh, rd);
-    ruinWalls.push(new THREE.Matrix4().compose(_v3, _q, _s));
-  }
-  const ewWallSegs: Array<[number, number, number, number, number]> = [
-    [-5.5, -4.1, 2.8, 0.86, 0.44],
-    [5.5, -4.1, 2.8, 0.88, 0.44],
-    [-5.4, -1.2, 2.6, 0.92, 0.42],
-    [5.4, -1.2, 2.6, 0.94, 0.42],
-    [-5.6, 1.6, 2.9, 0.78, 0.44],
-    [5.6, 1.6, 2.9, 0.82, 0.44],
-    [-4.8, 4.1, 4.4, 0.70, 0.46],
-    [4.8, 4.1, 4.4, 0.74, 0.46],
-    [0.0, 2.8, 4.6, 0.64, 0.42],
-  ];
-  for (const [rx, rz, rw, rh, rd] of ewWallSegs) {
-    _v3.set(rx, -0.35 + rh * 0.5, rz);
-    _q.identity();
-    _s.set(rw, rh, rd);
-    ruinWalls.push(new THREE.Matrix4().compose(_v3, _q, _s));
-  }
-  const ruinInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinWalls.length);
-  ruinWalls.forEach((m, idx) => ruinInst.setMatrixAt(idx, m));
-  ruinInst.instanceMatrix.needsUpdate = true;
-  ruinInst.computeBoundingSphere();
-  ruinInst.castShadow = true;
-  ruinInst.receiveShadow = true;
-  ruinInst.userData.nonCollidable = true;
-  group.add(ruinInst);
+    frameGroup.add(backing, face, hitTarget);
+    pGroup.add(post, collar, frameGroup);
+    group.add(pGroup);
+  };
+  createMuseumPlaquePedestal(0.0, pitHalfD + 0.08, 0, lTex.plaqueMarkerMap, 'markerStone');
+  createMuseumPlaquePedestal(pitHalfW + 0.08, 0.0, Math.PI * 0.5, lTex.plaqueChambersMap, 'mauryanChambers');
+  createMuseumPlaquePedestal(0.0, -pitHalfD - 0.08, Math.PI, lTex.plaqueNativityMap, 'nativityRelief');
 
-  // Sacred Marker Stone (conglomerate stone slab under bulletproof glass shrine in pit center!)
-  // Note: Optional custom GLB artifact replacement hook for markerStone / reliefAltar below.
-  const markerPlinth = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.52, 2.2), mats.brickMat);
-  markerPlinth.position.set(0, -0.09, 0);
-  const markerStone = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.16, 0.64), mats.chunarStoneMat);
-  markerStone.position.set(0, 0.24, 0);
-  const caseGlassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xd9f2ff,
-    transparent: true,
-    opacity: 0.34,
-    roughness: 0.08,
-    metalness: 0.1,
-    side: THREE.DoubleSide,
-  });
-  const glassCase = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.96, 1.55), caseGlassMat);
-  glassCase.position.set(0, 0.62, 0);
-  glassCase.userData.nonCollidable = true;
-  const caseFrame = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.09, 1.64), mats.giltGoldMat);
-  caseFrame.position.set(0, 1.10, 0);
-  caseFrame.userData.nonCollidable = true;
-  group.add(markerPlinth, markerStone, glassCase, caseFrame);
-
-  // 4th-c. Gupta Nativity Bas-Relief Shrine Stele & Baby Siddhartha + Brass Butter Lamps on North Sanctum Edge
-  const reliefAltar = new THREE.Group();
-  reliefAltar.position.set(0, 0.05, -3.8);
-  reliefAltar.scale.setScalar(1.18);
-  const altarPlinth = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.65, 1.2), mats.brickMat);
-  altarPlinth.position.y = 0.22;
-  const reliefBacking = new THREE.Mesh(new THREE.BoxGeometry(1.85, 2.25, 0.24), mats.chunarStoneMat);
-  reliefBacking.position.set(0, 1.66, -0.22);
-  const reliefFaceMat = new THREE.MeshStandardMaterial({
-    map: lTex.nativityReliefMap,
-    normalMap: lTex.nativityReliefNormal,
-    normalScale: new THREE.Vector2(1.4, 1.4),
-    roughness: 0.72,
-  });
-  const reliefPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 1.98), reliefFaceMat);
-  reliefPanel.position.set(0, 1.66, -0.09);
-
-  const innerSiddhartha = createNativitySiddharthaStatue(mats.giltGoldMat, mats.chunarStoneMat);
-  innerSiddhartha.position.set(0, 0.55, 0.28);
-  innerSiddhartha.scale.setScalar(0.84);
-
-  const diyoL = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.65, true);
-  diyoL.position.set(-1.12, 0.55, 0.26);
-  const diyoR = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.65, true);
-  diyoR.position.set(1.12, 0.55, 0.26);
-  reliefAltar.add(altarPlinth, reliefBacking, reliefPanel, innerSiddhartha, diyoL, diyoR);
-  group.add(reliefAltar);
-
-  // 4 Corner Sukunda Brass Butter Lamps along inner viewing boardwalk corners with pooled flicker metadata
+  // =========================================================================
+  // 9. COZY RITUAL PROPS: BUTTER LAMPS, INCENSE BURNER SMOKE & PRAYER CUSHIONS
+  // =========================================================================
   const cornerLampRig = new THREE.Group();
   cornerLampRig.userData.noMerge = true;
   cornerLampRig.userData.nonCollidable = true;
@@ -727,35 +1208,210 @@ export function buildMayaDeviTemple(
     [8.4, 4.9],
   ];
   cornerSpecs.forEach(([lx, lz], idx) => {
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.21, 0.34, 10), mats.warmBronzeMat);
-    ped.position.set(lx, walkY + 0.17, lz);
-    const lamp = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.62, true);
-    lamp.position.set(lx, walkY + 0.34, lz);
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 0.42, 12), mats.warmBronzeMat);
+    ped.position.set(lx, walkY + 0.21, lz);
+    const lamp = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.68, true);
+    lamp.position.set(lx, walkY + 0.42, lz);
     lamp.userData.nonCollidable = true;
     cornerLampRig.add(ped, lamp);
     cornerLamps.push(lamp);
 
-    const lgt = new THREE.PointLight(0xffb454, 1.45, 11.5, 1.45);
-    lgt.position.set(lx, walkY + 0.72, lz);
+    const lgt = new THREE.PointLight(0xffb454, 1.55, 13.0, 1.4);
+    lgt.position.set(lx, walkY + 0.85, lz);
     lgt.userData.flickerPhase = idx * 1.65;
-    lgt.userData.flickerAmp = 0.22;
-    lgt.userData.intensityScale = 1.45;
+    lgt.userData.flickerAmp = 0.20;
+    lgt.userData.intensityScale = 1.55;
     lgt.userData.warmFlicker = true;
     lgt.userData.interiorSanctum = true;
     beaconLights.push(lgt);
     cornerLampRig.add(lgt);
   });
-  cornerLampRig.userData.onFlickerUpdate = (t: number) => {
-    for (let i = 0; i < cornerLamps.length; i++) {
-      const s = 0.61 + Math.sin(t * 8.4 + i * 1.9) * 0.03 + Math.sin(t * 14.3 + i) * 0.014;
-      cornerLamps[i].scale.set(0.62, s, 0.62);
-    }
-  };
-  group.add(cornerLampRig);
-  animatedNodes.push(cornerLampRig);
 
-  // Floating Golden Skylight Dust Motes drifting inside the central sanctum light shaft
-  const moteCount = 140;
+  // Ornate Tiered Nepali/Tibetan Choe-sham Butter Lamp Offering Altar on NE Gallery
+  const butterTrayGroup = buildDetailedButterLampAltar(lTex, craftMats, cornerLamps, beaconLights);
+  butterTrayGroup.position.set(6.2, walkY, -6.65);
+  cornerLampRig.add(butterTrayGroup);
+
+  // Carved Bronze Incense Burner (Dhupauro) on NW Gallery + Custom GLSL Rising Smoke Wisps
+  const incenseGroup = buildDetailedDhupauroIncenseBurner(craftMats);
+  incenseGroup.position.set(-6.4, walkY, -6.55);
+  cornerLampRig.add(incenseGroup);
+
+  const smokeCount = 26;
+  const smokePos = new Float32Array(smokeCount * 3);
+  const smokeSeed = new Float32Array(smokeCount);
+  for (let i = 0; i < smokeCount; i++) {
+    smokePos[i * 3] = -6.4;
+    smokePos[i * 3 + 1] = walkY + 1.12 + (i / smokeCount) * 2.2;
+    smokePos[i * 3 + 2] = -6.55;
+    smokeSeed[i] = i * 0.47;
+  }
+  const smokeGeo = new THREE.BufferGeometry();
+  smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
+  smokeGeo.setAttribute('aSeed', new THREE.BufferAttribute(smokeSeed, 1));
+  const smokeUniforms = { uTime: { value: 0 } };
+  const smokeMat = new THREE.ShaderMaterial({
+    uniforms: smokeUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      attribute float aSeed;
+      uniform float uTime;
+      varying float vAlpha;
+      void main() {
+        float life = fract(aSeed * 0.19 + uTime * 0.16);
+        vec3 p = position;
+        p.y = ${(walkY + 1.12).toFixed(2)} + life * 2.25;
+        p.x += sin(life * 5.2 + uTime * 0.9 + aSeed) * (0.04 + life * 0.22);
+        p.z += cos(life * 4.4 + uTime * 0.75 + aSeed) * (0.04 + life * 0.18);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = clamp((18.0 + life * 38.0) / max(1.0, -mv.z), 4.0, 22.0);
+        vAlpha = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.55, 1.0, life)) * 0.24;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float r2 = dot(c, c);
+        if (r2 > 0.25) discard;
+        float soft = exp(-r2 * 10.0);
+        gl_FragColor = vec4(0.88, 0.87, 0.85, soft * vAlpha);
+      }
+    `,
+  });
+  const incenseSmoke = new THREE.Points(smokeGeo, smokeMat);
+  incenseSmoke.frustumCulled = false;
+  incenseSmoke.userData.noMerge = true;
+  incenseSmoke.userData.nonCollidable = true;
+  group.add(incenseSmoke);
+
+  // Quilted Himalayan Prayer Cushion Meditation Stations & Choktse Side Tables along West Gallery
+  const meditationGallery = buildMeditationGalleryEnsemble(lTex, craftMats, walkY);
+  group.add(meditationGallery);
+
+  // =========================================================================
+  // 10. COFFERED TIMBER CEILING, TRACK SPOTLIGHTS & VOLUMETRIC GOD RAYS
+  // =========================================================================
+  // Note: Roof slab bottom sits at y = 6.07. Place coffered soffit panels cleanly BELOW at y = 6.01!
+  const ceilingGroup = new THREE.Group();
+  ceilingGroup.userData.nonCollidable = true;
+  const acousticMat = new THREE.MeshStandardMaterial({
+    map: lTex.cofferTimberMap,
+    normalMap: lTex.cofferTimberNormal,
+    roughnessMap: lTex.cofferTimberRough,
+    color: 0x563925,
+    roughness: 0.86,
+    metalness: 0.02,
+  });
+
+  const addCeilingSoffit = (cx: number, cz: number, sx: number, sz: number) => {
+    const soffit = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.08, sz), acousticMat);
+    soffit.position.set(cx, 6.01, cz);
+    soffit.receiveShadow = true;
+    ceilingGroup.add(soffit);
+    cameraOccluders.push(soffit);
+  };
+  addCeilingSoffit(0, -(skyHoleD * 0.5 + sideRoofZ * 0.5), innerSpanW, sideRoofZ - wallT);
+  addCeilingSoffit(0, skyHoleD * 0.5 + sideRoofZ * 0.5, innerSpanW, sideRoofZ - wallT);
+  addCeilingSoffit(-(skyHoleW * 0.5 + sideRoofX * 0.5), 0, sideRoofX - wallT, skyHoleD);
+  addCeilingSoffit(skyHoleW * 0.5 + sideRoofX * 0.5, 0, sideRoofX - wallT, skyHoleD);
+
+  // Coffered heavy primary crossbeams (N-S and E-W)
+  for (const bx of [-13.5, -9.2, -4.6, 4.6, 9.2, 13.5]) {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, innerSpanD - 0.3), salBeamMat);
+    beam.position.set(bx, 5.84, 0);
+    beam.castShadow = true;
+    ceilingGroup.add(beam);
+  }
+  for (const bz of [-8.8, -3.55, 3.55, 8.8]) {
+    const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(innerSpanW - 0.3, 0.30, 0.32), salBeamMat);
+    crossBeam.position.set(0, 5.86, bz);
+    ceilingGroup.add(crossBeam);
+  }
+  // Secondary coffer rafters framing acoustic ceiling bays
+  for (const bx of [-11.35, -6.9, 6.9, 11.35]) {
+    const rafter = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, innerSpanD - 0.4), salBeamMat);
+    rafter.position.set(bx, 5.93, 0);
+    ceilingGroup.add(rafter);
+  }
+  for (const bz of [-6.15, 0, 6.15]) {
+    for (const side of [-1, 1]) {
+      const rafter = new THREE.Mesh(new THREE.BoxGeometry(sideRoofX - 0.9, 0.16, 0.14), salBeamMat);
+      rafter.position.set(side * (skyHoleW * 0.5 + sideRoofX * 0.5 - 0.2), 5.93, bz);
+      ceilingGroup.add(rafter);
+    }
+  }
+  // Decorative coffered skylight well fascia collar
+  for (const [fx, fz, sx, sz] of [
+    [0, -skyHoleD * 0.5, skyHoleW + 0.32, 0.28],
+    [0, skyHoleD * 0.5, skyHoleW + 0.32, 0.28],
+    [-skyHoleW * 0.5, 0, 0.28, skyHoleD],
+    [skyHoleW * 0.5, 0, 0.28, skyHoleD],
+  ] as Array<[number, number, number, number]>) {
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.50, sz), salBeamMat);
+    collar.position.set(fx, 5.98, fz);
+    ceilingGroup.add(collar);
+  }
+
+  // Suspended Black Museum Track-Spotlights aimed at Marker Stone, Nativity Stele & Mauryan Ruins
+  const trackHalfW = 6.2;
+  const trackHalfD = 4.6;
+  const trackY = 5.62;
+  for (const [tx, tz, sx, sz] of [
+    [0, -trackHalfD, trackHalfW * 2, 0.08],
+    [0, trackHalfD, trackHalfW * 2, 0.08],
+    [-trackHalfW, 0, 0.08, trackHalfD * 2],
+    [trackHalfW, 0, 0.08, trackHalfD * 2],
+  ] as Array<[number, number, number, number]>) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.06, sz), mats.darkMetalMat);
+    rail.position.set(tx, trackY, tz);
+    ceilingGroup.add(rail);
+  }
+  const trackLensMat = new THREE.MeshStandardMaterial({
+    color: 0xfff2cc,
+    emissive: 0xffc66e,
+    emissiveIntensity: 1.9,
+    roughness: 0.2,
+  });
+  const spotSpecs: Array<{ pos: [number, number, number]; target: [number, number, number] }> = [
+    { pos: [-4.2, trackY, trackHalfD], target: [0, 0.1, 0.65] },
+    { pos: [0, trackY, trackHalfD], target: [0, 0.1, 0.65] },
+    { pos: [4.2, trackY, trackHalfD], target: [0, 0.1, 0.65] },
+    { pos: [-3.8, trackY, -trackHalfD], target: [0, 1.5, -3.45] },
+    { pos: [0, trackY, -trackHalfD], target: [0, 1.7, -3.45] },
+    { pos: [3.8, trackY, -trackHalfD], target: [0, 1.5, -3.45] },
+    { pos: [-trackHalfW, trackY, -2.5], target: [-4.5, 0.1, -2.0] },
+    { pos: [-trackHalfW, trackY, 0.5], target: [-4.5, 0.1, 0.8] },
+    { pos: [-trackHalfW, trackY, 3.0], target: [-3.5, 0.1, 2.5] },
+    { pos: [trackHalfW, trackY, -2.5], target: [4.5, 0.1, -2.0] },
+    { pos: [trackHalfW, trackY, 0.5], target: [4.5, 0.1, 0.8] },
+    { pos: [trackHalfW, trackY, 3.0], target: [3.5, 0.1, 2.5] },
+  ];
+  const _lookDummy = new THREE.Object3D();
+  for (const sp of spotSpecs) {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.24, 6), mats.darkMetalMat);
+    stem.position.set(sp.pos[0], sp.pos[1] - 0.10, sp.pos[2]);
+    ceilingGroup.add(stem);
+
+    const fixture = new THREE.Group();
+    fixture.position.set(sp.pos[0], sp.pos[1] - 0.22, sp.pos[2]);
+    _lookDummy.position.copy(fixture.position);
+    _lookDummy.lookAt(sp.target[0], sp.target[1], sp.target[2]);
+    fixture.quaternion.copy(_lookDummy.quaternion);
+
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.082, 0.24, 12), mats.darkMetalMat);
+    can.rotation.x = Math.PI * 0.5;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.068, 12), trackLensMat);
+    lens.position.z = 0.122;
+    fixture.add(can, lens);
+    ceilingGroup.add(fixture);
+  }
+  group.add(ceilingGroup);
+
+  // Floating Golden Skylight Dust Motes drifting inside the volumetric light shafts
+  const moteCount = 175;
   const motePos = new Float32Array(moteCount * 3);
   const moteSeed = new Float32Array(moteCount);
   for (let i = 0; i < moteCount; i++) {
@@ -765,9 +1421,9 @@ export function buildMayaDeviTemple(
     const r2 = h2 - Math.floor(h2);
     const h3 = Math.sin(i * 39.346 + 9.412) * 43758.5453;
     const r3 = h3 - Math.floor(h3);
-    motePos[i * 3] = (r1 - 0.5) * 9.8;
-    motePos[i * 3 + 1] = 0.65 + r2 * 6.4;
-    motePos[i * 3 + 2] = (r3 - 0.5) * 7.2;
+    motePos[i * 3] = (r1 - 0.5) * 10.4;
+    motePos[i * 3 + 1] = 0.35 + r2 * 6.5;
+    motePos[i * 3 + 2] = (r3 - 0.5) * 7.8;
     moteSeed[i] = r1 * 6.2831;
   }
   const moteGeo = new THREE.BufferGeometry();
@@ -785,13 +1441,13 @@ export function buildMayaDeviTemple(
       varying float vAlpha;
       void main() {
         vec3 p = position;
-        p.x += sin(uTime * 0.35 + aSeed) * 0.42;
-        p.y = 0.65 + mod(p.y + uTime * 0.14 + aSeed, 6.4);
-        p.z += cos(uTime * 0.28 + aSeed * 1.3) * 0.38;
+        p.x += sin(uTime * 0.32 + aSeed) * 0.45;
+        p.y = 0.35 + mod(p.y + uTime * 0.13 + aSeed, 6.5);
+        p.z += cos(uTime * 0.26 + aSeed * 1.3) * 0.40;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_PointSize = clamp(28.0 / max(1.2, -mv.z), 2.0, 9.0);
-        float heightFade = smoothstep(0.65, 1.6, p.y) * (1.0 - smoothstep(5.8, 7.05, p.y));
-        vAlpha = heightFade * (0.42 + 0.42 * sin(uTime * 1.4 + aSeed * 2.0));
+        float heightFade = smoothstep(0.35, 1.4, p.y) * (1.0 - smoothstep(5.8, 6.85, p.y));
+        vAlpha = heightFade * (0.40 + 0.42 * sin(uTime * 1.35 + aSeed * 2.0));
         gl_Position = projectionMatrix * mv;
       }
     `,
@@ -811,53 +1467,109 @@ export function buildMayaDeviTemple(
   dustMotes.frustumCulled = false;
   dustMotes.userData.noMerge = true;
   dustMotes.userData.nonCollidable = true;
-  dustMotes.userData.onFlickerUpdate = (t: number) => {
-    moteUniforms.uTime.value = t;
-  };
   group.add(dustMotes);
-  animatedNodes.push(dustMotes);
 
-  // Soft Volumetric Golden Skylight Beams descending onto the Marker Stone sanctum
-  const beamMat = new THREE.MeshBasicMaterial({
-    color: 0xffdf9e,
-    transparent: true,
-    opacity: 0.055,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const skylightCone = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 4.6, 6.2, 20, 1, true), beamMat);
-  skylightCone.position.set(0, 3.6, -0.35);
-  skylightCone.userData.nonCollidable = true;
-  group.add(skylightCone);
+  // Soft Custom GLSL Fresnel-Faded Volumetric God Rays (ZERO hard geometric edges!)
+  const rayOuter = createVolumetricGodRayMaterial(0xffe2a4, 0.165, 2.25);
+  const rayInner = createVolumetricGodRayMaterial(0xffebc2, 0.145, 2.65);
+  const rayClerestory = createVolumetricGodRayMaterial(0xffe7ba, 0.095, 2.45);
 
-  // Warm Architectural Sanctuary Spotlight illuminating the Marker Stone & sunken Mauryan ruins
-  const sanctumLight = new THREE.PointLight(0xffcf87, 4.2, 25, 1.15);
-  sanctumLight.position.set(0, 5.4, -0.6);
-  sanctumLight.userData.intensityScale = 2.4;
-  sanctumLight.userData.flickerAmp = 0.06;
+  const outerShaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.35, 4.45, 6.7, 32, 1, true),
+    rayOuter.material,
+  );
+  outerShaft.position.set(0, 3.25, -0.25);
+  outerShaft.renderOrder = 5;
+  outerShaft.userData.nonCollidable = true;
+
+  const innerShaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.35, 2.55, 6.6, 28, 1, true),
+    rayInner.material,
+  );
+  innerShaft.position.set(0, 3.22, -0.35);
+  innerShaft.renderOrder = 6;
+  innerShaft.userData.nonCollidable = true;
+  group.add(outerShaft, innerShaft);
+
+  // Soft angled daylight/moonlight rays entering through high clerestory windows
+  const clerestoryBeamGeo = new THREE.CylinderGeometry(0.65, 1.75, 7.6, 20, 1, true);
+  const clerestoryBeamSpecs: Array<{ pos: [number, number, number]; rot: [number, number, number] }> = [
+    { pos: [-7.2, 3.45, 7.2], rot: [0.54, 0, -0.14] },
+    { pos: [7.2, 3.45, 7.2], rot: [0.54, 0, 0.14] },
+    { pos: [-12.6, 3.35, 0.0], rot: [0, 0, -0.58] },
+    { pos: [12.6, 3.35, 0.0], rot: [0, 0, 0.58] },
+  ];
+  for (const cb of clerestoryBeamSpecs) {
+    const shaft = new THREE.Mesh(clerestoryBeamGeo, rayClerestory.material);
+    shaft.position.set(cb.pos[0], cb.pos[1], cb.pos[2]);
+    shaft.rotation.set(cb.rot[0], cb.rot[1], cb.rot[2]);
+    shaft.renderOrder = 5;
+    shaft.userData.nonCollidable = true;
+    group.add(shaft);
+  }
+
+  cornerLampRig.userData.onFlickerUpdate = (t: number) => {
+    for (let i = 0; i < cornerLamps.length; i++) {
+      const base = i < 4 ? 0.68 : 0.94;
+      const s = base + Math.sin(t * 8.4 + i * 1.9) * (base * 0.048) + Math.sin(t * 14.3 + i) * (base * 0.02);
+      cornerLamps[i].scale.set(base, s, base);
+    }
+    moteUniforms.uTime.value = t;
+    smokeUniforms.uTime.value = t;
+    rayOuter.uniforms.uTime.value = t;
+    rayInner.uniforms.uTime.value = t;
+    rayClerestory.uniforms.uTime.value = t;
+  };
+  group.add(cornerLampRig);
+  animatedNodes.push(cornerLampRig);
+
+  // =========================================================================
+  // 11. BALANCED WARM SANCTUM KEY + WARM BOUNCE FILL LIGHTING (6-LIGHT POOL)
+  // =========================================================================
+  const sanctumLight = new THREE.PointLight(0xffcf87, 4.4, 28, 1.15);
+  sanctumLight.position.set(0, 5.25, -0.45);
+  sanctumLight.userData.intensityScale = 2.65;
+  sanctumLight.userData.flickerAmp = 0.05;
   sanctumLight.userData.warmFlicker = true;
   sanctumLight.userData.interiorSanctum = true;
   beaconLights.push(sanctumLight);
   group.add(sanctumLight);
 
-  group.userData.mayaDeviHighlights = {
+  const bounceFillLight = new THREE.PointLight(0xffb470, 2.2, 32, 1.05);
+  bounceFillLight.position.set(0, 2.05, 0.35);
+  bounceFillLight.userData.intensityScale = 1.65;
+  bounceFillLight.userData.flickerAmp = 0.03;
+  bounceFillLight.userData.warmFlicker = false;
+  bounceFillLight.userData.interiorSanctum = true;
+  beaconLights.push(bounceFillLight);
+  group.add(bounceFillLight);
+
+  const mayaDeviHighlights: Record<'markerStone' | 'mauryanChambers' | 'nativityRelief', MayaDeviHighlightInfo> = {
     markerStone: {
-      title: 'Sacred Marker Stone (3rd c. BCE)',
+      title: 'The Sacred Marker Stone',
       subtitle: 'Birthplace Sanctum · UNESCO World Heritage Core',
       description:
-        'Discovered during 1992–1996 excavations beneath the Maya Devi sanctum, this conglomerate stone slab marks the exact nativity spot of Siddhartha Gautama surrounded by Mauryan brick chambers.',
-      localPos: [0, 0.24, 0],
+        'Discovered during 1992–1996 excavations beneath the Maya Devi sanctum, this sunken conglomerate stone slab marks the exact birthplace of Siddhartha Gautama, framed by offerings and ancient brick chambers.',
+      localPos: [0, 0.33, 0.65],
+    },
+    mauryanChambers: {
+      title: 'Mauryan Brick Chambers (3rd Century BCE)',
+      subtitle: 'Stratified Archaeological Excavation',
+      description:
+        'Stepped fired-brick walls descending 1.6 meters below the boardwalk reveal structural phases from the 3rd-century BCE Mauryan apsidal timber-and-brick shrine through Sunga and Kushan temple reconstructions.',
+      localPos: [5.8, 0.0, 0.0],
     },
     nativityRelief: {
-      title: '4th-c. Gupta Nativity Bas-Relief',
-      subtitle: 'Queen Maya Devi Holding the Sal Branch',
+      title: 'The Nativity Sculpture',
+      subtitle: 'Queen Maya Devi Grasping the Sal Tree Branch',
       description:
-        'Carved sandstone stele depicting Queen Maya Devi grasping a blossoming Sal tree branch while infant Siddhartha takes his seven symbolic steps atop sacred lotus medallions.',
-      localPos: [0, 1.5, -3.8],
+        'Carved sandstone stele depicting Queen Maya Devi grasping a blossoming Sal tree branch at Lumbini Garden while newborn Prince Siddhartha stands upon sacred lotus pedestals, adorned with ceremonial silk khata scarves.',
+      localPos: [0, 1.6, -3.45],
     },
   };
+  group.userData.mayaDeviHighlights = mayaDeviHighlights;
+  group.userData.mayaDeviPlaqueHitTargets = plaqueHitTargets;
 
-  return { group, beaconLights, animatedNodes, cameraOccluders };
+  return { group, beaconLights, animatedNodes, cameraOccluders, plaqueHitTargets };
 }
 

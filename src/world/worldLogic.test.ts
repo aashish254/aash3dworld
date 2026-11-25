@@ -2300,6 +2300,58 @@ test('Footprint decal ring-buffer pool and meditation butterfly flocking update 
   );
 });
 
+test('Full 360 camera vertical pitch (-80 to +85 deg), anti-floor clipping, and Maya Devi 3 plaques work cleanly', async () => {
+  const {
+    CAMERA_LOOK_DOWN_MAX_RAD,
+    CAMERA_LOOK_UP_MAX_RAD,
+    clampCameraPitch,
+    computeFirstPersonLookPitch,
+    dampCameraValue,
+    resolveThirdPersonCameraFloorClearance,
+    computeContextualWorldAction,
+  } = await import('./worldLogic');
+
+  // Vertical pitch unlocked across -80 deg (down) to +85 deg (up)
+  assert.ok(Math.abs(CAMERA_LOOK_DOWN_MAX_RAD - (80 * Math.PI) / 180) < 1e-6);
+  assert.ok(Math.abs(CAMERA_LOOK_UP_MAX_RAD - (85 * Math.PI) / 180) < 1e-6);
+  assert.equal(clampCameraPitch(-3.0), -CAMERA_LOOK_UP_MAX_RAD);
+  assert.equal(clampCameraPitch(3.0), CAMERA_LOOK_DOWN_MAX_RAD);
+  assert.ok(computeFirstPersonLookPitch(-CAMERA_LOOK_UP_MAX_RAD) > 1.48);
+  assert.ok(computeFirstPersonLookPitch(CAMERA_LOOK_DOWN_MAX_RAD) < -1.39);
+
+  // Damping moves smoothly toward target without overshoot
+  const damped = dampCameraValue(0, 1.0, 12.0, 0.05);
+  assert.ok(damped > 0.3 && damped < 0.7, `Unexpected damped value: ${damped}`);
+
+  // Anti-floor clipping slides camera up toward shoulder instead of dipping below walkway (y=1.25m)
+  const targetY = 2.75; // player at 1.25 + 1.5
+  const pitchUp = -1.15; // looking ~66 deg up -> boom swings downward
+  const dist = 6.0;
+  const rawCamY = targetY + Math.sin(pitchUp) * dist; // ~ -2.72m (below floor!)
+  const resolved = resolveThirdPersonCameraFloorClearance(
+    -210,
+    targetY,
+    80.5,
+    -210,
+    rawCamY,
+    80.5 + Math.cos(pitchUp) * dist,
+    0.78,
+    0.38,
+    () => 1.25,
+  );
+  assert.equal(resolved.clipped, true);
+  assert.ok(resolved.y >= 1.25 + 0.38 - 1e-4, `Camera clipped below walkway: ${resolved.y}`);
+
+  // All 3 Maya Devi museum plaques trigger accurately based on boardwalk location
+  const southPlaque = computeContextualWorldAction(-210.0, 80.2, null, [], [], [], []);
+  assert.equal(southPlaque?.kind, 'inspect-marker-stone');
+  const eastPlaque = computeContextualWorldAction(-200.2, 74.0, null, [], [], [], []);
+  assert.equal(eastPlaque?.kind, 'inspect-mauryan-chambers');
+  const northPlaque = computeContextualWorldAction(-210.0, 67.6, null, [], [], [], []);
+  assert.equal(northPlaque?.kind, 'inspect-nativity-relief');
+});
+
+
 
 
 

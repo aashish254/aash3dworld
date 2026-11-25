@@ -26,10 +26,12 @@ import {
   TreeSpecies,
   WORLD_RADIUS,
   WeatherKind,
+  clampCameraPitch,
   clampToWalkable,
   computeAtmosphereParticleProfile,
   computeContextualWorldAction,
   computeEffectiveLightingState,
+  computeFirstPersonLookPitch,
   computeFootprintDecalAlpha,
   computeLumbiniAudioProfile,
   computeLumbiniFireflyIntensity,
@@ -37,6 +39,7 @@ import {
   computeTimeLightingState,
   createFootprintDecalPool,
   createMeditationButterflyStates,
+  dampCameraValue,
   findFirstUnexploredLandmarkApproach,
   findNearestLandmark,
   findWaterEdgeRippleOrigin,
@@ -53,6 +56,7 @@ import {
   isOnLumbiniCanalBridge,
   isOnLumbiniSacredBridge,
   recordFootprintDecal,
+  resolveThirdPersonCameraFloorClearance,
   stepFootprintDecalPool,
   stepMeditationButterflies,
   stepPrayerWheelSpin,
@@ -253,8 +257,10 @@ export class WorldEngine {
   private meditationSpots: Array<{ x: number; z: number; lookX: number; lookZ: number; label: string }> = [];
   private mayaDeviHighlights: {
     markerStone?: MayaDeviHighlightInfo;
+    mauryanChambers?: MayaDeviHighlightInfo;
     nativityRelief?: MayaDeviHighlightInfo;
   } | null = null;
+  private mayaDeviPlaqueHitTargets: THREE.Mesh[] = [];
   private activeTossedPebbles: TossedPebbleEntry[] = [];
   private tossedPebbleGeo: THREE.BufferGeometry | null = null;
   private tossedPebbleMat: THREE.MeshStandardMaterial | null = null;
@@ -348,12 +354,16 @@ export class WorldEngine {
   private cameraYaw = 0;
   private cameraPitch = 0.45;
   private cameraDistance = 13.8;
+  private targetCameraYaw = 0;
+  private targetCameraPitch = 0.45;
+  private targetCameraDistance = 13.8;
   private currentCamPos = new THREE.Vector3(0, 7.5, 16.5);
   private currentLookAt = new THREE.Vector3(0, 1.8, 0);
 
   private keysPressed = new Set<string>();
   private joystickVec = { x: 0, y: 0 };
   private isDraggingCamera = false;
+  private activePointerButton = 0;
   private pointerDownPos = { x: 0, y: 0 };
   private lastPointerPos = { x: 0, y: 0 };
   private hasPointerMoved = false;
@@ -589,6 +599,8 @@ export class WorldEngine {
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
+    this.renderer.domElement.style.touchAction = 'none';
+    this.renderer.domElement.dataset.cameraMode = this.cameraMode;
     this.renderer.domElement.setAttribute('data-testid', 'world-canvas');
     this.container.appendChild(this.renderer.domElement);
 
@@ -966,6 +978,16 @@ export class WorldEngine {
         }
         if (built.group.userData.mayaDeviHighlights) {
           this.mayaDeviHighlights = built.group.userData.mayaDeviHighlights;
+        }
+        const rawPlaques = built.group.userData.mayaDeviPlaqueHitTargets as
+          | Array<{ mesh: THREE.Mesh; highlightKey: 'markerStone' | 'mauryanChambers' | 'nativityRelief' }>
+          | undefined;
+        if (Array.isArray(rawPlaques)) {
+          for (const item of rawPlaques) {
+            item.mesh.layers.set(2);
+            item.mesh.userData.mayaDeviPlaqueKey = item.highlightKey;
+            this.mayaDeviPlaqueHitTargets.push(item.mesh);
+          }
         }
       }
       if (built.cameraOccluders && built.cameraOccluders.length > 0) {
@@ -2818,35 +2840,67 @@ export class WorldEngine {
 
     const onPointerDown = (e: PointerEvent) => {
       if (this.gameState !== 'playing') return;
+      if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
       this.isDraggingCamera = true;
+      this.activePointerButton = e.button;
       this.hasPointerMoved = false;
       this.pointerDownPos = { x: e.clientX, y: e.clientY };
       this.lastPointerPos = { x: e.clientX, y: e.clientY };
+      try {
+        canvas.setPointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore synthetic pointer events without active pointer IDs
+      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
       if (!this.isDraggingCamera || this.gameState !== 'playing') return;
       const dx = e.clientX - this.lastPointerPos.x;
       const dy = e.clientY - this.lastPointerPos.y;
-      if (Math.hypot(e.clientX - this.pointerDownPos.x, e.clientY - this.pointerDownPos.y) > 6) {
+      if (Math.hypot(e.clientX - this.pointerDownPos.x, e.clientY - this.pointerDownPos.y) > 5) {
         this.hasPointerMoved = true;
       }
-      this.cameraYaw -= dx * 0.0055;
-      this.cameraPitch = Math.max(0.24, Math.min(1.05, this.cameraPitch + dy * 0.0045));
+      const yawSpeed = this.cameraMode === 'first-person' ? 0.0046 : 0.0055;
+      const pitchSpeed = this.cameraMode === 'first-person' ? 0.0042 : 0.0048;
+      this.targetCameraYaw -= dx * yawSpeed;
+      this.targetCameraPitch = clampCameraPitch(this.targetCameraPitch + dy * pitchSpeed);
       this.lastPointerPos = { x: e.clientX, y: e.clientY };
     };
 
     const onPointerUp = (e: PointerEvent) => {
       if (!this.isDraggingCamera) return;
+      const wasRightClick = this.activePointerButton === 2;
       this.isDraggingCamera = false;
-      if (!this.hasPointerMoved && this.gameState === 'playing') {
+      try {
+        if (canvas.hasPointerCapture?.(e.pointerId)) {
+          canvas.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore capture release errors
+      }
+      if (!this.hasPointerMoved && !wasRightClick && e.type !== 'pointercancel' && this.gameState === 'playing') {
         this.handleCanvasTap(e.clientX, e.clientY);
       }
     };
 
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
     const onWheel = (e: WheelEvent) => {
       if (this.gameState !== 'playing') return;
-      this.cameraDistance = Math.max(6.8, Math.min(68, this.cameraDistance + e.deltaY * 0.015));
+      e.preventDefault();
+      // Pinch zoom (ctrlKey) or coarse vertical scroll-wheel adjusts zoom; two-finger trackpad pan rotates free-look
+      const isPinchZoom = e.ctrlKey;
+      const isMouseWheelZoom =
+        !isPinchZoom && Math.abs(e.deltaX) < 1.2 && (e.deltaMode !== 0 || Math.abs(e.deltaY) >= 60);
+      if (isPinchZoom || isMouseWheelZoom) {
+        const zoomStep = isPinchZoom ? e.deltaY * 0.045 : e.deltaY * 0.015;
+        this.targetCameraDistance = Math.max(4.6, Math.min(68, this.targetCameraDistance + zoomStep));
+      } else {
+        this.targetCameraYaw -= e.deltaX * 0.0042;
+        this.targetCameraPitch = clampCameraPitch(this.targetCameraPitch - e.deltaY * 0.0038);
+      }
     };
 
     const onResize = () => {
@@ -2896,9 +2950,11 @@ export class WorldEngine {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
     canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('pointercancel', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('resize', onResize);
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -2911,8 +2967,10 @@ export class WorldEngine {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
       this.resizeObserver?.disconnect();
@@ -2931,9 +2989,29 @@ export class WorldEngine {
     _pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (this.bellHitTargets.length > 0 || this.prayerWheelHitTargets.length > 0) {
+    if (
+      this.bellHitTargets.length > 0 ||
+      this.prayerWheelHitTargets.length > 0 ||
+      this.mayaDeviPlaqueHitTargets.length > 0
+    ) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
+      if (this.mayaDeviPlaqueHitTargets.length > 0) {
+        const plaqueHits = this.raycaster.intersectObjects(this.mayaDeviPlaqueHitTargets, false);
+        if (plaqueHits.length > 0) {
+          const key = plaqueHits[0].object.userData.mayaDeviPlaqueKey as
+            | 'markerStone'
+            | 'mauryanChambers'
+            | 'nativityRelief'
+            | undefined;
+          const info = key ? this.mayaDeviHighlights?.[key] : undefined;
+          if (info) {
+            soundEngine.playBellChime();
+            this.callbacks.onInspectHighlight?.(info);
+            return;
+          }
+        }
+      }
       if (this.bellHitTargets.length > 0) {
         const bellHits = this.raycaster.intersectObjects(this.bellHitTargets, false);
         if (bellHits.length > 0) {
@@ -3206,6 +3284,11 @@ export class WorldEngine {
       this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.markerStone);
       return;
     }
+    if (action.kind === 'inspect-mauryan-chambers' && this.mayaDeviHighlights?.mauryanChambers) {
+      soundEngine.playBellChime();
+      this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.mauryanChambers);
+      return;
+    }
     if (action.kind === 'inspect-nativity-relief' && this.mayaDeviHighlights?.nativityRelief) {
       soundEngine.playBellChime();
       this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.nativityRelief);
@@ -3316,7 +3399,7 @@ export class WorldEngine {
       this.scheduleImmediateRender();
     } else if (!lm) {
       if (this.cameraMode === 'first-person') {
-        const fpPitch = Math.max(-0.55, Math.min(0.55, 0.36 - this.cameraPitch));
+        const fpPitch = computeFirstPersonLookPitch(this.cameraPitch);
         const eyeY = this.playerPos.y + 1.56;
         this.currentCamPos.set(this.playerPos.x, eyeY, this.playerPos.z);
         this.currentLookAt.set(
@@ -3341,22 +3424,61 @@ export class WorldEngine {
     }
   }
 
+  private sampleCameraFloorHeight(x: number, z: number, refY: number): number {
+    const surfaceY = getSurfaceHeightAt(x, z);
+    const bvhY = this.physicsWorld.sampleFloorHeight(x, z, refY);
+    return bvhY !== null ? Math.max(surfaceY, bvhY) : surfaceY;
+  }
+
   private applyCameraOcclusion(lookAt: THREE.Vector3, camPos: THREE.Vector3): void {
-    if (this.cameraOccluders.length === 0) return;
-    _camRayDir.subVectors(camPos, lookAt);
-    const desiredDist = _camRayDir.length();
-    if (desiredDist <= 0.1) return;
-    _camRayDir.divideScalar(desiredDist);
-    this.raycaster.layers.set(0);
-    this.raycaster.near = 0.22;
-    this.raycaster.far = desiredDist;
-    this.raycaster.set(lookAt, _camRayDir);
-    const hits = this.raycaster.intersectObjects(this.cameraOccluders, false);
-    this.raycaster.near = 0;
-    this.raycaster.far = Infinity;
-    if (hits.length > 0) {
-      const safeDist = Math.max(1.8, hits[0].distance - 0.55);
-      camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+    if (this.cameraOccluders.length > 0) {
+      _camRayDir.subVectors(camPos, lookAt);
+      const desiredDist = _camRayDir.length();
+      if (desiredDist > 0.1) {
+        _camRayDir.divideScalar(desiredDist);
+        this.raycaster.layers.set(0);
+        this.raycaster.near = 0.22;
+        this.raycaster.far = desiredDist;
+        this.raycaster.set(lookAt, _camRayDir);
+        const hits = this.raycaster.intersectObjects(this.cameraOccluders, false);
+        this.raycaster.near = 0;
+        this.raycaster.far = Infinity;
+        if (hits.length > 0) {
+          const safeDist = Math.max(0.75, hits[0].distance - 0.35);
+          camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+        }
+      }
+    }
+
+    const cleared = resolveThirdPersonCameraFloorClearance(
+      lookAt.x,
+      lookAt.y,
+      lookAt.z,
+      camPos.x,
+      camPos.y,
+      camPos.z,
+      0.65,
+      0.24,
+      (sx, sz) => this.sampleCameraFloorHeight(sx, sz, lookAt.y + 0.6),
+    );
+    camPos.set(cleared.x, cleared.y, cleared.z);
+
+    // When looking steeply upward in third-person, slide slightly over the shoulder so backpack does not block ceiling view
+    const finalDist = camPos.distanceTo(lookAt);
+    if (this.cameraPitch < -0.22 && finalDist < 2.6) {
+      const shoulderWeight =
+        Math.min(1, (-0.22 - this.cameraPitch) / 0.75) *
+        Math.min(1, (2.6 - finalDist) / 1.4);
+      const rightX = Math.cos(this.cameraYaw);
+      const rightZ = -Math.sin(this.cameraYaw);
+      const rightOffset = 0.72 * shoulderWeight;
+      const liftOffset = 0.22 * shoulderWeight;
+      lookAt.x += rightX * rightOffset;
+      lookAt.z += rightZ * rightOffset;
+      lookAt.y += liftOffset;
+      camPos.x += rightX * rightOffset;
+      camPos.z += rightZ * rightOffset;
+      camPos.y += liftOffset;
     }
   }
 
@@ -3392,7 +3514,9 @@ export class WorldEngine {
       this.justTeleported = true;
       this.playerYaw = Math.PI;
       this.cameraYaw = 0;
+      this.targetCameraYaw = 0;
       this.cameraPitch = 0.45;
+      this.targetCameraPitch = 0.45;
       this.character.root.rotation.y = this.playerYaw;
       const inCourtyard =
         (Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6) ||
@@ -3455,6 +3579,9 @@ export class WorldEngine {
     this.teleportTo(SPAWN_POSITION.x, SPAWN_POSITION.z);
     this.playerYaw = Math.PI;
     this.cameraYaw = 0;
+    this.targetCameraYaw = 0;
+    this.cameraPitch = 0.45;
+    this.targetCameraPitch = 0.45;
   }
 
   public setInitialDistanceWalked(meters: number): void {
@@ -3498,9 +3625,19 @@ export class WorldEngine {
     this.sunLight.target.updateMatrixWorld();
     this.sunLight.position.set(lx + sunOffX, sunOffY, lz + sunOffZ);
 
-    this.hemiLight.color.set(state.hemiSkyColor);
-    this.hemiLight.groundColor.set(state.hemiGroundColor);
-    this.hemiLight.intensity = state.hemiIntensity;
+    const inMayaDeviSanctum =
+      Math.abs(lightingAnchor.x + 210) <= 17.8 &&
+      lightingAnchor.z >= 62.2 &&
+      lightingAnchor.z <= 85.8;
+    if (inMayaDeviSanctum) {
+      this.hemiLight.color.set(state.hemiSkyColor).lerp(_targetColor.set(0xffebd0), 0.72);
+      this.hemiLight.groundColor.set(state.hemiGroundColor).lerp(_targetColor.set(0x7d4c2c), 0.78);
+      this.hemiLight.intensity = Math.max(state.hemiIntensity, 1.05);
+    } else {
+      this.hemiLight.color.set(state.hemiSkyColor);
+      this.hemiLight.groundColor.set(state.hemiGroundColor);
+      this.hemiLight.intensity = state.hemiIntensity;
+    }
 
     this.skyDomeMat.uniforms.topColor.value.set(state.skyTopColor);
     this.skyDomeMat.uniforms.horizonColor.value.set(state.skyHorizonColor);
@@ -4664,8 +4801,20 @@ export class WorldEngine {
       Math.abs(this.playerPos.x + 210) <= 17.2 &&
       this.playerPos.z >= 62.8 &&
       this.playerPos.z <= 85.2;
+
+    const lookLambda = this.cameraMode === 'first-person' ? 18.0 : 12.0;
+    this.cameraYaw = dampCameraValue(this.cameraYaw, this.targetCameraYaw, lookLambda, dt);
+    this.cameraPitch = clampCameraPitch(
+      dampCameraValue(this.cameraPitch, this.targetCameraPitch, lookLambda, dt),
+    );
+    this.cameraDistance = dampCameraValue(this.cameraDistance, this.targetCameraDistance, 10.0, dt);
+
     if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.insideMayaDevi = inMayaDeviInterior ? 'true' : 'false';
+      const ds = this.renderer.domElement.dataset;
+      ds.insideMayaDevi = inMayaDeviInterior ? 'true' : 'false';
+      ds.cameraMode = this.cameraMode;
+      ds.cameraPitchDeg = String(Math.round((-this.cameraPitch * 180) / Math.PI));
+      ds.cameraYawDeg = String(Math.round(((this.cameraYaw * 180) / Math.PI) % 360));
     }
 
     if (this.focusedLandmark) {
@@ -4691,7 +4840,7 @@ export class WorldEngine {
       }
     } else if (this.cameraMode === 'first-person') {
       this.character.root.visible = false;
-      const fpPitch = Math.max(-0.55, Math.min(0.55, 0.36 - this.cameraPitch));
+      const fpPitch = computeFirstPersonLookPitch(this.cameraPitch);
       const bob = movedDist > 0.001 && this.isGrounded ? Math.sin(this.walkCycle * 2.0) * 0.04 : 0;
       const eyeY = this.playerPos.y + 1.56 + bob;
       _camTargetPos.set(this.playerPos.x, eyeY, this.playerPos.z);
@@ -4713,22 +4862,16 @@ export class WorldEngine {
           : this.cameraDistance;
       const horiz = Math.cos(this.cameraPitch) * activeCamDist;
       const vert = Math.sin(this.cameraPitch) * activeCamDist;
+      _camLookTarget.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);
       _camTargetPos.set(
         this.playerPos.x + Math.sin(this.cameraYaw) * horiz,
-        Math.max(
-          groundHeightAt(
-            this.playerPos.x + Math.sin(this.cameraYaw) * horiz,
-            this.playerPos.z + Math.cos(this.cameraYaw) * horiz,
-          ) + 1.4,
-          this.playerPos.y + vert + 1.5,
-        ),
+        this.playerPos.y + vert + 1.5,
         this.playerPos.z + Math.cos(this.cameraYaw) * horiz,
       );
-      _camLookTarget.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);
       this.applyCameraOcclusion(_camLookTarget, _camTargetPos);
     }
 
-    const camDamp = 1 - Math.exp(-(this.cameraMode === 'first-person' ? 14.0 : 7.5) * dt);
+    const camDamp = 1 - Math.exp(-(this.cameraMode === 'first-person' ? 18.0 : 10.5) * dt);
     this.currentCamPos.lerp(_camTargetPos, camDamp);
     this.currentLookAt.lerp(_camLookTarget, camDamp);
     this.camera.position.copy(this.currentCamPos);

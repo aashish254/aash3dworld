@@ -811,6 +811,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const lz = z - 96;
     const underPushkariniBasin = lx >= -3.2 && lx <= 23.2 && lz >= 7.5 && lz <= 25.5;
     const underMayaPit = Math.abs(lx) <= 17.5 && lz >= -33.5 && lz <= -10.5;
+    const underMayaRamp = Math.abs(lx) <= 2.35 && lz > -10.5 && lz <= -1.8;
     const underLumbiniPlaza = lx >= -44.8 && lx <= 44.8 && lz >= -44.8 && lz <= 52.8;
     const inSurroundingPond = isInLumbiniSurroundingPond(x, z);
     const onSacredBridge = isOnLumbiniSacredBridge(x, z);
@@ -847,6 +848,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       onBridgePier ||
       onSacredBridge ||
       underMayaPit ||
+      underMayaRamp ||
       underPlinth ||
       underChowk ||
       underCompoundWalk ||
@@ -871,8 +873,8 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     } else if (underGangaSagarBasin) {
       y = -0.48;
     } else if (underMayaPit) {
-      y = -0.35;
-    } else if (underPlinth) {
+      y = -0.95;
+    } else if (underPlinth || underMayaRamp) {
       y = 0.08;
     } else if (
       underChowk ||
