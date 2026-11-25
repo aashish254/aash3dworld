@@ -11,6 +11,16 @@ import {
   buildDetailedNativitySteleEnsemble,
   buildMeditationGalleryEnsemble,
 } from './mayaDeviSanctuaryCraft';
+import {
+  applySanctumWeatheringShader,
+  buildDetailedSanctuaryWallLantern,
+  createSanctumAtmosphereParticles,
+} from './mayaDeviAtmosphere';
+import {
+  createCarvedLotusPetalGeometry,
+  createMarigoldFloretGeometry,
+  createSculptedMarkerStoneGeometry,
+} from './mayaDeviSculptureGeo';
 import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 
 const _m4 = new THREE.Matrix4();
@@ -83,10 +93,12 @@ function createVolumetricGodRayMaterial(
         float edgeFade = pow(clamp(ndotv, 0.0, 1.0), ${edgePower.toFixed(2)});
         float verticalFade = smoothstep(0.0, 0.24, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
         float topStrength = mix(0.36, 1.0, vUv.y);
-        float streaks = 0.80
-          + 0.12 * sin(vUv.x * 37.699 + uTime * 0.22)
-          + 0.08 * cos(vUv.x * 62.831 - uTime * 0.17 + vUv.y * 2.5);
-        float alpha = uOpacity * edgeFade * verticalFade * topStrength * streaks;
+        float streaks = 0.76
+          + 0.13 * sin(vUv.x * 37.699 + uTime * 0.22)
+          + 0.08 * cos(vUv.x * 62.831 - uTime * 0.17 + vUv.y * 2.5)
+          + 0.06 * sin(vUv.y * 14.0 - uTime * 0.31 + vUv.x * 18.849);
+        float shimmer = 0.92 + 0.08 * sin(uTime * 0.65 + vWorldPos.x * 0.45 + vWorldPos.y * 0.75);
+        float alpha = uOpacity * edgeFade * verticalFade * topStrength * streaks * shimmer;
         if (alpha < 0.0015) discard;
         gl_FragColor = vec4(uColor, alpha);
       }
@@ -529,9 +541,9 @@ export function buildMayaDeviTemple(
   }
 
   // =========================================================================
-  // 5. SLOPED WHITE SOUTH ENTRANCE RAMP (8.0m) & GOLDEN DHARMACHAKRA RAILINGS
+  // 5. CARVED CEREMONIAL STONE STAIRWAY, CHANDRASILA APRON & ANCHORED DHARMACHAKRA BALUSTRADES
   // =========================================================================
-  // Rises from tz = +20.0 (local y = 0.10 flush with outer brick promenade) up to tz = +12.0 (y = 1.00 doorway deck)
+  // Smooth structural ramp core kept underneath for silky-smooth player BVH walking from z=+20.0 (y=0.10) to z=+12.0 (y=1.00)
   const rampZStart = D * 0.5 + 8.0; // +20.0 (garden ldz = -2.0)
   const rampZEnd = D * 0.5; // +12.0 (garden ldz = -10.0)
   const rampSpanZ = rampZStart - rampZEnd; // 8.0m
@@ -540,62 +552,305 @@ export function buildMayaDeviTemple(
   const rampShape = new THREE.Shape();
   rampShape.moveTo(-rampZStart, -0.10);
   rampShape.lineTo(-rampZEnd, -0.10);
-  rampShape.lineTo(-rampZEnd, rampYEnd);
-  rampShape.lineTo(-rampZStart, rampYStart);
+  rampShape.lineTo(-rampZEnd, rampYEnd - 0.035);
+  rampShape.lineTo(-rampZStart, rampYStart - 0.025);
   rampShape.closePath();
 
   const rampGeo = new THREE.ExtrudeGeometry(rampShape, {
-    depth: doorHalfW * 2 + 0.48,
+    depth: doorHalfW * 2 + 0.52,
     bevelEnabled: false,
   });
-  rampGeo.translate(0, 0, -(doorHalfW + 0.24));
+  rampGeo.translate(0, 0, -(doorHalfW + 0.26));
   rampGeo.rotateY(Math.PI * 0.5);
   rampGeo.computeVertexNormals();
-  const rampMesh = new THREE.Mesh(rampGeo, mats.stuccoWhiteMat);
+  const rampMesh = new THREE.Mesh(rampGeo, mats.chunarStoneMat);
   rampMesh.castShadow = true;
   rampMesh.receiveShadow = true;
   group.add(rampMesh);
 
-  // Flush South doorway threshold sill bridging ramp top (z = +12.0) onto interior boardwalk (z = +11.2)
+  // Carved semicircular Chandrasila (Moonstone) threshold apron at the base of the stair (z = +20.05)
+  const moonstoneGroup = new THREE.Group();
+  moonstoneGroup.position.set(0, rampYStart, rampZStart + 0.02);
+  moonstoneGroup.userData.nonCollidable = true;
+  const moonOuter = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.92, 2.02, 0.075, 24, 1, false, -Math.PI * 0.5, Math.PI),
+    mats.chunarStoneMat,
+  );
+  moonOuter.rotation.y = Math.PI;
+  moonOuter.position.y = 0.025;
+  moonOuter.receiveShadow = true;
+  const moonInner = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.48, 1.54, 0.088, 24, 1, false, -Math.PI * 0.5, Math.PI),
+    mats.terracottaCapMat,
+  );
+  moonInner.rotation.y = Math.PI;
+  moonInner.position.y = 0.028;
+  moonInner.receiveShadow = true;
+  const moonBrassTrim = new THREE.Mesh(
+    new THREE.TorusGeometry(1.52, 0.024, 8, 24, Math.PI),
+    mats.warmBronzeMat,
+  );
+  moonBrassTrim.rotation.x = Math.PI * 0.5;
+  moonBrassTrim.position.y = 0.068;
+  const moonLotusCore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.74, 0.78, 0.095, 20, 1, false, -Math.PI * 0.5, Math.PI),
+    mats.chunarStoneMat,
+  );
+  moonLotusCore.rotation.y = Math.PI;
+  moonLotusCore.position.y = 0.032;
+  moonstoneGroup.add(moonOuter, moonInner, moonBrassTrim, moonLotusCore);
+  group.add(moonstoneGroup);
+
+  // 14 Precision-Stepped Carved Chunar Sandstone & Marble Stair Treads + Terracotta & Brass Ceremonial Runner
+  const stairCount = 14;
+  const stepRun = rampSpanZ / stairCount;
+  const stepRise = (rampYEnd - rampYStart) / stairCount;
+  const stairW = doorHalfW * 2 - 0.08;
+  const runnerW = 1.46;
+  const treadSlabGeo = new THREE.BoxGeometry(stairW, 0.048, stepRun + 0.055);
+  const riserRevealGeo = new THREE.BoxGeometry(stairW - 0.04, stepRise + 0.02, 0.045);
+  const nosingFilletGeo = new THREE.CylinderGeometry(0.024, 0.024, stairW + 0.04, 10);
+  nosingFilletGeo.rotateZ(Math.PI * 0.5);
+  const runnerTreadGeo = new THREE.BoxGeometry(runnerW, 0.014, stepRun + 0.025);
+  const runnerTrimGeo = new THREE.BoxGeometry(0.045, 0.018, stepRun + 0.03);
+
+  for (let s = 0; s < stairCount; s++) {
+    const stepTopY = rampYStart + (s + 1) * stepRise;
+    const stepCenterZ = rampZStart - (s + 0.5) * stepRun;
+    const treadMat = s % 2 === 0 ? mats.chunarStoneMat : mats.stuccoWhiteMat;
+
+    const tread = new THREE.Mesh(treadSlabGeo, treadMat);
+    tread.position.set(0, stepTopY - 0.024, stepCenterZ);
+    tread.castShadow = true;
+    tread.receiveShadow = true;
+    tread.userData.nonCollidable = true;
+
+    const riser = new THREE.Mesh(riserRevealGeo, mats.warmBronzeMat);
+    riser.position.set(0, stepTopY - stepRise * 0.5 - 0.02, stepCenterZ + stepRun * 0.5);
+    riser.receiveShadow = true;
+    riser.userData.nonCollidable = true;
+
+    const bullnose = new THREE.Mesh(nosingFilletGeo, mats.chunarStoneMat);
+    bullnose.position.set(0, stepTopY - 0.016, stepCenterZ + stepRun * 0.5 + 0.02);
+    bullnose.castShadow = true;
+    bullnose.receiveShadow = true;
+    bullnose.userData.nonCollidable = true;
+
+    const runner = new THREE.Mesh(runnerTreadGeo, mats.terracottaCapMat);
+    runner.position.set(0, stepTopY + 0.004, stepCenterZ);
+    runner.receiveShadow = true;
+    runner.userData.nonCollidable = true;
+
+    const trimL = new THREE.Mesh(runnerTrimGeo, mats.giltGoldMat);
+    trimL.position.set(-runnerW * 0.5 - 0.025, stepTopY + 0.006, stepCenterZ);
+    trimL.userData.nonCollidable = true;
+    const trimR = new THREE.Mesh(runnerTrimGeo, mats.giltGoldMat);
+    trimR.position.set(runnerW * 0.5 + 0.025, stepTopY + 0.006, stepCenterZ);
+    trimR.userData.nonCollidable = true;
+
+    group.add(tread, riser, bullnose, runner, trimL, trimR);
+  }
+
+  // Carved Doorway Threshold Sill, Flanking Stone Jamb Plinths & Brass Sill Plate at Top (z = +12.0)
   const thresholdSill = new THREE.Mesh(
-    new THREE.BoxGeometry(doorHalfW * 2 - 0.14, 0.20, wallT + 0.16),
-    mats.stuccoWhiteMat,
+    new THREE.BoxGeometry(doorHalfW * 2 - 0.06, 0.22, wallT + 0.24),
+    mats.chunarStoneMat,
   );
   thresholdSill.position.set(0, rampYEnd - 0.10, D * 0.5 - wallT * 0.5);
   thresholdSill.receiveShadow = true;
   thresholdSill.castShadow = true;
-  group.add(thresholdSill);
+  const thresholdBrassPlate = new THREE.Mesh(
+    new THREE.BoxGeometry(doorHalfW * 2 - 0.28, 0.024, 0.26),
+    mats.giltGoldMat,
+  );
+  thresholdBrassPlate.position.set(0, rampYEnd + 0.012, D * 0.5 - 0.04);
+  thresholdBrassPlate.userData.nonCollidable = true;
+  const portalHeaderCornice = new THREE.Mesh(
+    new THREE.BoxGeometry(doorHalfW * 2 + 0.85, 0.24, 0.34),
+    mats.chunarStoneMat,
+  );
+  portalHeaderCornice.position.set(0, doorH + 0.12, D * 0.5 + 0.06);
+  portalHeaderCornice.castShadow = true;
+  portalHeaderCornice.userData.nonCollidable = true;
+  const portalHeaderBrass = new THREE.Mesh(
+    new THREE.BoxGeometry(doorHalfW * 2 + 0.56, 0.06, 0.36),
+    mats.giltGoldMat,
+  );
+  portalHeaderBrass.position.set(0, doorH + 0.24, D * 0.5 + 0.06);
+  portalHeaderBrass.userData.nonCollidable = true;
+  group.add(thresholdSill, thresholdBrassPlate, portalHeaderCornice, portalHeaderBrass);
 
-  // Signature sloped white railings with 7 golden Dharmachakra Wheel medallions on each side of ramp
+  // Sloped Tiered Stringers, Sculpted Newel Balusters, Guardian Base Piers & Anchored 8-Spoke Dharmachakra Wheels
   const rampAngle = Math.atan2(rampYEnd - rampYStart, rampSpanZ);
   const rampHyp = Math.hypot(rampSpanZ, rampYEnd - rampYStart);
+  const wheelOuterGeo = new THREE.TorusGeometry(0.24, 0.032, 10, 24);
+  const wheelInnerRingGeo = new THREE.TorusGeometry(0.16, 0.015, 8, 20);
+  const wheelSpokeGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6);
+  const wheelHubGeo = new THREE.CylinderGeometry(0.058, 0.058, 0.072, 14);
+  const wheelVertStrutGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.42, 8);
+  const wheelHorizStrutGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.62, 8);
+
   for (const side of [-1, 1]) {
     const rx = side * (doorHalfW + 0.16);
+
+    // Carved stepped cheek-wall stringer & shoe rail molding flanking the treads
+    const stringerWall = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.30, rampHyp + 0.26),
+      mats.chunarStoneMat,
+    );
+    stringerWall.position.set(rx, (rampYStart + rampYEnd) * 0.5 - 0.02, (rampZStart + rampZEnd) * 0.5);
+    stringerWall.rotation.x = rampAngle;
+    stringerWall.castShadow = true;
+    stringerWall.receiveShadow = true;
+    stringerWall.userData.nonCollidable = true;
+
+    const shoeRail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.20, 0.09, rampHyp + 0.18),
+      mats.stuccoWhiteMat,
+    );
+    shoeRail.position.set(rx, (rampYStart + rampYEnd) * 0.5 + 0.14, (rampZStart + rampZEnd) * 0.5);
+    shoeRail.rotation.x = rampAngle;
+    shoeRail.userData.nonCollidable = true;
+
+    const topRailCap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.21, 0.075, rampHyp + 0.28),
+      mats.chunarStoneMat,
+    );
+    topRailCap.position.set(rx, (rampYStart + rampYEnd) * 0.5 + 0.99, (rampZStart + rampZEnd) * 0.5);
+    topRailCap.rotation.x = rampAngle;
+    topRailCap.castShadow = true;
+
+    const topRailMain = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.075, rampHyp + 0.22),
+      mats.stuccoWhiteMat,
+    );
+    topRailMain.position.set(rx, (rampYStart + rampYEnd) * 0.5 + 0.92, (rampZStart + rampZEnd) * 0.5);
+    topRailMain.rotation.x = rampAngle;
+
+    const topRailBrass = new THREE.Mesh(
+      new THREE.BoxGeometry(0.17, 0.024, rampHyp + 0.20),
+      mats.warmBronzeMat,
+    );
+    topRailBrass.position.set(rx, (rampYStart + rampYEnd) * 0.5 + 0.875, (rampZStart + rampZEnd) * 0.5);
+    topRailBrass.rotation.x = rampAngle;
+    topRailBrass.userData.nonCollidable = true;
+
+    // Doorway jamb carved stone plinth pier (top of stair)
+    const jambStonePlinth = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 1.35, 0.38),
+      mats.chunarStoneMat,
+    );
+    jambStonePlinth.position.set(side * (doorHalfW + 0.14), rampYEnd + 0.67, D * 0.5 + 0.02);
+    jambStonePlinth.castShadow = true;
+    jambStonePlinth.userData.nonCollidable = true;
+
+    group.add(stringerWall, shoeRail, topRailCap, topRailMain, topRailBrass, jambStonePlinth);
+
+    // Monumental Foot-of-Stair Guardian Newel Pier & Carved Lotus Kalash Finial
+    const footPierBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.34, 0.46),
+      mats.chunarStoneMat,
+    );
+    footPierBase.position.set(rx, rampYStart + 0.17, rampZStart + 0.08);
+    footPierBase.castShadow = true;
+    footPierBase.receiveShadow = true;
+    footPierBase.userData.nonCollidable = true;
+
+    const footPierShaft = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.86, 0.32),
+      mats.stuccoWhiteMat,
+    );
+    footPierShaft.position.set(rx, rampYStart + 0.72, rampZStart + 0.08);
+    footPierShaft.castShadow = true;
+    footPierShaft.userData.nonCollidable = true;
+
+    const footPierCap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.12, 0.42),
+      mats.chunarStoneMat,
+    );
+    footPierCap.position.set(rx, rampYStart + 1.18, rampZStart + 0.08);
+    footPierCap.castShadow = true;
+    footPierCap.userData.nonCollidable = true;
+
+    const footLotusCrown = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.19, 0.14, 16),
+      mats.warmBronzeMat,
+    );
+    footLotusCrown.position.set(rx, rampYStart + 1.31, rampZStart + 0.08);
+    footLotusCrown.userData.nonCollidable = true;
+
+    const footFinialBall = new THREE.Mesh(
+      new THREE.SphereGeometry(0.085, 12, 10),
+      mats.giltGoldMat,
+    );
+    footFinialBall.position.set(rx, rampYStart + 1.44, rampZStart + 0.08);
+    footFinialBall.userData.nonCollidable = true;
+
+    const footFinialSpire = new THREE.Mesh(
+      new THREE.ConeGeometry(0.042, 0.14, 10),
+      mats.giltGoldMat,
+    );
+    footFinialSpire.position.set(rx, rampYStart + 1.56, rampZStart + 0.08);
+    footFinialSpire.userData.nonCollidable = true;
+
+    group.add(footPierBase, footPierShaft, footPierCap, footLotusCrown, footFinialBall, footFinialSpire);
+
     for (let p = 0; p <= 7; p++) {
       const t = p / 7;
       const pz = THREE.MathUtils.lerp(rampZStart, rampZEnd, t);
       const py = THREE.MathUtils.lerp(rampYStart, rampYEnd, t);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.96, 0.12), mats.stuccoWhiteMat);
-      post.position.set(rx, py + 0.48, pz);
+
+      // Stepped multi-part carved balustrade post
+      const postPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), mats.chunarStoneMat);
+      postPlinth.position.set(rx, py + 0.24, pz);
+      postPlinth.userData.nonCollidable = true;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.80, 0.14), mats.stuccoWhiteMat);
+      post.position.set(rx, py + 0.56, pz);
       post.castShadow = true;
-      group.add(post);
+      const postNeck = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 0.18), mats.chunarStoneMat);
+      postNeck.position.set(rx, py + 0.88, pz);
+      postNeck.userData.nonCollidable = true;
+      const postFinial = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mats.warmBronzeMat);
+      postFinial.position.set(rx, py + 1.07, pz);
+      postFinial.userData.nonCollidable = true;
+      group.add(postPlinth, post, postNeck, postFinial);
+
       if (p < 7) {
         const midZ = THREE.MathUtils.lerp(rampZStart, rampZEnd, (p + 0.5) / 7);
         const midY = THREE.MathUtils.lerp(rampYStart, rampYEnd, (p + 0.5) / 7);
-        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.036, 8, 18), mats.giltGoldMat);
-        wheel.rotation.y = Math.PI * 0.5;
-        wheel.position.set(rx, midY + 0.48, midZ);
-        group.add(wheel);
-        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.065, 12), mats.giltGoldMat);
+        const wheelCenterY = midY + 0.52;
+
+        const wheelGroup = new THREE.Group();
+        wheelGroup.position.set(rx, wheelCenterY, midZ);
+        wheelGroup.userData.nonCollidable = true;
+
+        const wheelOuter = new THREE.Mesh(wheelOuterGeo, mats.giltGoldMat);
+        wheelOuter.rotation.y = Math.PI * 0.5;
+        wheelOuter.castShadow = true;
+
+        const wheelInner = new THREE.Mesh(wheelInnerRingGeo, mats.warmBronzeMat);
+        wheelInner.rotation.y = Math.PI * 0.5;
+
+        const hub = new THREE.Mesh(wheelHubGeo, mats.giltGoldMat);
         hub.rotation.z = Math.PI * 0.5;
-        hub.position.set(rx, midY + 0.48, midZ);
-        group.add(hub);
+
+        const vertStrut = new THREE.Mesh(wheelVertStrutGeo, mats.warmBronzeMat);
+        vertStrut.position.y = 0;
+
+        const horizStrut = new THREE.Mesh(wheelHorizStrutGeo, mats.warmBronzeMat);
+        horizStrut.rotation.x = Math.PI * 0.5 + rampAngle;
+
+        wheelGroup.add(wheelOuter, wheelInner, hub, vertStrut, horizStrut);
+
+        for (let k = 0; k < 4; k++) {
+          const spoke = new THREE.Mesh(wheelSpokeGeo, mats.giltGoldMat);
+          spoke.rotation.x = (k / 4) * Math.PI;
+          wheelGroup.add(spoke);
+        }
+
+        group.add(wheelGroup);
       }
     }
-    const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.09, rampHyp + 0.16), mats.stuccoWhiteMat);
-    topRail.position.set(rx, (rampYStart + rampYEnd) * 0.5 + 0.94, (rampZStart + rampZEnd) * 0.5);
-    topRail.rotation.x = rampAngle;
-    group.add(topRail);
   }
 
   const plaqueHitTargets: MayaDeviPlaqueHitTarget[] = [];
@@ -647,17 +902,58 @@ export function buildMayaDeviTemple(
     group.add(sump);
   }
 
-  // Stepped brick chamber foundations (Mauryan dark damp base -> Sunga/Kushan mid-tier -> eroded upper brick courses)
+  // Stepped brick chamber foundations (high-res PBR normal + roughness + AO + physical mortar displacement)
   const deepBrickMat = new THREE.MeshStandardMaterial({
     map: lTex.mauryaBrickMap,
     normalMap: lTex.mauryaBrickNormal,
-    normalScale: new THREE.Vector2(1.1, 1.1),
+    normalScale: new THREE.Vector2(1.55, 1.55),
     roughnessMap: lTex.mauryaBrickRough,
     aoMap: lTex.mauryaBrickAo,
-    color: 0x7c4330,
-    roughness: 0.88,
+    aoMapIntensity: 0.94,
+    displacementMap: lTex.mauryaBrickDisp,
+    displacementScale: 0.022,
+    displacementBias: -0.011,
+    color: 0x864935,
+    roughness: 0.90,
     metalness: 0.03,
   });
+  const chamberBrickMat = new THREE.MeshStandardMaterial({
+    map: lTex.mauryaBrickMap,
+    normalMap: lTex.mauryaBrickNormal,
+    normalScale: new THREE.Vector2(1.45, 1.45),
+    roughnessMap: lTex.mauryaBrickRough,
+    aoMap: lTex.mauryaBrickAo,
+    aoMapIntensity: 0.90,
+    displacementMap: lTex.mauryaBrickDisp,
+    displacementScale: 0.020,
+    displacementBias: -0.010,
+    color: 0xc27654,
+    roughness: 0.90,
+    metalness: 0.03,
+  });
+  const deepBrickWeather = applySanctumWeatheringShader(deepBrickMat, {
+    cacheKey: 'maya-devi-deep-brick-weather-v1',
+    minRelY: 0.0,
+    maxRelY: 0.34,
+    mossStrength: 0.36,
+    dampDarken: 0.68,
+    noiseScale: 4.5,
+    initialAnchorY: trenchFloorY,
+  });
+  const chamberBrickWeather = applySanctumWeatheringShader(chamberBrickMat, {
+    cacheKey: 'maya-devi-chamber-brick-weather-v1',
+    minRelY: 0.12,
+    maxRelY: 0.62,
+    mossStrength: 0.28,
+    dampDarken: 0.74,
+    noiseScale: 4.2,
+    initialAnchorY: trenchFloorY,
+  });
+  pitFloor.onBeforeRender = () => {
+    const ty = pitFloor.matrixWorld.elements[13] + 0.08;
+    deepBrickWeather.uniforms.uWeatherAnchorY.value = ty;
+    chamberBrickWeather.uniforms.uWeatherAnchorY.value = ty;
+  };
   const ruinFootings: THREE.Matrix4[] = [];
   const ruinWalls: THREE.Matrix4[] = [];
   const ruinCaps: THREE.Matrix4[] = [];
@@ -739,14 +1035,15 @@ export function buildMayaDeviTemple(
     }
   }
 
-  const footingInst = new THREE.InstancedMesh(unitBoxGeo, deepBrickMat, ruinFootings.length);
+  const brickBoxGeo = new THREE.BoxGeometry(1, 1, 1, 10, 8, 10);
+  const footingInst = new THREE.InstancedMesh(brickBoxGeo, deepBrickMat, ruinFootings.length);
   ruinFootings.forEach((m, idx) => footingInst.setMatrixAt(idx, m));
   footingInst.instanceMatrix.needsUpdate = true;
   footingInst.computeBoundingSphere();
   footingInst.receiveShadow = true;
   footingInst.userData.nonCollidable = true;
 
-  const ruinInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinWalls.length);
+  const ruinInst = new THREE.InstancedMesh(brickBoxGeo, chamberBrickMat, ruinWalls.length);
   ruinWalls.forEach((m, idx) => ruinInst.setMatrixAt(idx, m));
   ruinInst.instanceMatrix.needsUpdate = true;
   ruinInst.computeBoundingSphere();
@@ -754,7 +1051,7 @@ export function buildMayaDeviTemple(
   ruinInst.receiveShadow = true;
   ruinInst.userData.nonCollidable = true;
 
-  const ruinCapInst = new THREE.InstancedMesh(unitBoxGeo, mats.brickMat, ruinCaps.length);
+  const ruinCapInst = new THREE.InstancedMesh(brickBoxGeo, chamberBrickMat, ruinCaps.length);
   ruinCaps.forEach((m, idx) => ruinCapInst.setMatrixAt(idx, m));
   ruinCapInst.instanceMatrix.needsUpdate = true;
   ruinCapInst.computeBoundingSphere();
@@ -794,7 +1091,7 @@ export function buildMayaDeviTemple(
 
   // Excavated brick fragment scatter on trench beds
   const rubbleCount = 36;
-  const rubbleInst = new THREE.InstancedMesh(unitBoxGeo, deepBrickMat, rubbleCount);
+  const rubbleInst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1, 3, 2, 2), deepBrickMat, rubbleCount);
   for (let i = 0; i < rubbleCount; i++) {
     const h1 = Math.sin(i * 19.7 + 1.3) * 43758.5453;
     const r1 = h1 - Math.floor(h1);
@@ -820,126 +1117,462 @@ export function buildMayaDeviTemple(
   // =========================================================================
   // 7. DUAL-FOCUS CENTRAL SANCTUM: RECESSED MARKER STONE + 3D NATIVITY STELE
   // =========================================================================
-  // 7A. Sunken Sacred Marker Stone (x = 0, z = +0.65) in Ancient Brick Chamber Floor + Frameless Glass Enclosure
+  // 7A. Sunken Sacred Marker Stone (x = 0, z = +0.65) in Ancient Brick Chamber Floor + Museum Glass Enclosure
   const markerSanctum = new THREE.Group();
   markerSanctum.position.set(0, 0, 0.65);
 
-  const markerOuterChamber = new THREE.Mesh(new THREE.BoxGeometry(3.35, 0.62, 2.75), deepBrickMat);
+  const markerOuterChamber = new THREE.Mesh(new THREE.BoxGeometry(3.36, 0.62, 2.76, 18, 6, 16), deepBrickMat);
   markerOuterChamber.position.set(0, trenchFloorY + 0.31, 0);
   markerOuterChamber.receiveShadow = true;
-  const markerBrickRim = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.34, 2.20), mats.brickMat);
+  const markerBrickRim = new THREE.Mesh(new THREE.BoxGeometry(2.78, 0.34, 2.22, 16, 4, 14), chamberBrickMat);
   markerBrickRim.position.set(0, 0.10, 0);
   markerBrickRim.receiveShadow = true;
-  const markerSunkenWell = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.12, 1.42), sumpMat);
-  markerSunkenWell.position.set(0, 0.24, 0);
+  const markerSunkenWell = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.10, 1.44), sumpMat);
+  markerSunkenWell.position.set(0, 0.23, 0);
   markerSunkenWell.receiveShadow = true;
 
-  // Conglomerate Sacred Marker Stone slab + golden lotus border frame + hammered gold offering bowls
-  const markerStone = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.16, 0.68), mats.chunarStoneMat);
-  markerStone.position.set(0, 0.33, 0);
-  markerStone.castShadow = true;
-  markerStone.receiveShadow = true;
-  const markerGoldBorder = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.05, 0.80), mats.giltGoldMat);
-  markerGoldBorder.position.set(0, 0.28, 0);
-
-  for (const [ox, oz] of [[-0.68, 0.44], [0.68, 0.44], [-0.68, -0.44], [0.68, -0.44]] as Array<[number, number]>) {
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.065, 0.08, 12), mats.giltGoldMat);
-    bowl.position.set(ox, 0.34, oz);
-    markerSanctum.add(bowl);
-  }
-
-  // Fresh Orange & Saffron Marigold Flower Garlands framing the Marker Stone (InstancedMesh)
-  const marigoldGeo = new THREE.DodecahedronGeometry(0.055, 0);
-  const marigoldOrangeMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.64 });
-  const marigoldGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.62 });
-  const marigoldCount = 44;
-  const marigoldOrangeInst = new THREE.InstancedMesh(marigoldGeo, marigoldOrangeMat, marigoldCount);
-  const marigoldGoldInst = new THREE.InstancedMesh(marigoldGeo, marigoldGoldMat, marigoldCount);
-  for (let i = 0; i < marigoldCount; i++) {
-    const t = (i / marigoldCount) * Math.PI * 2;
-    const gx = Math.cos(t) * 0.78;
-    const gz = Math.sin(t) * 0.54;
-    const gy = 0.33 + Math.abs(Math.sin(t * 6)) * 0.02;
-    _v3.set(gx, gy, gz);
-    _q.setFromEuler(_e.set(t, t * 2, 0));
-    _s.set(1.05, 0.78, 1.05);
-    _m4.compose(_v3, _q, _s);
-    if (i % 2 === 0) {
-      marigoldOrangeInst.setMatrixAt(i, _m4);
-      _s.set(0.001, 0.001, 0.001);
-      _m4.compose(_v3, _q, _s);
-      marigoldGoldInst.setMatrixAt(i, _m4);
-    } else {
-      marigoldGoldInst.setMatrixAt(i, _m4);
-      _s.set(0.001, 0.001, 0.001);
-      _m4.compose(_v3, _q, _s);
-      marigoldOrangeInst.setMatrixAt(i, _m4);
+  // Stepped 3D Mauryan/Kushan Terracotta Brick Header Courses lining the inner sanctum rim
+  const brickCourseMatrices: THREE.Matrix4[] = [];
+  const brickCourseColors: THREE.Color[] = [];
+  const courseSpecs = [
+    { halfX: 1.06, halfZ: 0.80, y: 0.295, bw: 0.21, bh: 0.055, bd: 0.11 },
+    { halfX: 1.24, halfZ: 0.96, y: 0.265, bw: 0.22, bh: 0.052, bd: 0.11 },
+  ];
+  for (let cIdx = 0; cIdx < courseSpecs.length; cIdx++) {
+    const cs = courseSpecs[cIdx];
+    const nx = Math.floor((cs.halfX * 2) / (cs.bw + 0.018));
+    for (let i = 0; i < nx; i++) {
+      const bx = -cs.halfX + ((i + 0.5) / nx) * cs.halfX * 2;
+      for (const sz of [-1, 1]) {
+        const jitterY = ((i * 7 + cIdx * 3) % 5 - 2) * 0.0025;
+        _v3.set(bx, cs.y + jitterY, sz * cs.halfZ);
+        _q.setFromEuler(_e.set(0, ((i % 3) - 1) * 0.015, 0));
+        _s.set(cs.bw, cs.bh, cs.bd);
+        _m4.compose(_v3, _q, _s);
+        brickCourseMatrices.push(_m4.clone());
+        const tone = 0.84 + ((i * 11 + sz + cIdx) % 7) * 0.032;
+        brickCourseColors.push(new THREE.Color(tone, tone * 0.92, tone * 0.86));
+      }
+    }
+    const nz = Math.floor((cs.halfZ * 2 - 0.22) / (cs.bw + 0.018));
+    for (let i = 0; i < nz; i++) {
+      const bz = -(cs.halfZ - 0.11) + ((i + 0.5) / nz) * (cs.halfZ - 0.11) * 2;
+      for (const sx of [-1, 1]) {
+        const jitterY = ((i * 5 + cIdx * 2) % 5 - 2) * 0.0025;
+        _v3.set(sx * cs.halfX, cs.y + jitterY, bz);
+        _q.setFromEuler(_e.set(0, Math.PI * 0.5 + ((i % 3) - 1) * 0.015, 0));
+        _s.set(cs.bw, cs.bh, cs.bd);
+        _m4.compose(_v3, _q, _s);
+        brickCourseMatrices.push(_m4.clone());
+        const tone = 0.84 + ((i * 13 + sx + cIdx) % 7) * 0.032;
+        brickCourseColors.push(new THREE.Color(tone, tone * 0.92, tone * 0.86));
+      }
     }
   }
-  marigoldOrangeInst.instanceMatrix.needsUpdate = true;
-  marigoldGoldInst.instanceMatrix.needsUpdate = true;
-  marigoldOrangeInst.userData.nonCollidable = true;
-  marigoldGoldInst.userData.nonCollidable = true;
+  const sanctumBrickGeo = new THREE.BoxGeometry(1, 1, 1, 4, 2, 3);
+  const sanctumBrickInst = new THREE.InstancedMesh(sanctumBrickGeo, chamberBrickMat, brickCourseMatrices.length);
+  for (let i = 0; i < brickCourseMatrices.length; i++) {
+    sanctumBrickInst.setMatrixAt(i, brickCourseMatrices[i]);
+    sanctumBrickInst.setColorAt(i, brickCourseColors[i]);
+  }
+  sanctumBrickInst.instanceMatrix.needsUpdate = true;
+  if (sanctumBrickInst.instanceColor) sanctumBrickInst.instanceColor.needsUpdate = true;
+  sanctumBrickInst.castShadow = true;
+  sanctumBrickInst.receiveShadow = true;
+  sanctumBrickInst.userData.nonCollidable = true;
 
-  // Frameless Tempered-Glass Protective Barrier with Brushed Brass Corner Posts & Warm Interior Display Light
+  // Sculpted Chunar Sandstone Plinth + Beaded Gilt-Brass Cradle Collar under the Marker Stone
+  const markerBaseStoneMat = (mats.chunarStoneMat as THREE.MeshStandardMaterial).clone();
+  const markerBaseWeather = applySanctumWeatheringShader(markerBaseStoneMat, {
+    cacheKey: 'maya-devi-marker-plinth-weather-v1',
+    minRelY: -0.06,
+    maxRelY: 0.06,
+    mossStrength: 0.36,
+    dampDarken: 0.70,
+    noiseScale: 6.4,
+    initialAnchorY: 0.35,
+  });
+  const markerStoneBaseSlab = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.045, 1.02), markerBaseStoneMat);
+  markerStoneBaseSlab.position.set(0, 0.302, 0);
+  markerStoneBaseSlab.receiveShadow = true;
+
+  const markerGoldBorder = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.036, 0.88), mats.giltGoldMat);
+  markerGoldBorder.position.set(0, 0.342, 0);
+  markerGoldBorder.receiveShadow = true;
+
+  const bezelBeadGeo = new THREE.SphereGeometry(0.018, 8, 6);
+  const bezelBeads: THREE.Matrix4[] = [];
+  for (let i = 0; i < 11; i++) {
+    const bx = THREE.MathUtils.lerp(-0.56, 0.56, i / 10);
+    for (const sz of [-1, 1]) {
+      _v3.set(bx, 0.362, sz * 0.41);
+      _q.identity();
+      _s.set(1.1, 0.65, 1.1);
+      _m4.compose(_v3, _q, _s);
+      bezelBeads.push(_m4.clone());
+    }
+  }
+  for (let i = 1; i < 7; i++) {
+    const bz = THREE.MathUtils.lerp(-0.41, 0.41, i / 7);
+    for (const sx of [-1, 1]) {
+      _v3.set(sx * 0.595, 0.362, bz);
+      _q.identity();
+      _s.set(1.1, 0.65, 1.1);
+      _m4.compose(_v3, _q, _s);
+      bezelBeads.push(_m4.clone());
+    }
+  }
+  const bezelBeadInst = new THREE.InstancedMesh(bezelBeadGeo, mats.giltGoldMat, bezelBeads.length);
+  bezelBeads.forEach((m, idx) => bezelBeadInst.setMatrixAt(idx, m));
+  bezelBeadInst.instanceMatrix.needsUpdate = true;
+  bezelBeadInst.userData.nonCollidable = true;
+
+  // Authentic Sculpted River-Cobble Conglomerate Sacred Marker Stone (bound to dedicated 1024px markerStone PBR maps)
+  const markerStoneMat = new THREE.MeshStandardMaterial({
+    map: lTex.markerStoneMap,
+    normalMap: lTex.markerStoneNormal,
+    normalScale: new THREE.Vector2(2.1, 2.1),
+    roughnessMap: lTex.markerStoneRough,
+    color: 0xffffff,
+    roughness: 0.84,
+    metalness: 0.04,
+  });
+  const markerStoneWeather = applySanctumWeatheringShader(markerStoneMat, {
+    cacheKey: 'maya-devi-marker-stone-weather-v1',
+    minRelY: 0.0,
+    maxRelY: 0.135,
+    mossStrength: 0.32,
+    dampDarken: 0.72,
+    noiseScale: 7.4,
+    initialAnchorY: 0.35,
+  });
+  const stoneW = 1.16;
+  const stoneH = 0.23;
+  const stoneD = 0.78;
+  const stoneBaseY = 0.35;
+  const markerStone = new THREE.Mesh(
+    createSculptedMarkerStoneGeometry(stoneW, stoneH, stoneD, 52, 16),
+    markerStoneMat,
+  );
+  markerStone.position.set(0, stoneBaseY, 0);
+  markerStone.castShadow = true;
+  markerStone.receiveShadow = true;
+  const syncMarkerWeatherAnchor = () => {
+    const wy = markerStone.matrixWorld.elements[13];
+    markerBaseWeather.uniforms.uWeatherAnchorY.value = wy;
+    markerStoneWeather.uniforms.uWeatherAnchorY.value = wy;
+  };
+  markerStoneBaseSlab.onBeforeRender = syncMarkerWeatherAnchor;
+  markerStone.onBeforeRender = syncMarkerWeatherAnchor;
+
+  // 64 Real 3D Embedded River-Pebble Clasts protruding organically from the Conglomerate Stone
+  const pebbleGeo = new THREE.IcosahedronGeometry(1, 2);
+  const pebbleMat = new THREE.MeshStandardMaterial({
+    normalMap: lTex.markerStoneNormal,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughness: 0.74,
+    metalness: 0.05,
+  });
+  const pebblePalette = [
+    new THREE.Color(0xe6dccb), // milky river quartz
+    new THREE.Color(0xc29362), // warm ochre quartzite
+    new THREE.Color(0x9a543a), // brick-red jasper
+    new THREE.Color(0x524c45), // smooth dark basalt
+    new THREE.Color(0xb6a48b), // weathered sandstone clast
+    new THREE.Color(0x7c7163), // grey river chert
+  ];
+  const pebbleCount = 64;
+  const pebbleInst = new THREE.InstancedMesh(pebbleGeo, pebbleMat, pebbleCount);
+  for (let i = 0; i < pebbleCount; i++) {
+    // Golden-angle spiral distribution across top plateau & sloped shoulder
+    const u = (i + 0.5) / pebbleCount;
+    const radial = Math.sqrt(u) * 0.90;
+    const ang = i * 2.3999632 + 0.42;
+    const ux = Math.cos(ang) * radial;
+    const uz = Math.sin(ang) * radial;
+    const px = ux * stoneW * 0.45;
+    const pz = uz * stoneD * 0.45;
+    // Match createSculptedMarkerStoneGeometry dome profile
+    const edgeFall = Math.max(0, 1 - radial * radial * 0.65);
+    const py = stoneBaseY + stoneH * (0.58 + 0.38 * edgeFall);
+    const pr = 0.020 + ((i * 17) % 11) * 0.0024;
+    _v3.set(px, py, pz);
+    _q.setFromEuler(
+      _e.set(
+        (Math.sin(i * 3.1) * 0.35),
+        ang + i * 0.7,
+        (Math.cos(i * 2.7) * 0.35),
+      ),
+    );
+    _s.set(pr * 1.25, pr * 0.52, pr * 0.98);
+    _m4.compose(_v3, _q, _s);
+    pebbleInst.setMatrixAt(i, _m4);
+    pebbleInst.setColorAt(i, pebblePalette[(i * 5 + 2) % pebblePalette.length]);
+  }
+  pebbleInst.instanceMatrix.needsUpdate = true;
+  if (pebbleInst.instanceColor) pebbleInst.instanceColor.needsUpdate = true;
+  pebbleInst.castShadow = true;
+  pebbleInst.receiveShadow = true;
+  pebbleInst.userData.nonCollidable = true;
+
+  // Ritual Offerings Resting on Top of the Marker Stone: Gold-Leaf Foil (Varq), Kumkum Tilak & Loose Petals
+  const goldFoilMat = new THREE.MeshStandardMaterial({
+    color: 0xffd262,
+    emissive: 0x3b2202,
+    emissiveIntensity: 0.25,
+    roughness: 0.22,
+    metalness: 0.92,
+  });
+  const foilPatches: Array<[number, number, number, number, number]> = [
+    [-0.08, 0.566, 0.02, 0.11, 0.075],
+    [0.06, 0.568, -0.04, 0.085, 0.068],
+    [0.01, 0.565, 0.09, 0.07, 0.055],
+    [-0.19, 0.556, -0.05, 0.055, 0.045],
+    [0.18, 0.558, 0.06, 0.06, 0.048],
+  ];
+  for (let i = 0; i < foilPatches.length; i++) {
+    const [fx, fy, fz, fw, fd] = foilPatches[i];
+    const foil = new THREE.Mesh(new THREE.CylinderGeometry(fw, fw * 0.9, 0.004, 7), goldFoilMat);
+    foil.position.set(fx, fy, fz);
+    foil.rotation.y = i * 0.85;
+    foil.scale.set(1.0, 1.0, fd / fw);
+    foil.userData.nonCollidable = true;
+    markerSanctum.add(foil);
+  }
+  const kumkumMat = new THREE.MeshStandardMaterial({ color: 0xc93b1a, roughness: 0.92, metalness: 0.02 });
+  for (const [kx, ky, kz, kr] of [
+    [-0.02, 0.568, 0.01, 0.036],
+    [0.12, 0.562, 0.03, 0.024],
+    [-0.14, 0.560, 0.05, 0.022],
+  ] as Array<[number, number, number, number]>) {
+    const kum = new THREE.Mesh(new THREE.CylinderGeometry(kr, kr * 1.15, 0.005, 10), kumkumMat);
+    kum.position.set(kx, ky, kz);
+    kum.userData.nonCollidable = true;
+    markerSanctum.add(kum);
+  }
+
+  // 4 Sculpted Hammered Brass Kalash Offering Vessels at the Corners (with Dark Water & Floating Blossom)
+  const kalashProfile = [
+    new THREE.Vector2(0.001, 0.0),
+    new THREE.Vector2(0.048, 0.0),
+    new THREE.Vector2(0.054, 0.012),
+    new THREE.Vector2(0.040, 0.024),
+    new THREE.Vector2(0.076, 0.052),
+    new THREE.Vector2(0.088, 0.082),
+    new THREE.Vector2(0.066, 0.110),
+    new THREE.Vector2(0.056, 0.125),
+    new THREE.Vector2(0.082, 0.145),
+    new THREE.Vector2(0.078, 0.150),
+    new THREE.Vector2(0.052, 0.128),
+  ];
+  const kalashGeo = new THREE.LatheGeometry(kalashProfile, 22);
+  kalashGeo.computeVertexNormals();
+  const offeringWaterMat = new THREE.MeshStandardMaterial({
+    color: 0x2a1c11,
+    roughness: 0.12,
+    metalness: 0.18,
+  });
+  const offeringPetalMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.58 });
+  for (const [ox, oz] of [[-0.75, 0.50], [0.75, 0.50], [-0.75, -0.50], [0.75, -0.50]] as Array<[number, number]>) {
+    const vessel = new THREE.Mesh(kalashGeo, mats.giltGoldMat);
+    vessel.position.set(ox, 0.30, oz);
+    vessel.castShadow = true;
+    vessel.receiveShadow = true;
+    const waterDisc = new THREE.Mesh(new THREE.CircleGeometry(0.064, 14), offeringWaterMat);
+    waterDisc.rotation.x = -Math.PI * 0.5;
+    waterDisc.position.set(ox, 0.432, oz);
+    const floatFlower = new THREE.Mesh(createMarigoldFloretGeometry(0.028), offeringPetalMat);
+    floatFlower.position.set(ox, 0.440, oz);
+    markerSanctum.add(vessel, waterDisc, floatFlower);
+  }
+
+  // Lush Braided Garland of 128 Ruffled Marigolds, Jasmine Buds & 4 Sculpted Lotus Blossoms
+  const marigoldGeo = createMarigoldFloretGeometry(0.048);
+  const marigoldMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.02 });
+  const marigoldTints = [
+    new THREE.Color(0xf97316), // rich marigold orange
+    new THREE.Color(0xfacc15), // golden yellow
+    new THREE.Color(0xfb923c), // warm saffron
+    new THREE.Color(0xea580c), // deep tangerine
+  ];
+  const marigoldCount = 128;
+  const marigoldInst = new THREE.InstancedMesh(marigoldGeo, marigoldMat, marigoldCount);
+  for (let i = 0; i < marigoldCount; i++) {
+    const ringLayer = i % 2;
+    const t = (i / marigoldCount) * Math.PI * 2;
+    const radialJitter = (ringLayer === 0 ? -0.022 : 0.026) + Math.sin(t * 9) * 0.008;
+    const gx = Math.cos(t) * (0.72 + radialJitter);
+    const gz = Math.sin(t) * (0.50 + radialJitter * 0.85);
+    const gy = 0.368 + (ringLayer === 0 ? 0.016 : 0.002) + Math.abs(Math.sin(t * 7)) * 0.014;
+    _v3.set(gx, gy, gz);
+    _q.setFromEuler(_e.set(Math.sin(t * 3) * 0.25, t, Math.cos(t * 4) * 0.22));
+    const sc = 0.88 + ((i * 7) % 5) * 0.07;
+    _s.set(sc, sc * 0.82, sc);
+    _m4.compose(_v3, _q, _s);
+    marigoldInst.setMatrixAt(i, _m4);
+    marigoldInst.setColorAt(i, marigoldTints[i % marigoldTints.length]);
+  }
+  marigoldInst.instanceMatrix.needsUpdate = true;
+  if (marigoldInst.instanceColor) marigoldInst.instanceColor.needsUpdate = true;
+  marigoldInst.castShadow = true;
+  marigoldInst.userData.nonCollidable = true;
+
+  // Fresh White Jasmine Buds & Scattered Loose Petals on Stone Shoulder
+  const jasmineGeo = new THREE.OctahedronGeometry(0.017, 1);
+  const jasmineMat = new THREE.MeshStandardMaterial({ color: 0xfef8ea, roughness: 0.55 });
+  const jasmineCount = 32;
+  const jasmineInst = new THREE.InstancedMesh(jasmineGeo, jasmineMat, jasmineCount);
+  for (let i = 0; i < jasmineCount; i++) {
+    const t = (i / jasmineCount) * Math.PI * 2 + 0.08;
+    _v3.set(Math.cos(t) * 0.70, 0.388 + (i % 2) * 0.01, Math.sin(t) * 0.48);
+    _q.setFromEuler(_e.set(i * 0.5, t, 0));
+    _s.set(1.0, 1.35, 1.0);
+    _m4.compose(_v3, _q, _s);
+    jasmineInst.setMatrixAt(i, _m4);
+  }
+  jasmineInst.instanceMatrix.needsUpdate = true;
+  jasmineInst.userData.nonCollidable = true;
+
+  // 4 Sculpted Sacred Multi-Petal Lotus Offerings at Cardinal N/S/E/W
+  const lotusOfferPetalGeo = createCarvedLotusPetalGeometry(0.036, 0.068, 0.016);
+  const lotusPinkMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.48 });
+  const lotusCenterMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.45 });
+  for (const [lx, lz] of [[0, 0.49], [0, -0.49], [0.71, 0], [-0.71, 0]] as Array<[number, number]>) {
+    const lotusGroup = new THREE.Group();
+    lotusGroup.position.set(lx, 0.376, lz);
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.012, 0.018, 10), lotusCenterMat);
+    pod.position.y = 0.012;
+    lotusGroup.add(pod);
+    for (let ring = 0; ring < 2; ring++) {
+      const petals = ring === 0 ? 8 : 6;
+      const tilt = ring === 0 ? 1.05 : 0.62;
+      const rad = ring === 0 ? 0.022 : 0.015;
+      for (let p = 0; p < petals; p++) {
+        const a = (p / petals) * Math.PI * 2 + ring * 0.4;
+        const petal = new THREE.Mesh(lotusOfferPetalGeo, lotusPinkMat);
+        petal.position.set(Math.cos(a) * rad, 0.008, Math.sin(a) * rad);
+        petal.rotation.order = 'YXZ';
+        petal.rotation.y = -a + Math.PI * 0.5;
+        petal.rotation.x = tilt;
+        lotusGroup.add(petal);
+      }
+    }
+    markerSanctum.add(lotusGroup);
+  }
+
+  // Crystal-Clear Museum Protective Tempered-Glass Enclosure + Stepped Brass Posts & Glass Clamps
   const barrierW = 2.46;
   const barrierD = 1.94;
   const barrierH = 1.12;
   const barrierY = 0.27 + barrierH * 0.5;
   const temperedGlassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xdff5ff,
+    color: 0xf4fbff,
     transparent: true,
-    opacity: 0.22,
-    roughness: 0.06,
-    metalness: 0.08,
+    opacity: 0.09,
+    roughness: 0.04,
+    metalness: 0.05,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
+    clearcoatRoughness: 0.03,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
   for (const [px, pz, pw, pd] of [
-    [0, -barrierD * 0.5, barrierW, 0.025],
-    [0, barrierD * 0.5, barrierW, 0.025],
-    [-barrierW * 0.5, 0, 0.025, barrierD],
-    [barrierW * 0.5, 0, 0.025, barrierD],
+    [0, -barrierD * 0.5, barrierW, 0.022],
+    [0, barrierD * 0.5, barrierW, 0.022],
+    [-barrierW * 0.5, 0, 0.022, barrierD],
+    [barrierW * 0.5, 0, 0.022, barrierD],
   ] as Array<[number, number, number, number]>) {
     const pane = new THREE.Mesh(new THREE.BoxGeometry(pw, barrierH, pd), temperedGlassMat);
     pane.position.set(px, barrierY, pz);
     pane.userData.nonCollidable = true;
-    markerSanctum.add(pane);
+    const baseChannel = new THREE.Mesh(
+      new THREE.BoxGeometry(pw > pd ? pw + 0.02 : 0.046, 0.042, pd > pw ? pd + 0.02 : 0.046),
+      mats.warmBronzeMat,
+    );
+    baseChannel.position.set(px, 0.29, pz);
+    markerSanctum.add(pane, baseChannel);
   }
-  // Brushed brass corner posts, clamps & warm base interior display LED strips
+  // Turned stepped brass corner posts, machined glass clamps, lotus finials & 4 corner pin-spot heads
+  const postProfile = [
+    new THREE.Vector2(0.001, 0.0),
+    new THREE.Vector2(0.056, 0.0),
+    new THREE.Vector2(0.056, 0.04),
+    new THREE.Vector2(0.040, 0.07),
+    new THREE.Vector2(0.032, 0.12),
+    new THREE.Vector2(0.030, barrierH + 0.04),
+    new THREE.Vector2(0.044, barrierH + 0.07),
+    new THREE.Vector2(0.026, barrierH + 0.10),
+    new THREE.Vector2(0.042, barrierH + 0.14),
+    new THREE.Vector2(0.016, barrierH + 0.19),
+    new THREE.Vector2(0.001, barrierH + 0.22),
+  ];
+  const turnedPostGeo = new THREE.LatheGeometry(postProfile, 16);
+  const spotHousingMat = new THREE.MeshStandardMaterial({ color: 0x2c241d, roughness: 0.35, metalness: 0.82 });
+  const spotLensMat = new THREE.MeshStandardMaterial({
+    color: 0xfff0c8,
+    emissive: 0xffc668,
+    emissiveIntensity: 1.9,
+    roughness: 0.2,
+  });
+  const _spotDummy = new THREE.Object3D();
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, barrierH + 0.08, 10), mats.giltGoldMat);
-      post.position.set(sx * barrierW * 0.5, barrierY, sz * barrierD * 0.5);
-      const finial = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), mats.giltGoldMat);
-      finial.position.set(sx * barrierW * 0.5, barrierY + barrierH * 0.5 + 0.06, sz * barrierD * 0.5);
-      markerSanctum.add(post, finial);
+      const px = sx * barrierW * 0.5;
+      const pz = sz * barrierD * 0.5;
+      const post = new THREE.Mesh(turnedPostGeo, mats.giltGoldMat);
+      post.position.set(px, 0.27, pz);
+      post.castShadow = true;
+      markerSanctum.add(post);
+
+      // Upper & lower machined brass glass-clamp brackets
+      for (const cy of [0.50, 1.24]) {
+        const clampX = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.045, 0.046), mats.warmBronzeMat);
+        clampX.position.set(px - sx * 0.04, cy, pz);
+        const clampZ = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.045, 0.09), mats.warmBronzeMat);
+        clampZ.position.set(px, cy, pz - sz * 0.04);
+        markerSanctum.add(clampX, clampZ);
+      }
+
+      // Miniature angled corner museum pin-spot fixture aimed directly at the Marker Stone
+      const pinSpot = new THREE.Group();
+      pinSpot.position.set(px - sx * 0.07, 0.27 + barrierH + 0.02, pz - sz * 0.07);
+      _spotDummy.position.copy(pinSpot.position);
+      _spotDummy.lookAt(0, 0.48, 0);
+      pinSpot.quaternion.copy(_spotDummy.quaternion);
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 0.075, 10), spotHousingMat);
+      can.rotation.x = Math.PI * 0.5;
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.020, 10), spotLensMat);
+      lens.position.z = 0.039;
+      pinSpot.add(can, lens);
+      markerSanctum.add(pinSpot);
     }
   }
   const caseDisplayLedMat = new THREE.MeshStandardMaterial({
     color: 0xffe4ad,
     emissive: 0xffb84d,
-    emissiveIntensity: 1.75,
+    emissiveIntensity: 1.35,
     roughness: 0.3,
   });
   for (const [lx, lz, lsx, lsz] of [
-    [0, -barrierD * 0.5 + 0.05, barrierW - 0.16, 0.04],
-    [0, barrierD * 0.5 - 0.05, barrierW - 0.16, 0.04],
+    [0, -barrierD * 0.5 + 0.045, barrierW - 0.16, 0.024],
+    [0, barrierD * 0.5 - 0.045, barrierW - 0.16, 0.024],
   ] as Array<[number, number, number, number]>) {
-    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(lsx, 0.03, lsz), caseDisplayLedMat);
-    ledStrip.position.set(lx, 0.31, lz);
+    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(lsx, 0.022, lsz), caseDisplayLedMat);
+    ledStrip.position.set(lx, 0.305, lz);
     markerSanctum.add(ledStrip);
   }
   markerSanctum.add(
     markerOuterChamber,
     markerBrickRim,
     markerSunkenWell,
+    sanctumBrickInst,
+    markerStoneBaseSlab,
     markerGoldBorder,
+    bezelBeadInst,
     markerStone,
-    marigoldOrangeInst,
-    marigoldGoldInst,
+    pebbleInst,
+    marigoldInst,
+    jasmineInst,
   );
   group.add(markerSanctum);
 
@@ -1128,17 +1761,27 @@ export function buildMayaDeviTemple(
     plaster.userData.nonCollidable = true;
     group.add(dado, plaster);
   }
+  const wallLanternFlames: THREE.Object3D[] = [];
   for (const px of [-12.0, -6.0, 0, 6.0, 12.0]) {
-    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.25, 0.14), mats.stuccoWhiteMat);
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.36, 3.25, 0.16), mats.stuccoWhiteMat);
     pil.position.set(px, walkY + 1.62, -wallInnerZ + 0.06);
     pil.userData.nonCollidable = true;
-    const sconce = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.06, 0.24, 10), mats.warmBronzeMat);
-    sconce.position.set(px, walkY + 2.15, -wallInnerZ + 0.16);
-    const sconceGlow = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), mats.flameGlowMat);
-    sconceGlow.position.set(px, walkY + 2.28, -wallInnerZ + 0.16);
-    sconce.userData.nonCollidable = true;
-    sconceGlow.userData.nonCollidable = true;
-    group.add(pil, sconce, sconceGlow);
+    const pilBase = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.20, 0.22), mats.stuccoWhiteMat);
+    pilBase.position.set(px, walkY + 0.10, -wallInnerZ + 0.08);
+    pilBase.userData.nonCollidable = true;
+    const pilCap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.18, 0.24), mats.stuccoWhiteMat);
+    pilCap.position.set(px, walkY + 3.22, -wallInnerZ + 0.09);
+    pilCap.userData.nonCollidable = true;
+
+    const wallLantern = buildDetailedSanctuaryWallLantern({
+      giltGoldMat: mats.giltGoldMat,
+      warmBronzeMat: mats.warmBronzeMat,
+      darkMetalMat: mats.darkMetalMat,
+      flameGlowMat: mats.flameGlowMat,
+    });
+    wallLantern.group.position.set(px, walkY + 2.24, -wallInnerZ + 0.14);
+    wallLanternFlames.push(wallLantern.flameGroup);
+    group.add(pil, pilBase, pilCap, wallLantern.group);
   }
   for (const side of [-1, 1]) {
     const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.16, doorH - 0.2, 0.22), salBeamMat);
@@ -1410,65 +2053,6 @@ export function buildMayaDeviTemple(
   }
   group.add(ceilingGroup);
 
-  // Floating Golden Skylight Dust Motes drifting inside the volumetric light shafts
-  const moteCount = 175;
-  const motePos = new Float32Array(moteCount * 3);
-  const moteSeed = new Float32Array(moteCount);
-  for (let i = 0; i < moteCount; i++) {
-    const h1 = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
-    const r1 = h1 - Math.floor(h1);
-    const h2 = Math.sin(i * 78.233 + 1.923) * 43758.5453;
-    const r2 = h2 - Math.floor(h2);
-    const h3 = Math.sin(i * 39.346 + 9.412) * 43758.5453;
-    const r3 = h3 - Math.floor(h3);
-    motePos[i * 3] = (r1 - 0.5) * 10.4;
-    motePos[i * 3 + 1] = 0.35 + r2 * 6.5;
-    motePos[i * 3 + 2] = (r3 - 0.5) * 7.8;
-    moteSeed[i] = r1 * 6.2831;
-  }
-  const moteGeo = new THREE.BufferGeometry();
-  moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
-  moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(moteSeed, 1));
-  const moteUniforms = { uTime: { value: 0 } };
-  const moteMat = new THREE.ShaderMaterial({
-    uniforms: moteUniforms,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: `
-      attribute float aSeed;
-      uniform float uTime;
-      varying float vAlpha;
-      void main() {
-        vec3 p = position;
-        p.x += sin(uTime * 0.32 + aSeed) * 0.45;
-        p.y = 0.35 + mod(p.y + uTime * 0.13 + aSeed, 6.5);
-        p.z += cos(uTime * 0.26 + aSeed * 1.3) * 0.40;
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp(28.0 / max(1.2, -mv.z), 2.0, 9.0);
-        float heightFade = smoothstep(0.35, 1.4, p.y) * (1.0 - smoothstep(5.8, 6.85, p.y));
-        vAlpha = heightFade * (0.40 + 0.42 * sin(uTime * 1.35 + aSeed * 2.0));
-        gl_Position = projectionMatrix * mv;
-      }
-    `,
-    fragmentShader: `
-      varying float vAlpha;
-      void main() {
-        vec2 c = gl_PointCoord - 0.5;
-        float r2 = dot(c, c);
-        if (r2 > 0.25) discard;
-        float glow = exp(-r2 * 14.0);
-        gl_FragColor = vec4(1.0, 0.87, 0.58, glow * vAlpha * 0.72);
-      }
-    `,
-  });
-  const dustMotes = new THREE.Points(moteGeo, moteMat);
-  dustMotes.name = 'MayaDeviDustMotes';
-  dustMotes.frustumCulled = false;
-  dustMotes.userData.noMerge = true;
-  dustMotes.userData.nonCollidable = true;
-  group.add(dustMotes);
-
   // Soft Custom GLSL Fresnel-Faded Volumetric God Rays (ZERO hard geometric edges!)
   const rayOuter = createVolumetricGodRayMaterial(0xffe2a4, 0.165, 2.25);
   const rayInner = createVolumetricGodRayMaterial(0xffebc2, 0.145, 2.65);
@@ -1508,13 +2092,24 @@ export function buildMayaDeviTemple(
     group.add(shaft);
   }
 
+  // Dual Atmospheric Particle Systems:
+  // 1) Golden dust motes drifting specifically within the volumetric light shafts
+  // 2) Fine floating dust / sacred pollen motes swirling around the 3 Nativity Statues & Marker Stone
+  const atmosphereParticles = createSanctumAtmosphereParticles(clerestoryBeamSpecs);
+  group.add(atmosphereParticles.group);
+
   cornerLampRig.userData.onFlickerUpdate = (t: number) => {
     for (let i = 0; i < cornerLamps.length; i++) {
       const base = i < 4 ? 0.68 : 0.94;
       const s = base + Math.sin(t * 8.4 + i * 1.9) * (base * 0.048) + Math.sin(t * 14.3 + i) * (base * 0.02);
       cornerLamps[i].scale.set(base, s, base);
     }
-    moteUniforms.uTime.value = t;
+    for (let i = 0; i < wallLanternFlames.length; i++) {
+      const sy = 1.0 + Math.sin(t * 9.6 + i * 2.1) * 0.09 + Math.sin(t * 15.8 + i) * 0.04;
+      const sxz = 1.0 + Math.cos(t * 7.8 + i * 1.4) * 0.05;
+      wallLanternFlames[i].scale.set(sxz, sy, sxz);
+    }
+    atmosphereParticles.uniforms.uTime.value = t;
     smokeUniforms.uTime.value = t;
     rayOuter.uniforms.uTime.value = t;
     rayInner.uniforms.uTime.value = t;
@@ -1526,17 +2121,17 @@ export function buildMayaDeviTemple(
   // =========================================================================
   // 11. BALANCED WARM SANCTUM KEY + WARM BOUNCE FILL LIGHTING (6-LIGHT POOL)
   // =========================================================================
-  const sanctumLight = new THREE.PointLight(0xffcf87, 4.4, 28, 1.15);
+  const sanctumLight = new THREE.PointLight(0xffcf87, 3.8, 28, 1.15);
   sanctumLight.position.set(0, 5.25, -0.45);
-  sanctumLight.userData.intensityScale = 2.65;
-  sanctumLight.userData.flickerAmp = 0.05;
+  sanctumLight.userData.intensityScale = 2.15;
+  sanctumLight.userData.flickerAmp = 0.04;
   sanctumLight.userData.warmFlicker = true;
   sanctumLight.userData.interiorSanctum = true;
   beaconLights.push(sanctumLight);
   group.add(sanctumLight);
 
-  const bounceFillLight = new THREE.PointLight(0xffb470, 2.2, 32, 1.05);
-  bounceFillLight.position.set(0, 2.05, 0.35);
+  const bounceFillLight = new THREE.PointLight(0xffb470, 2.35, 32, 1.05);
+  bounceFillLight.position.set(0, 2.15, 0.75);
   bounceFillLight.userData.intensityScale = 1.65;
   bounceFillLight.userData.flickerAmp = 0.03;
   bounceFillLight.userData.warmFlicker = false;

@@ -1263,51 +1263,356 @@ export function buildToranaGate(
   return g;
 }
 
+interface PeaceLanternGeoCache {
+  stoneGeo: THREE.BufferGeometry;
+  bronzeGeo: THREE.BufferGeometry;
+  amberGlassGeo: THREE.BufferGeometry;
+  chimneyGeo: THREE.BufferGeometry;
+  flameGeo: THREE.BufferGeometry;
+  amberGlassMat: THREE.MeshPhysicalMaterial;
+  chimneyGlassMat: THREE.MeshPhysicalMaterial;
+}
+
+let cachedPeaceLanternGeos: PeaceLanternGeoCache | null = null;
+
+function pushNonIndexed(
+  list: THREE.BufferGeometry[],
+  geo: THREE.BufferGeometry,
+  translateY = 0,
+  rotX = 0,
+  rotY = 0,
+  rotZ = 0,
+  translateX = 0,
+  translateZ = 0,
+): void {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  if (rotX !== 0) g.rotateX(rotX);
+  if (rotY !== 0) g.rotateY(rotY);
+  if (rotZ !== 0) g.rotateZ(rotZ);
+  if (translateX !== 0 || translateY !== 0 || translateZ !== 0) {
+    g.translate(translateX, translateY, translateZ);
+  }
+  if (!g.getAttribute('normal')) g.computeVertexNormals();
+  if (!g.getAttribute('uv')) {
+    const count = g.getAttribute('position').count;
+    g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+  }
+  list.push(g);
+  geo.dispose();
+}
+
+function getPeaceLanternCache(): PeaceLanternGeoCache {
+  if (cachedPeaceLanternGeos) return cachedPeaceLanternGeos;
+
+  const stoneParts: THREE.BufferGeometry[] = [];
+  const bronzeParts: THREE.BufferGeometry[] = [];
+
+  // 1. Stepped Ashlar Base Plinth + Chamfered Bolsters + Carved Padma-Pitha Lotus Pedestal
+  pushNonIndexed(stoneParts, new THREE.BoxGeometry(0.76, 0.13, 0.76), 0.065);
+  pushNonIndexed(stoneParts, new THREE.BoxGeometry(0.60, 0.13, 0.60), 0.195);
+  pushNonIndexed(stoneParts, new THREE.BoxGeometry(0.46, 0.08, 0.46), 0.30);
+
+  // Corner lotus relief stops on square-to-octagonal plinth transition
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      pushNonIndexed(
+        stoneParts,
+        new THREE.ConeGeometry(0.055, 0.11, 6),
+        0.37,
+        0,
+        Math.PI * 0.25,
+        0,
+        sx * 0.175,
+        sz * 0.175,
+      );
+    }
+  }
+
+  // Carved inverted-lotus pedestal cushion (y = 0.34 .. 0.49)
+  const lotusBasePts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.21, 0.0),
+    new THREE.Vector2(0.225, 0.035),
+    new THREE.Vector2(0.195, 0.075),
+    new THREE.Vector2(0.16, 0.115),
+    new THREE.Vector2(0.18, 0.135),
+    new THREE.Vector2(0.145, 0.155),
+    new THREE.Vector2(0.0, 0.155),
+  ];
+  pushNonIndexed(stoneParts, new THREE.LatheGeometry(lotusBasePts, 16), 0.34);
+
+  // 2. Fluted & Entasis-Tapered Chunar Sandstone Column + Mid-Shaft Kumbha Collar + Lotus Capital
+  const shaftPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.145, 0.0),
+    new THREE.Vector2(0.132, 0.14),
+    new THREE.Vector2(0.118, 0.42),
+    new THREE.Vector2(0.152, 0.46), // Mid-shaft Kumbha collar
+    new THREE.Vector2(0.115, 0.50),
+    new THREE.Vector2(0.106, 0.78),
+    new THREE.Vector2(0.145, 0.86), // Capital necking
+    new THREE.Vector2(0.195, 0.94), // Lotus capital flare
+    new THREE.Vector2(0.175, 0.98),
+    new THREE.Vector2(0.0, 0.98),
+  ];
+  pushNonIndexed(stoneParts, new THREE.LatheGeometry(shaftPts, 16), 0.49);
+
+  // 8 Vertical sandstone shaft flutes / ribs + Kumbha ring accent
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    pushNonIndexed(
+      stoneParts,
+      new THREE.CylinderGeometry(0.016, 0.022, 0.78, 6),
+      0.89,
+      0,
+      0,
+      0,
+      Math.cos(a) * 0.116,
+      Math.sin(a) * 0.116,
+    );
+  }
+  pushNonIndexed(bronzeParts, new THREE.TorusGeometry(0.152, 0.012, 8, 20), 0.95, Math.PI * 0.5);
+
+  // 3. Bracketed Octagonal Sill Deck + 8 Carved Stone Corbel Spurs
+  pushNonIndexed(stoneParts, new THREE.CylinderGeometry(0.285, 0.235, 0.09, 8), 1.515, 0, Math.PI / 8);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    pushNonIndexed(
+      stoneParts,
+      new THREE.BoxGeometry(0.042, 0.085, 0.11),
+      1.45,
+      0.28,
+      a,
+      0,
+      Math.sin(a) * 0.19,
+      Math.cos(a) * 0.19,
+    );
+  }
+
+  // 4. Ornate Octagonal Bronze & Filigree Lantern Chamber (y = 1.56 .. 2.02)
+  // Base bronze drip pan & inner Diyo burner bowl
+  pushNonIndexed(bronzeParts, new THREE.CylinderGeometry(0.215, 0.235, 0.036, 8), 1.578, 0, Math.PI / 8);
+  const diyoPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.068, 0.0),
+    new THREE.Vector2(0.042, 0.03),
+    new THREE.Vector2(0.082, 0.075),
+    new THREE.Vector2(0.074, 0.095),
+    new THREE.Vector2(0.02, 0.095),
+  ];
+  pushNonIndexed(bronzeParts, new THREE.LatheGeometry(diyoPts, 14), 1.595);
+
+  // 8 Turned Bronze Corner Mullion Colonnettes + Mid Knobs + Jali X-Filigree Latticework + Arched Cusps
+  const chamberR = 0.185;
+  const chamberBotY = 1.585;
+  const chamberTopY = 2.005;
+  const chamberH = chamberTopY - chamberBotY;
+  const chamberMidY = (chamberBotY + chamberTopY) * 0.5;
+  const faceAngleStep = (Math.PI * 2) / 8;
+  const faceChord = 2 * chamberR * Math.sin(Math.PI / 8);
+  const diagLen = Math.hypot(faceChord * 0.88, chamberH * 0.86);
+  const diagTilt = Math.atan2(faceChord * 0.88, chamberH * 0.86);
+
+  for (let i = 0; i < 8; i++) {
+    const ca = i * faceAngleStep + Math.PI / 8;
+    const cx = Math.cos(ca) * chamberR;
+    const cz = Math.sin(ca) * chamberR;
+    pushNonIndexed(bronzeParts, new THREE.CylinderGeometry(0.013, 0.015, chamberH, 8), chamberMidY, 0, 0, 0, cx, cz);
+    pushNonIndexed(bronzeParts, new THREE.SphereGeometry(0.020, 8, 6), chamberMidY, 0, 0, 0, cx, cz);
+    pushNonIndexed(bronzeParts, new THREE.SphereGeometry(0.018, 8, 6), chamberBotY + 0.03, 0, 0, 0, cx, cz);
+    pushNonIndexed(bronzeParts, new THREE.SphereGeometry(0.018, 8, 6), chamberTopY - 0.03, 0, 0, 0, cx, cz);
+
+    // Mid-face center X-lattice & upper bronze arch cusp
+    const fa = (i + 0.5) * faceAngleStep + Math.PI / 8;
+    const fDist = chamberR * Math.cos(Math.PI / 8) + 0.005;
+    const fx = Math.cos(fa) * fDist;
+    const fz = Math.sin(fa) * fDist;
+    const faceYaw = -fa + Math.PI * 0.5;
+
+    // Crossed Jali bars rotated flush into face tangent plane
+    const bar1 = new THREE.CylinderGeometry(0.0045, 0.0045, diagLen, 5);
+    bar1.rotateZ(diagTilt);
+    bar1.rotateY(faceYaw);
+    bar1.translate(fx, chamberMidY, fz);
+    pushNonIndexed(bronzeParts, bar1);
+
+    const bar2 = new THREE.CylinderGeometry(0.0045, 0.0045, diagLen, 5);
+    bar2.rotateZ(-diagTilt);
+    bar2.rotateY(faceYaw);
+    bar2.translate(fx, chamberMidY, fz);
+    pushNonIndexed(bronzeParts, bar2);
+
+    // Arched bronze window cusp at top of face
+    const cusp = new THREE.TorusGeometry(faceChord * 0.36, 0.006, 6, 12, Math.PI);
+    cusp.rotateY(faceYaw);
+    cusp.translate(fx, chamberTopY - 0.075, fz);
+    pushNonIndexed(bronzeParts, cusp);
+  }
+
+  // Top bronze frieze collar beneath pagoda roof eaves
+  pushNonIndexed(bronzeParts, new THREE.CylinderGeometry(0.24, 0.215, 0.045, 8), chamberTopY + 0.015, 0, Math.PI / 8);
+
+  // 5. Tiered Nepali Flared Pagoda Canopy Roof + Radial Rafters + Upturned Makara Hip Spurs + 8 Hanging Bells
+  const roofBaseY = 2.03;
+  // Underside sculpted rafter ribs
+  for (let i = 0; i < 16; i++) {
+    const ra = (i / 16) * Math.PI * 2;
+    pushNonIndexed(
+      bronzeParts,
+      new THREE.BoxGeometry(0.016, 0.018, 0.24),
+      roofBaseY + 0.005,
+      -0.16,
+      ra,
+      0,
+      Math.sin(ra) * 0.26,
+      Math.cos(ra) * 0.26,
+    );
+  }
+
+  // Concave swept octagonal pagoda roof shell (y = 2.03 .. 2.34)
+  const pagodaRoofPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.42, 0.0),
+    new THREE.Vector2(0.41, 0.025),
+    new THREE.Vector2(0.30, 0.095),
+    new THREE.Vector2(0.20, 0.195),
+    new THREE.Vector2(0.135, 0.285),
+    new THREE.Vector2(0.0, 0.295),
+  ];
+  pushNonIndexed(stoneParts, new THREE.LatheGeometry(pagodaRoofPts, 8), roofBaseY, 0, Math.PI / 8);
+
+  // 8 Bronze Hip Ridge Ribs + Upturned Corner Eave Finials + 8 Suspended Miniature Ghanti Bells
+  for (let i = 0; i < 8; i++) {
+    const ha = i * faceAngleStep + Math.PI / 8;
+    const midHx = Math.cos(ha) * 0.245;
+    const midHz = Math.sin(ha) * 0.245;
+    const ridge = new THREE.CylinderGeometry(0.008, 0.013, 0.36, 6);
+    ridge.rotateZ(Math.PI * 0.28);
+    ridge.rotateY(-ha);
+    ridge.translate(midHx, roofBaseY + 0.165, midHz);
+    pushNonIndexed(bronzeParts, ridge);
+
+    // Upturned corner horn finial
+    const hornX = Math.cos(ha) * 0.405;
+    const hornZ = Math.sin(ha) * 0.405;
+    pushNonIndexed(bronzeParts, new THREE.ConeGeometry(0.018, 0.075, 6), roofBaseY + 0.055, 0, 0, 0, hornX, hornZ);
+
+    // Hanging miniature brass temple bell suspended under corner eave
+    const bellX = Math.cos(ha) * 0.355;
+    const bellZ = Math.sin(ha) * 0.355;
+    pushNonIndexed(bronzeParts, new THREE.CylinderGeometry(0.004, 0.004, 0.04, 5), roofBaseY - 0.02, 0, 0, 0, bellX, bellZ);
+    pushNonIndexed(bronzeParts, new THREE.ConeGeometry(0.022, 0.044, 8), roofBaseY - 0.055, 0, 0, 0, bellX, bellZ);
+    pushNonIndexed(bronzeParts, new THREE.SphereGeometry(0.008, 6, 5), roofBaseY - 0.082, 0, 0, 0, bellX, bellZ);
+  }
+
+  // 6. Harmika Crown + 13-Ring Chaitya Gajur Finial (y = 2.32 .. 2.74)
+  pushNonIndexed(stoneParts, new THREE.BoxGeometry(0.22, 0.065, 0.22), roofBaseY + 0.315);
+  const gajurPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.095, 0.0),
+    new THREE.Vector2(0.075, 0.03),
+    new THREE.Vector2(0.082, 0.055),
+    new THREE.Vector2(0.058, 0.09),
+    new THREE.Vector2(0.064, 0.115),
+    new THREE.Vector2(0.042, 0.155),
+    new THREE.Vector2(0.046, 0.18),
+    new THREE.Vector2(0.024, 0.24),
+    new THREE.Vector2(0.034, 0.285),
+    new THREE.Vector2(0.015, 0.325),
+    new THREE.Vector2(0.0, 0.385),
+  ];
+  pushNonIndexed(bronzeParts, new THREE.LatheGeometry(gajurPts, 14), roofBaseY + 0.345);
+
+  const stoneGeo = mergeGeometries(stoneParts, false)!;
+  const bronzeGeo = mergeGeometries(bronzeParts, false)!;
+  stoneParts.forEach((p) => p.dispose());
+  bronzeParts.forEach((p) => p.dispose());
+
+  // Warm frosted amber octagonal glass panes + clear hurricane chimney + sculpted teardrop flame
+  const amberGlassGeo = new THREE.CylinderGeometry(0.165, 0.165, 0.37, 8);
+  amberGlassGeo.rotateY(Math.PI / 8);
+  amberGlassGeo.translate(0, 1.79, 0);
+
+  const chimneyGeo = new THREE.CylinderGeometry(0.054, 0.062, 0.22, 12);
+  chimneyGeo.translate(0, 1.78, 0);
+
+  const flamePts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.024, 0.018),
+    new THREE.Vector2(0.028, 0.045),
+    new THREE.Vector2(0.016, 0.088),
+    new THREE.Vector2(0.004, 0.125),
+    new THREE.Vector2(0.0, 0.14),
+  ];
+  const flameGeo = new THREE.LatheGeometry(flamePts, 10);
+  flameGeo.translate(0, 1.69, 0);
+
+  const amberGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xffd796,
+    emissive: 0xff9328,
+    emissiveIntensity: 0.42,
+    roughness: 0.16,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.38,
+    clearcoat: 0.85,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const chimneyGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xfff8e6,
+    emissive: 0xffb84d,
+    emissiveIntensity: 0.22,
+    roughness: 0.08,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
+
+  cachedPeaceLanternGeos = {
+    stoneGeo,
+    bronzeGeo,
+    amberGlassGeo,
+    chimneyGeo,
+    flameGeo,
+    amberGlassMat,
+    chimneyGlassMat,
+  };
+  return cachedPeaceLanternGeos;
+}
+
 /**
- * Builds a carved Chunar sandstone Peace Garden lantern pedestal.
+ * Builds a museum-grade Nepali Newari Carved Chunar Sandstone & Filigree Bronze
+ * Chaitya-Dipa Pagoda Lantern with fluted lotus pillar, Jali cage, amber stained glass,
+ * inner oil Diyo flame, hanging eaves bells, and 13-ring Gajur finial.
  */
 export function buildPeaceLantern(
   stoneMat: THREE.Material,
   bronzeMat: THREE.Material,
   glowMat: THREE.Material,
 ): THREE.Group {
+  const cache = getPeaceLanternCache();
   const g = new THREE.Group();
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.18, 0.66), stoneMat);
-  foot.position.y = 0.09;
-  foot.castShadow = true;
-  foot.receiveShadow = true;
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.22, 0.50), stoneMat);
-  plinth.position.y = 0.29;
-  plinth.castShadow = true;
-  const shaftPts = [
-    new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.16, 0.0),
-    new THREE.Vector2(0.11, 0.18),
-    new THREE.Vector2(0.10, 0.86),
-    new THREE.Vector2(0.15, 0.98),
-    new THREE.Vector2(0.0, 0.98),
-  ];
-  const shaft = new THREE.Mesh(new THREE.LatheGeometry(shaftPts, 16), stoneMat);
-  shaft.position.y = 0.40;
-  shaft.castShadow = true;
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.09, 0.44), stoneMat);
-  sill.position.y = 1.425;
-  const glassCore = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.34, 8), glowMat);
-  glassCore.position.y = 1.64;
-  for (const sx of [-0.15, 0.15]) {
-    for (const sz of [-0.15, 0.15]) {
-      const mullion = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.36, 6), bronzeMat);
-      mullion.position.set(sx, 1.64, sz);
-      g.add(mullion);
-    }
-  }
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.26, 4), stoneMat);
-  roof.rotation.y = Math.PI / 4;
-  roof.position.y = 1.94;
-  roof.castShadow = true;
-  const kalash = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), bronzeMat);
-  kalash.position.y = 2.11;
-  g.add(foot, plinth, shaft, sill, glassCore, roof, kalash);
+
+  const stoneBody = new THREE.Mesh(cache.stoneGeo, stoneMat);
+  stoneBody.castShadow = true;
+  stoneBody.receiveShadow = true;
+
+  const bronzeTrim = new THREE.Mesh(cache.bronzeGeo, bronzeMat);
+  bronzeTrim.castShadow = true;
+  bronzeTrim.userData.nonCollidable = true;
+
+  const amberGlass = new THREE.Mesh(cache.amberGlassGeo, cache.amberGlassMat);
+  amberGlass.userData.nonCollidable = true;
+
+  const chimney = new THREE.Mesh(cache.chimneyGeo, cache.chimneyGlassMat);
+  chimney.userData.nonCollidable = true;
+
+  const flame = new THREE.Mesh(cache.flameGeo, glowMat);
+  flame.userData.nonCollidable = true;
+
+  g.add(stoneBody, bronzeTrim, amberGlass, chimney, flame);
   return g;
 }
 

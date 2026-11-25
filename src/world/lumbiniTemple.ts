@@ -3,6 +3,8 @@ import {
   createDetailedGajurSpire,
   createDetailedTempleBell,
   createRectangularHipRoofGeometry,
+  getDetailedParterreFinialGeo,
+  getDetailedPrayerWheelCapGeo,
 } from './janakiMandirCraft';
 import { BuddhaMaterials, createMonumentalBabyBuddhaMonument } from './lumbiniBuddhaSculpt';
 import { buildMayaDeviTemple } from './lumbiniMayaDevi';
@@ -737,37 +739,116 @@ export function createLumbiniBuddha(
   bellPav.add(bellBase, bellBeam, bellRoof, bellGajur, mainBell);
   group.add(bellPav);
 
-  // 2 Spinning Mani Brass Prayer-Wheel Racks flanking Baby Buddha South Forecourt (x = +-7.4, z = +39.0)
+  // 4 Interactive Mani Prayer-Wheel Shrines: Baby Buddha Forecourt (x=±7.4, z=+39.0) & Maya Devi South Forecourt (x=±6.8, z=+1.8)
   const prayerWheelMat = new THREE.MeshStandardMaterial({
     map: jTex.prayerWheelMap,
     normalMap: jTex.prayerWheelNormal,
     roughnessMap: jTex.prayerWheelRough,
     color: 0xffd670,
-    roughness: 0.34,
-    metalness: 0.85,
+    roughness: 0.30,
+    metalness: 0.86,
   });
+  const wheelBarrelGeo = new THREE.CylinderGeometry(0.215, 0.215, 0.48, 24);
+  const wheelCapGeo = getDetailedPrayerWheelCapGeo();
+  const wheelBellyRingGeo = new THREE.TorusGeometry(0.222, 0.020, 8, 24);
+  const wheelFinialGeo = getDetailedParterreFinialGeo();
+  const wheelAxleGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.96, 8);
+  const wheelCollarGeo = new THREE.TorusGeometry(0.055, 0.012, 6, 14);
+  const rackPostPts: THREE.Vector2[] = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.095, 0.0),
+    new THREE.Vector2(0.085, 0.14),
+    new THREE.Vector2(0.068, 0.22),
+    new THREE.Vector2(0.056, 0.72),
+    new THREE.Vector2(0.072, 0.80),
+    new THREE.Vector2(0.054, 1.38),
+    new THREE.Vector2(0.088, 1.50),
+    new THREE.Vector2(0.0, 1.54),
+  ];
+  const rackPostGeo = new THREE.LatheGeometry(rackPostPts, 12);
+
   const prayerWheelSpinners: THREE.Object3D[] = [];
-  for (const side of [-1, 1]) {
+  const prayerWheelRackConfigs: Array<{ x: number; z: number; spanZ: number; wheelOffsets: number[] }> = [
+    { x: -7.4, z: 39.0, spanZ: 3.15, wheelOffsets: [-0.82, 0, 0.82] },
+    { x: 7.4, z: 39.0, spanZ: 3.15, wheelOffsets: [-0.82, 0, 0.82] },
+    { x: -6.8, z: 1.8, spanZ: 2.35, wheelOffsets: [-0.62, 0, 0.62] },
+    { x: 6.8, z: 1.8, spanZ: 2.35, wheelOffsets: [-0.62, 0, 0.62] },
+  ];
+
+  for (const cfg of prayerWheelRackConfigs) {
     const rack = new THREE.Group();
-    rack.position.set(side * 7.4, 0.03, 39.0);
-    const rBase = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.26, 3.2), brickMat);
-    rBase.position.y = 0.13;
-    rBase.castShadow = true;
-    for (const pz of [-1.34, 1.34]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.54, 0.24), timberMat);
-      post.position.set(0, 1.02, pz);
-      rack.add(post);
-    }
-    const rRoof = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.20, 3.28), terracottaCapMat);
-    rRoof.position.y = 1.86;
+    rack.position.set(cfg.x, 0.03, cfg.z);
+
+    // Carved Chunar stone & brick tiered base
+    const rStonePlinth = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.16, cfg.spanZ + 0.16), chunarStoneMat);
+    rStonePlinth.position.y = 0.08;
+    rStonePlinth.castShadow = true;
+    rStonePlinth.receiveShadow = true;
+    const rBrickTier = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.18, cfg.spanZ), brickMat);
+    rBrickTier.position.y = 0.25;
+    rBrickTier.castShadow = true;
+    const rSill = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, cfg.spanZ + 0.06), chunarStoneMat);
+    rSill.position.y = 0.37;
+    const rBench = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.09, cfg.spanZ - 0.18), timberMat);
+    rBench.position.y = 0.68;
+    const rTopBeam = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.13, cfg.spanZ - 0.08), timberMat);
+    rTopBeam.position.y = 1.84;
+    const roofH = 0.44;
+    const rRoof = new THREE.Mesh(
+      createRectangularHipRoofGeometry(1.26, roofH, cfg.spanZ + 0.48, 0.56),
+      terracottaCapMat,
+    );
+    rRoof.position.y = 1.91 + roofH * 0.5;
     rRoof.castShadow = true;
-    rack.add(rBase, rRoof);
-    for (const wz of [-0.82, 0, 0.82]) {
-      const spinner = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.46, 16), prayerWheelMat);
-      spinner.position.set(0, 1.12, wz);
-      spinner.castShadow = true;
+    const rRoofTrim = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.07, cfg.spanZ + 0.32), warmBronzeMat);
+    rRoofTrim.position.y = 1.92;
+    const rGajur = createDetailedGajurSpire(giltGoldMat, warmBronzeMat, 0.34);
+    rGajur.position.y = 1.91 + roofH;
+    rack.add(rStonePlinth, rBrickTier, rSill, rBench, rTopBeam, rRoof, rRoofTrim, rGajur);
+
+    const postHalfZ = cfg.spanZ * 0.44;
+    for (const px of [-0.26, 0.26]) {
+      for (const pz of [-postHalfZ, postHalfZ]) {
+        const post = new THREE.Mesh(rackPostGeo, timberMat);
+        post.position.set(px, 0.38, pz);
+        post.castShadow = true;
+        rack.add(post);
+      }
+    }
+
+    for (const wz of cfg.wheelOffsets) {
+      const axle = new THREE.Mesh(wheelAxleGeo, warmBronzeMat);
+      axle.position.set(0, 1.24, wz);
+      const botBearing = new THREE.Mesh(wheelCollarGeo, warmBronzeMat);
+      botBearing.rotation.x = Math.PI / 2;
+      botBearing.position.set(0, 0.74, wz);
+      const topBearing = new THREE.Mesh(wheelCollarGeo, warmBronzeMat);
+      topBearing.rotation.x = Math.PI / 2;
+      topBearing.position.set(0, 1.76, wz);
+      rack.add(axle, botBearing, topBearing);
+
+      const spinner = new THREE.Group();
+      spinner.position.set(0, 1.24, wz);
       spinner.userData.noSpin = true;
-      spinner.userData.prayerWheel = { angle: Math.abs(wz), velocity: 0.22 };
+      spinner.userData.noMerge = true;
+      spinner.userData.prayerWheel = { angle: Math.abs(wz) * 1.4, velocity: 0.24 };
+
+      const barrel = new THREE.Mesh(wheelBarrelGeo, prayerWheelMat);
+      barrel.castShadow = true;
+      const topCap = new THREE.Mesh(wheelCapGeo, giltGoldMat);
+      topCap.scale.setScalar(0.88);
+      topCap.position.y = 0.24;
+      const botCap = new THREE.Mesh(wheelCapGeo, giltGoldMat);
+      botCap.scale.setScalar(0.88);
+      botCap.rotation.x = Math.PI;
+      botCap.position.y = -0.24;
+      const midRing = new THREE.Mesh(wheelBellyRingGeo, warmBronzeMat);
+      midRing.rotation.x = Math.PI / 2;
+      const topFinial = new THREE.Mesh(wheelFinialGeo, giltGoldMat);
+      topFinial.scale.setScalar(0.55);
+      topFinial.position.y = 0.36;
+
+      spinner.add(barrel, topCap, botCap, midRing, topFinial);
       rack.add(spinner);
       animatedNodes.push(spinner);
       prayerWheelSpinners.push(spinner);

@@ -3,6 +3,7 @@ import {
   BirdFlightTrackSpec,
   getWorldTreeSpots,
   groundHeightAt,
+  isInsideMayaDeviBirdExclusion,
   sampleBirdFlightState,
 } from './worldLogic';
 
@@ -1019,15 +1020,15 @@ export function createAmbientWorldBirds(): {
     });
   });
 
-  // Lumbini Sacred Garden perched birds anchored at Sacred Bodhi Chautara, Torana & Thai Sanctuary grove
+  // Lumbini Sacred Garden perched birds anchored at Sacred Bodhi Chautara, South Torana lintel & Thai Sanctuary roof
   const lumbiniPerches: Array<[number, number, number, BirdSpeciesKind]> = [
     [-239.0 + 1.25, groundHeightAt(-239.0, 112.5) + 6.2, 112.5 - 0.65, 'parakeet_green'],
     [-239.0 - 1.1, groundHeightAt(-239.0, 112.5) + 5.7, 112.5 + 0.85, 'himalayan_bulbul'],
-    [-210.0 + 1.45, groundHeightAt(-210.0, 147.8) + 5.85, 147.8, 'white_dove'],
-    [-210.0 - 1.45, groundHeightAt(-210.0, 74.0) + 7.05, 74.0, 'ringneck_dove'],
+    [-210.0 + 1.45, groundHeightAt(-210.0, 147.8) + 6.39, 147.8, 'white_dove'],
     [-175.5, groundHeightAt(-175.5, 74.0) + 5.05, 74.0 + 0.4, 'himalayan_bulbul'],
   ];
   lumbiniPerches.forEach(([bx, by, bz, sp], idx) => {
+    if (isInsideMayaDeviBirdExclusion(bx, by, bz)) return;
     spawnBird(sp, 1.18, 'perched', {
       x: bx,
       y: by,
@@ -1146,10 +1147,11 @@ export function createAmbientWorldBirds(): {
           windZ * driftScale +
           rightZ * b.formationSideOffset +
           fwdZ * b.formationBackOffset;
-        const posY = Math.max(
+        const rawPosY = Math.max(
           groundHeightAt(posX, posZ) + 2.8,
           s.y + altShift + Math.sin(elapsed * 1.2 + b.phase) * windSpeed * 0.12,
         );
+        const posY = isInsideMayaDeviBirdExclusion(posX, rawPosY, posZ) ? 15.2 : rawPosY;
 
         b.root.position.set(posX, posY, posZ);
         b.root.rotation.order = 'YXZ';
@@ -1163,7 +1165,7 @@ export function createAmbientWorldBirds(): {
         b.headPivot.rotation.set(-s.pitch * 0.5, 0, 0);
         b.tailMesh.rotation.x = 0.08 + flapAngle * 0.12;
       } else {
-        // Perched birds face softly into strong breeze and ruffle feathers more frequently
+        // Perched birds face softly into strong breeze and keep wings tucked cleanly at sides
         b.root.visible = !isRain;
         if (!b.root.visible) continue;
 
@@ -1180,9 +1182,9 @@ export function createAmbientWorldBirds(): {
           (windYaw + Math.PI) * windLean +
           Math.sin(elapsed * 0.34 + b.phase) * 0.14;
         const flutterCycle = ((elapsed * 0.14 * windAgitation + b.phase * 0.51) % 1 + 1) % 1;
-        const flutter = flutterCycle > 0.86 ? Math.sin((flutterCycle - 0.86) * 105) * 0.28 : 0;
-        b.leftWing.rotation.set(0.18, 1.18 - Math.abs(flutter) * 0.45, -0.22 + flutter);
-        b.rightWing.rotation.set(0.18, -1.18 + Math.abs(flutter) * 0.45, 0.22 - flutter);
+        const flutter = flutterCycle > 0.88 ? Math.sin((flutterCycle - 0.88) * 105) * 0.14 : 0;
+        b.leftWing.rotation.set(0.06, 1.42 - Math.abs(flutter) * 0.35, -0.06 + flutter);
+        b.rightWing.rotation.set(0.06, -1.42 + Math.abs(flutter) * 0.35, 0.06 - flutter);
       }
     }
   };

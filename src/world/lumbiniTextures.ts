@@ -5,6 +5,7 @@ export interface LumbiniTextureSet {
   mauryaBrickNormal: THREE.CanvasTexture;
   mauryaBrickRough: THREE.CanvasTexture;
   mauryaBrickAo: THREE.CanvasTexture;
+  mauryaBrickDisp: THREE.CanvasTexture;
   whiteBrickMap: THREE.CanvasTexture;
   whiteBrickNormal: THREE.CanvasTexture;
   whiteBrickRough: THREE.CanvasTexture;
@@ -51,6 +52,9 @@ export interface LumbiniTextureSet {
   markerStoneMap: THREE.CanvasTexture;
   markerStoneNormal: THREE.CanvasTexture;
   markerStoneRough: THREE.CanvasTexture;
+  carvedSandstoneMap: THREE.CanvasTexture;
+  carvedSandstoneNormal: THREE.CanvasTexture;
+  carvedSandstoneRough: THREE.CanvasTexture;
   plaqueMarkerMap: THREE.CanvasTexture;
   plaqueChambersMap: THREE.CanvasTexture;
   plaqueNativityMap: THREE.CanvasTexture;
@@ -202,65 +206,150 @@ function toTex(
 }
 
 export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
-  // 1. Weathered Maurya Archaeological Terracotta Brick (Ruins, Foundation Plinths, Pushkarini Stepped Ghats)
-  const [brickC, brickCtx] = makeCanvas(512, 512);
-  const [brickH, brickHCtx] = makeCanvas(512, 512);
-  const [brickR, brickRCtx] = makeCanvas(512, 512);
-  brickCtx.fillStyle = '#4e392e';
-  brickCtx.fillRect(0, 0, 512, 512);
-  brickHCtx.fillStyle = '#282828';
-  brickHCtx.fillRect(0, 0, 512, 512);
-  brickRCtx.fillStyle = '#ececec';
-  brickRCtx.fillRect(0, 0, 512, 512);
+  // 1. High-Resolution 1024px Weathered Maurya/Sunga Archaeological Terracotta Brick
+  //    (Albedo, Normal, Roughness, AO, and Physical Mortar Displacement)
+  const bSize = 1024;
+  const [brickC, brickCtx] = makeCanvas(bSize, bSize);
+  const [brickH, brickHCtx] = makeCanvas(bSize, bSize);
+  const [brickR, brickRCtx] = makeCanvas(bSize, bSize);
 
-  const rows = 16;
+  // Recessed sandy lime-clay mortar base
+  brickCtx.fillStyle = '#423127';
+  brickCtx.fillRect(0, 0, bSize, bSize);
+  brickHCtx.fillStyle = '#242424';
+  brickHCtx.fillRect(0, 0, bSize, bSize);
+  brickRCtx.fillStyle = '#f2f2f2';
+  brickRCtx.fillRect(0, 0, bSize, bSize);
+
+  // Granular mortar sand aggregate in joints
+  for (let i = 0; i < 6500; i++) {
+    const mx = seededNoise(i, 3, 211) * bSize;
+    const my = seededNoise(i, 7, 223) * bSize;
+    const mn = seededNoise(i, 11, 229);
+    brickCtx.fillStyle = mn > 0.5 ? 'rgba(136, 112, 92, 0.24)' : 'rgba(32, 22, 16, 0.28)';
+    brickCtx.fillRect(mx, my, 2 + mn * 3, 2 + mn * 3);
+    const mh = Math.round(28 + mn * 28);
+    brickHCtx.fillStyle = `rgb(${mh},${mh},${mh})`;
+    brickHCtx.fillRect(mx, my, 2, 2);
+  }
+
+  const rows = 20;
   const cols = 8;
-  const bw = 512 / cols;
-  const bh = 512 / rows;
+  const bw = bSize / cols;
+  const bh = bSize / rows;
+  const mortarGap = 5.5;
   for (let row = 0; row < rows; row++) {
-    const offset = (row % 2) * (bw * 0.5);
+    // Alternating running/Flemish-style archaeological brick offset
+    const offset = (row % 2) * (bw * 0.5) + (row % 3 === 0 ? bw * 0.12 : 0);
     for (let col = -1; col <= cols; col++) {
-      const n = seededNoise(col + row * 13, row, 41);
-      const n2 = seededNoise(row, col, 93);
-      const bx = col * bw + offset;
-      const by = row * bh;
-      const r = Math.round(148 + n * 38 - n2 * 22);
-      const g = Math.round(74 + n * 24 - n2 * 14);
-      const b = Math.round(48 + n * 16 - n2 * 10);
+      const n = seededNoise(col + row * 17, row, 41);
+      const n2 = seededNoise(row * 3, col * 7, 93);
+      const n3 = seededNoise(col * 5, row * 11, 137);
+      const bx = col * bw + offset + (n3 - 0.5) * 4;
+      const by = row * bh + (n2 - 0.5) * 2.2;
+      const wSpan = bw - mortarGap * 2;
+      const hSpan = bh - mortarGap * 2;
+
+      // Kiln-fired terracotta palette variation (rich sienna, burnt ochre, deep umber)
+      const r = Math.round(142 + n * 44 - n2 * 24 - (n3 > 0.82 ? 22 : 0));
+      const g = Math.round(68 + n * 26 - n2 * 16 - (n3 > 0.82 ? 14 : 0));
+      const b = Math.round(44 + n * 18 - n2 * 12);
+
+      // Outer beveled shadow shoulder on height canvas for crisp mortar groove transition
+      const shoulderH = Math.round(115 + n * 35);
+      brickHCtx.fillStyle = `rgb(${shoulderH},${shoulderH},${shoulderH})`;
+      brickHCtx.fillRect(bx + mortarGap - 1.5, by + mortarGap - 1.5, wSpan + 3, hSpan + 3);
+
+      // Main brick body
       brickCtx.fillStyle = `rgb(${r},${g},${b})`;
-      brickCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
-      brickCtx.fillStyle = `rgba(218, 202, 182, ${0.05 + n2 * 0.08})`;
-      brickCtx.fillRect(bx + 3, by + 2, bw - 6, 4);
+      brickCtx.fillRect(bx + mortarGap, by + mortarGap, wSpan, hSpan);
 
-      const hVal = Math.round(190 + n * 52);
+      const hVal = Math.round(188 + n * 56);
       brickHCtx.fillStyle = `rgb(${hVal},${hVal},${hVal})`;
-      brickHCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
+      brickHCtx.fillRect(bx + mortarGap + 2, by + mortarGap + 2, wSpan - 4, hSpan - 4);
 
-      const rVal = Math.round(188 + n2 * 52);
+      const rVal = Math.round(184 + n2 * 56);
       brickRCtx.fillStyle = `rgb(${rVal},${rVal},${rVal})`;
-      brickRCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
+      brickRCtx.fillRect(bx + mortarGap, by + mortarGap, wSpan, hSpan);
+
+      // Subtle upper edge bevel highlight & lower underside mortar shadow
+      brickCtx.fillStyle = `rgba(228, 198, 168, ${0.08 + n2 * 0.08})`;
+      brickCtx.fillRect(bx + mortarGap + 2, by + mortarGap, wSpan - 4, 4);
+      brickCtx.fillStyle = 'rgba(32, 18, 12, 0.28)';
+      brickCtx.fillRect(bx + mortarGap, by + mortarGap + hSpan - 4, wSpan, 4);
+
+      // Subtle kiln blotches & lime-salt efflorescence patches
+      if (n > 0.68) {
+        brickCtx.fillStyle = 'rgba(226, 214, 194, 0.13)';
+        brickCtx.beginPath();
+        brickCtx.ellipse(bx + wSpan * (0.3 + n2 * 0.4), by + hSpan * 0.5, 16 + n * 18, 7 + n2 * 6, 0, 0, Math.PI * 2);
+        brickCtx.fill();
+      }
+      if (n3 < 0.22) {
+        brickCtx.fillStyle = 'rgba(38, 22, 14, 0.24)';
+        brickCtx.fillRect(bx + mortarGap + 6, by + mortarGap + 5, wSpan * 0.42, hSpan * 0.55);
+      }
+
+      // Chipped edges, spalling pits & vertical stress cracks
+      if (n2 > 0.52) {
+        const spX = bx + mortarGap + 8 + n * (wSpan - 32);
+        const spY = by + mortarGap + 4 + n3 * (hSpan - 16);
+        const spW = 8 + n * 16;
+        const spH = 6 + n2 * 9;
+        brickCtx.fillStyle = 'rgba(46, 26, 17, 0.34)';
+        brickCtx.fillRect(spX, spY, spW, spH);
+        brickHCtx.fillStyle = '#545454';
+        brickHCtx.fillRect(spX, spY, spW, spH);
+        brickRCtx.fillStyle = '#e8e8e8';
+        brickRCtx.fillRect(spX, spY, spW, spH);
+      }
+      if (n > 0.78) {
+        const crX = bx + mortarGap + wSpan * (0.25 + n2 * 0.5);
+        brickCtx.strokeStyle = 'rgba(36, 20, 12, 0.45)';
+        brickHCtx.strokeStyle = '#363636';
+        brickCtx.lineWidth = 2;
+        brickHCtx.lineWidth = 2.5;
+        brickCtx.beginPath();
+        brickHCtx.beginPath();
+        brickCtx.moveTo(crX, by + mortarGap);
+        brickHCtx.moveTo(crX, by + mortarGap);
+        brickCtx.lineTo(crX + (n3 - 0.5) * 10, by + mortarGap + hSpan * 0.55);
+        brickHCtx.lineTo(crX + (n3 - 0.5) * 10, by + mortarGap + hSpan * 0.55);
+        brickCtx.lineTo(crX + (n2 - 0.5) * 8, by + mortarGap + hSpan);
+        brickHCtx.lineTo(crX + (n2 - 0.5) * 8, by + mortarGap + hSpan);
+        brickCtx.stroke();
+        brickHCtx.stroke();
+      }
 
       // Archaeological dampness & mossy patina along lower brick courses
-      if (row >= rows - 5 && n > 0.28) {
-        brickCtx.fillStyle = `rgba(54, 78, 36, ${0.18 + n * 0.22})`;
-        brickCtx.fillRect(bx + 2, by + bh * 0.35, bw - 4, bh * 0.65);
-        const dampR = Math.max(82, rVal - 78);
+      if (row >= rows - 5 && n > 0.24) {
+        brickCtx.fillStyle = `rgba(52, 76, 34, ${0.18 + n * 0.22})`;
+        brickCtx.fillRect(bx + mortarGap, by + mortarGap + hSpan * 0.32, wSpan, hSpan * 0.68);
+        const dampR = Math.max(76, rVal - 84);
         brickRCtx.fillStyle = `rgb(${dampR},${dampR},${dampR})`;
-        brickRCtx.fillRect(bx + 2, by + bh * 0.35, bw - 4, bh * 0.65);
-      }
-      // Subtle chipped brick pitting
-      if (n2 > 0.62) {
-        brickCtx.fillStyle = 'rgba(42, 22, 14, 0.26)';
-        brickCtx.fillRect(bx + 6 + n * 18, by + 5 + n2 * 10, 6, 4);
-        brickHCtx.fillStyle = '#5a5a5a';
-        brickHCtx.fillRect(bx + 6 + n * 18, by + 5 + n2 * 10, 6, 4);
+        brickRCtx.fillRect(bx + mortarGap, by + mortarGap + hSpan * 0.32, wSpan, hSpan * 0.68);
       }
     }
   }
+
+  // Fine fired-clay sand grog & surface pitting across all bricks
+  for (let i = 0; i < 8000; i++) {
+    const gx = seededNoise(i, 5, 313) * bSize;
+    const gy = seededNoise(i, 9, 317) * bSize;
+    const gn = seededNoise(i, 13, 331);
+    const sz = 1.2 + gn * 2.4;
+    brickCtx.fillStyle = gn > 0.65 ? 'rgba(218, 174, 132, 0.14)' : 'rgba(38, 22, 14, 0.16)';
+    brickCtx.fillRect(gx, gy, sz, sz);
+    const gh = Math.round(100 + gn * 110);
+    brickHCtx.fillStyle = `rgba(${gh},${gh},${gh},0.18)`;
+    brickHCtx.fillRect(gx, gy, sz, sz);
+  }
+
   const mauryaBrickMap = toTex(brickC, true, 3, 2);
-  const mauryaBrickNormal = toTex(heightCanvasToNormal(brickH, 2.5), false, 3, 2);
+  const mauryaBrickNormal = toTex(heightCanvasToNormal(brickH, 3.2), false, 3, 2);
   const mauryaBrickRough = toTex(brickR, false, 3, 2);
-  const mauryaBrickAo = toTex(heightCanvasToAo(brickH, 3, 1.8, 82), false, 3, 2);
+  const mauryaBrickAo = toTex(heightCanvasToAo(brickH, 4, 2.05, 76), false, 3, 2);
+  const mauryaBrickDisp = toTex(brickH, false, 3, 2);
 
   // 2. Crisp White-Painted Exposed Brick Masonry (Signature 2003 Maya Devi Temple Exterior)
   const [wbC, wbCtx] = makeCanvas(512, 512);
@@ -822,6 +911,7 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     mauryaBrickNormal,
     mauryaBrickRough,
     mauryaBrickAo,
+    mauryaBrickDisp,
     whiteBrickMap,
     whiteBrickNormal,
     whiteBrickRough,
@@ -1208,77 +1298,78 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     'branch as Prince Siddhartha stands.',
   );
 
-  // 20. Sacred Marker Stone Weathered River-Cobble Conglomerate PBR Maps
-  const [msC, msCtx] = makeCanvas(512, 512);
-  const [msH, msHCtx] = makeCanvas(512, 512);
-  const [msR, msRCtx] = makeCanvas(512, 512);
-  const msGrad = msCtx.createRadialGradient(256, 256, 40, 256, 256, 320);
-  msGrad.addColorStop(0, '#a68967');
-  msGrad.addColorStop(0.58, '#876d50');
-  msGrad.addColorStop(1, '#5e4b37');
+  // 20. Sacred Marker Stone Weathered River-Cobble Conglomerate PBR Maps (1024x1024)
+  const [msC, msCtx] = makeCanvas(1024, 1024);
+  const [msH, msHCtx] = makeCanvas(1024, 1024);
+  const [msR, msRCtx] = makeCanvas(1024, 1024);
+  const msGrad = msCtx.createRadialGradient(512, 512, 80, 512, 512, 640);
+  msGrad.addColorStop(0, '#9d8264');
+  msGrad.addColorStop(0.55, '#7e654b');
+  msGrad.addColorStop(1, '#584634');
   msCtx.fillStyle = msGrad;
-  msCtx.fillRect(0, 0, 512, 512);
-  msHCtx.fillStyle = '#787878';
-  msHCtx.fillRect(0, 0, 512, 512);
-  msRCtx.fillStyle = '#cccccc';
-  msRCtx.fillRect(0, 0, 512, 512);
+  msCtx.fillRect(0, 0, 1024, 1024);
+  msHCtx.fillStyle = '#747474';
+  msHCtx.fillRect(0, 0, 1024, 1024);
+  msRCtx.fillStyle = '#d2d2d2';
+  msRCtx.fillRect(0, 0, 1024, 1024);
 
-  // Fine mineral sand matrix
-  for (let i = 0; i < 2400; i++) {
-    const x = seededNoise(i, 3, 911) * 512;
-    const y = seededNoise(i, 7, 919) * 512;
+  // Fine sandy conglomerate matrix & mineral grains
+  for (let i = 0; i < 6500; i++) {
+    const x = seededNoise(i, 3, 911) * 1024;
+    const y = seededNoise(i, 7, 919) * 1024;
     const t = seededNoise(i, 11, 929);
-    msCtx.fillStyle = t > 0.5 ? 'rgba(188, 162, 128, 0.16)' : 'rgba(54, 42, 30, 0.18)';
-    msCtx.fillRect(x, y, 2 + t * 3, 2 + t * 3);
-    const hv = Math.round(98 + t * 50);
-    msHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.35)`;
-    msHCtx.fillRect(x, y, 3, 3);
+    const sz = 2 + t * 5;
+    msCtx.fillStyle = t > 0.5 ? 'rgba(196, 170, 136, 0.18)' : 'rgba(46, 36, 26, 0.22)';
+    msCtx.fillRect(x, y, sz, sz);
+    const hv = Math.round(92 + t * 58);
+    msHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.36)`;
+    msHCtx.fillRect(x, y, sz, sz);
   }
 
-  // Embedded rounded river pebbles / quartz & basalt clasts characteristic of Lumbini conglomerate rock
+  // Embedded rounded river pebbles / quartz, sandstone, jasper & basalt clasts
   const cobblePalettes = [
-    ['#d7c5ab', '#a99375'],
-    ['#8f7b68', '#625243'],
-    ['#b98a64', '#855c3c'],
-    ['#68635d', '#44403c'],
-    ['#e4d8c5', '#b8a58c'],
+    ['#dfd0b8', '#a89274'],
+    ['#988470', '#635344'],
+    ['#c18d62', '#825738'],
+    ['#75706a', '#46423d'],
+    ['#ece1cf', '#b9a78c'],
+    ['#ad7a5e', '#744c37'],
   ];
-  for (let c = 0; c < 360; c++) {
-    const cx = 18 + seededNoise(c, 5, 937) * 476;
-    const cy = 18 + seededNoise(c, 9, 941) * 476;
-    const rx = 5 + seededNoise(c, 13, 947) * 16;
-    const ry = rx * (0.58 + seededNoise(c, 17, 953) * 0.42);
+  for (let c = 0; c < 680; c++) {
+    const cx = 24 + seededNoise(c, 5, 937) * 976;
+    const cy = 24 + seededNoise(c, 9, 941) * 976;
+    const rx = 7 + seededNoise(c, 13, 947) * 26;
+    const ry = rx * (0.56 + seededNoise(c, 17, 953) * 0.44);
     const ang = seededNoise(c, 21, 967) * Math.PI;
     const pal = cobblePalettes[Math.floor(seededNoise(c, 25, 971) * cobblePalettes.length)];
 
-    // Dark recessed cement socket around pebble
     msCtx.save();
     msCtx.translate(cx, cy);
     msCtx.rotate(ang);
-    msCtx.fillStyle = 'rgba(38, 28, 20, 0.48)';
+    msCtx.fillStyle = 'rgba(32, 23, 16, 0.56)';
     msCtx.beginPath();
-    msCtx.ellipse(0, 0, rx + 2.2, ry + 2.2, 0, 0, Math.PI * 2);
+    msCtx.ellipse(0, 0, rx + 3.5, ry + 3.5, 0, 0, Math.PI * 2);
     msCtx.fill();
     const cg = msCtx.createRadialGradient(-rx * 0.25, -ry * 0.25, 1, 0, 0, rx);
     cg.addColorStop(0, pal[0]);
-    cg.addColorStop(1, pal[1]);
+    cg.addColorStop(0.75, pal[1]);
+    cg.addColorStop(1, '#4c3b2b');
     msCtx.fillStyle = cg;
     msCtx.beginPath();
     msCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     msCtx.fill();
     msCtx.restore();
 
-    // Raised cobble bump on height map + smoother quartz specular on roughness map
     msHCtx.save();
     msHCtx.translate(cx, cy);
     msHCtx.rotate(ang);
-    msHCtx.fillStyle = '#3c3c3c';
+    msHCtx.fillStyle = '#323232';
     msHCtx.beginPath();
-    msHCtx.ellipse(0, 0, rx + 2.2, ry + 2.2, 0, 0, Math.PI * 2);
+    msHCtx.ellipse(0, 0, rx + 3.5, ry + 3.5, 0, 0, Math.PI * 2);
     msHCtx.fill();
-    const hg = msHCtx.createRadialGradient(-rx * 0.2, -ry * 0.2, 1, 0, 0, rx);
-    hg.addColorStop(0, '#f2f2f2');
-    hg.addColorStop(1, '#929292');
+    const hg = msHCtx.createRadialGradient(-rx * 0.22, -ry * 0.22, 1, 0, 0, rx);
+    hg.addColorStop(0, '#f8f8f8');
+    hg.addColorStop(1, '#8c8c8c');
     msHCtx.fillStyle = hg;
     msHCtx.beginPath();
     msHCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -1288,7 +1379,7 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     msRCtx.save();
     msRCtx.translate(cx, cy);
     msRCtx.rotate(ang);
-    const rv = Math.round(92 + seededNoise(c, 31, 977) * 76);
+    const rv = Math.round(78 + seededNoise(c, 31, 977) * 78);
     msRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
     msRCtx.beginPath();
     msRCtx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -1296,21 +1387,21 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     msRCtx.restore();
   }
 
-  // Natural geological fracture veins across the rock slab
-  msCtx.strokeStyle = 'rgba(42, 30, 20, 0.52)';
-  msHCtx.strokeStyle = '#222222';
-  msCtx.lineWidth = 2.0;
-  msHCtx.lineWidth = 2.6;
-  for (let f = 0; f < 9; f++) {
-    let fx = seededNoise(f, 3, 983) * 512;
-    let fy = seededNoise(f, 7, 991) * 512;
+  // Natural geological fracture veins & fine calcite lines
+  msCtx.strokeStyle = 'rgba(38, 26, 18, 0.56)';
+  msHCtx.strokeStyle = '#1c1c1c';
+  msCtx.lineWidth = 3.0;
+  msHCtx.lineWidth = 3.8;
+  for (let f = 0; f < 14; f++) {
+    let fx = seededNoise(f, 3, 983) * 1024;
+    let fy = seededNoise(f, 7, 991) * 1024;
     msCtx.beginPath();
     msHCtx.beginPath();
     msCtx.moveTo(fx, fy);
     msHCtx.moveTo(fx, fy);
-    for (let s = 0; s < 6; s++) {
-      fx += (seededNoise(f, s + 11, 997) - 0.35) * 44;
-      fy += (seededNoise(f, s + 17, 1009) - 0.5) * 38;
+    for (let s = 0; s < 7; s++) {
+      fx += (seededNoise(f, s + 11, 997) - 0.35) * 78;
+      fy += (seededNoise(f, s + 17, 1009) - 0.5) * 68;
       msCtx.lineTo(fx, fy);
       msHCtx.lineTo(fx, fy);
     }
@@ -1318,27 +1409,90 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     msHCtx.stroke();
   }
 
-  // Subtle ritual worship traces on the center stone face (saffron/vermilion kumkum & flecks of gold varq)
-  for (let w = 0; w < 28; w++) {
-    const wx = 128 + seededNoise(w, 2, 1013) * 256;
-    const wy = 144 + seededNoise(w, 5, 1019) * 224;
-    const wr = 6 + seededNoise(w, 9, 1021) * 18;
-    const isGold = w % 5 === 0;
-    msCtx.fillStyle = isGold ? 'rgba(235, 185, 58, 0.38)' : w % 2 === 0 ? 'rgba(186, 56, 22, 0.22)' : 'rgba(214, 134, 24, 0.20)';
+  // Ritual worship traces on the center stone face (kumkum, saffron paste & glinting gold varq flecks)
+  for (let w = 0; w < 38; w++) {
+    const wx = 240 + seededNoise(w, 2, 1013) * 544;
+    const wy = 260 + seededNoise(w, 5, 1019) * 504;
+    const wr = 10 + seededNoise(w, 9, 1021) * 26;
+    const isGold = w % 4 === 0;
+    msCtx.fillStyle = isGold
+      ? 'rgba(242, 194, 68, 0.42)'
+      : w % 2 === 0
+        ? 'rgba(188, 52, 22, 0.24)'
+        : 'rgba(222, 140, 26, 0.22)';
     msCtx.beginPath();
     msCtx.arc(wx, wy, wr, 0, Math.PI * 2);
     msCtx.fill();
     if (isGold) {
-      msRCtx.fillStyle = '#484848';
+      msRCtx.fillStyle = '#383838';
       msRCtx.beginPath();
-      msRCtx.arc(wx, wy, wr * 0.7, 0, Math.PI * 2);
+      msRCtx.arc(wx, wy, wr * 0.75, 0, Math.PI * 2);
       msRCtx.fill();
     }
   }
   const markerStoneMap = toTex(msC, true, 1, 1, true);
-  const markerStoneNormal = toTex(heightCanvasToNormal(msH, 3.4), false, 1, 1, true);
+  const markerStoneNormal = toTex(heightCanvasToNormal(msH, 3.8), false, 1, 1, true);
   const markerStoneRough = toTex(msR, false, 1, 1, true);
   allTex.push(markerStoneMap, markerStoneNormal, markerStoneRough);
+
+  // 21. Isotropic Fine-Grained Carved Gupta Chunar Sandstone (for Nativity Relief Statues — zero wood-streak bands)
+  const [csC, csCtx] = makeCanvas(512, 512);
+  const [csH, csHCtx] = makeCanvas(512, 512);
+  const [csR, csRCtx] = makeCanvas(512, 512);
+  const csGrad = csCtx.createRadialGradient(256, 256, 30, 256, 256, 360);
+  csGrad.addColorStop(0, '#d8ba93');
+  csGrad.addColorStop(0.6, '#ccb088');
+  csGrad.addColorStop(1, '#c0a27a');
+  csCtx.fillStyle = csGrad;
+  csCtx.fillRect(0, 0, 512, 512);
+  csHCtx.fillStyle = '#a0a0a0';
+  csHCtx.fillRect(0, 0, 512, 512);
+  csRCtx.fillStyle = '#b4b4b4';
+  csRCtx.fillRect(0, 0, 512, 512);
+
+  // Fine isotropic quartz-sandstone micro-grain & subtle ancient patina mottling
+  for (let i = 0; i < 4200; i++) {
+    const x = seededNoise(i, 3, 1103) * 512;
+    const y = seededNoise(i, 7, 1109) * 512;
+    const rad = 1.0 + seededNoise(i, 11, 1117) * 3.8;
+    const tone = seededNoise(i, 17, 1123);
+    csCtx.fillStyle =
+      tone > 0.6
+        ? 'rgba(246, 228, 198, 0.14)'
+        : tone < 0.25
+          ? 'rgba(122, 92, 58, 0.12)'
+          : 'rgba(182, 148, 108, 0.10)';
+    csCtx.beginPath();
+    csCtx.arc(x, y, rad, 0, Math.PI * 2);
+    csCtx.fill();
+
+    const hv = Math.round(138 + tone * 52);
+    csHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.28)`;
+    csHCtx.beginPath();
+    csHCtx.arc(x, y, rad * 0.85, 0, Math.PI * 2);
+    csHCtx.fill();
+
+    const rv = Math.round(145 + (1 - tone) * 65);
+    csRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.26)`;
+    csRCtx.beginPath();
+    csRCtx.arc(x, y, rad, 0, Math.PI * 2);
+    csRCtx.fill();
+  }
+  // Subtle mineral warm-ochre & gold-leaf rub traces on venerated relief stone
+  for (let p = 0; p < 160; p++) {
+    const px = seededNoise(p, 5, 1151) * 512;
+    const py = seededNoise(p, 9, 1163) * 512;
+    const pr = 5 + seededNoise(p, 13, 1171) * 18;
+    const t = seededNoise(p, 19, 1181);
+    csCtx.fillStyle = t > 0.5 ? 'rgba(232, 196, 136, 0.08)' : 'rgba(138, 102, 64, 0.08)';
+    csCtx.beginPath();
+    csCtx.arc(px, py, pr, 0, Math.PI * 2);
+    csCtx.fill();
+  }
+  const carvedSandstoneMap = toTex(csC, true, 2, 2);
+  const carvedSandstoneNormal = toTex(heightCanvasToNormal(csH, 1.35), false, 2, 2);
+  const carvedSandstoneRough = toTex(csR, false, 2, 2);
+  allTex.push(carvedSandstoneMap, carvedSandstoneNormal, carvedSandstoneRough);
 
   const clampedAniso = Math.min(16, Math.max(1, maxAnisotropy));
   for (const t of allTex) {
@@ -1350,6 +1504,7 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     mauryaBrickNormal,
     mauryaBrickRough,
     mauryaBrickAo,
+    mauryaBrickDisp,
     whiteBrickMap,
     whiteBrickNormal,
     whiteBrickRough,
@@ -1396,6 +1551,9 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     markerStoneMap,
     markerStoneNormal,
     markerStoneRough,
+    carvedSandstoneMap,
+    carvedSandstoneNormal,
+    carvedSandstoneRough,
     plaqueMarkerMap,
     plaqueChambersMap,
     plaqueNativityMap,

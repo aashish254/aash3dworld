@@ -2351,7 +2351,37 @@ test('Full 360 camera vertical pitch (-80 to +85 deg), anti-floor clipping, and 
   assert.equal(northPlaque?.kind, 'inspect-nativity-relief');
 });
 
+test('Maya Devi skylight bird exclusion, Lumbini pond proximity ripple state, and South Forecourt prayer wheel racks behave accurately', async () => {
+  const { isInsideMayaDeviBirdExclusion, computeLumbiniPondProximityState } = await import('./worldLogic');
 
+  // Inside Maya Devi skylight & sanctum interior (the former stuck ringneck_dove coordinate) is strictly excluded
+  assert.equal(isInsideMayaDeviBirdExclusion(-211.45, 7.3, 74.0), true);
+  assert.equal(isInsideMayaDeviBirdExclusion(-210.0, 12.0, 74.0), true);
+  // High flying above skylight roof or outside temple walls is allowed
+  assert.equal(isInsideMayaDeviBirdExclusion(-210.0, 15.2, 74.0), false);
+  assert.equal(isInsideMayaDeviBirdExclusion(-210.0, 6.0, 98.0), false);
 
+  // Lumbini pond proximity ripples excite continuously near Pushkarini Pond and increase with player speed
+  const idleNearPond = computeLumbiniPondProximityState(-212.4, 112.5, 0.0);
+  const walkNearPond = computeLumbiniPondProximityState(-212.4, 112.5, 4.5);
+  assert.equal(idleNearPond.active, true);
+  assert.equal(idleNearPond.nearestPond, 'pushkarini');
+  assert.ok(idleNearPond.factor > 0.15, `Expected ambient proximity factor near Pushkarini, got ${idleNearPond.factor}`);
+  assert.ok(walkNearPond.factor > idleNearPond.factor, 'Moving near pond should increase wave excitation factor');
 
+  // Surrounding sacred moat proximity also activates near outer bridges
+  const moatWalk = computeLumbiniPondProximityState(-210.0, 148.0, 3.8);
+  assert.equal(moatWalk.active, true);
+  assert.equal(moatWalk.nearestPond, 'surrounding');
+
+  // Far away from Lumbini ponds yields inactive proximity state
+  const farState = computeLumbiniPondProximityState(0.0, 0.0, 5.0);
+  assert.equal(farState.active, false);
+  assert.equal(farState.factor, 0);
+
+  // South Forecourt Mani prayer wheel shrines block direct walk-through while central Maya Devi avenue stays walkable
+  assert.equal(isWalkablePosition(-216.8, 97.8), false, 'West South Forecourt prayer wheel rack plinth blocks pass-through');
+  assert.equal(isWalkablePosition(-203.2, 97.8), false, 'East South Forecourt prayer wheel rack plinth blocks pass-through');
+  assert.equal(isWalkablePosition(-210.0, 97.8), true, 'Central South Forecourt avenue remains open');
+});
 

@@ -1545,19 +1545,45 @@ class SoundEngine {
     const ctx = this.ensureContext();
     if (!ctx) return;
     const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(340, t);
-    osc.frequency.exponentialRampToValueAtTime(480, t + 0.18);
-    gain.gain.setValueAtTime(0.002, t);
-    gain.gain.linearRampToValueAtTime(0.032, t + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.36);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.38);
-    this.playTone(920, 0.05, 'sine', 0.018);
+
+    // 1. Tactile brass spindle ratchet catches (3 fast ascending ticks as the Mani drum accelerates)
+    for (let i = 0; i < 3; i++) {
+      const clickT = t + i * 0.048;
+      const clickOsc = ctx.createOscillator();
+      const clickGain = ctx.createGain();
+      clickOsc.type = 'triangle';
+      clickOsc.frequency.setValueAtTime(1180 + i * 240, clickT);
+      clickOsc.frequency.exponentialRampToValueAtTime(520, clickT + 0.028);
+      clickGain.gain.setValueAtTime(0.001, clickT);
+      clickGain.gain.linearRampToValueAtTime(0.022 * (1 - i * 0.18), clickT + 0.005);
+      clickGain.gain.exponentialRampToValueAtTime(0.0004, clickT + 0.036);
+      clickOsc.connect(clickGain);
+      clickGain.connect(ctx.destination);
+      clickOsc.start(clickT);
+      clickOsc.stop(clickT + 0.042);
+    }
+
+    // 2. Resonant Tibetan bronze singing-bowl harmonic overtones with warm amplitude shimmer
+    const harmonics: Array<{ freq: number; gain: number; decay: number; detune?: number }> = [
+      { freq: 293.66, gain: 0.034, decay: 1.45 }, // D4 warm bronze fundamental
+      { freq: 295.4, gain: 0.022, decay: 1.38 }, // Gentle acoustic bowl shimmer beat (~1.7 Hz)
+      { freq: 440.0, gain: 0.018, decay: 1.25 }, // A4 sacred fifth
+      { freq: 587.33, gain: 0.014, decay: 1.05 }, // D5 octave chime
+      { freq: 880.0, gain: 0.008, decay: 0.72 }, // High brass overtone
+    ];
+    for (const h of harmonics) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(h.freq, t);
+      gain.gain.setValueAtTime(0.0006, t);
+      gain.gain.linearRampToValueAtTime(h.gain, t + 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.0003, t + h.decay);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + h.decay + 0.04);
+    }
   }
 
   public playClick(): void {

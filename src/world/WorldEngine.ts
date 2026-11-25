@@ -35,6 +35,7 @@ import {
   computeFootprintDecalAlpha,
   computeLumbiniAudioProfile,
   computeLumbiniFireflyIntensity,
+  computeLumbiniPondProximityState,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
   createFootprintDecalPool,
@@ -253,6 +254,7 @@ export class WorldEngine {
   private prayerWheelEntries: PrayerWheelEntry[] = [];
   private prayerWheelHitTargets: THREE.Mesh[] = [];
   private prayerWheelSpinsCount = 0;
+  private prayerWheelParticleBursts = 0;
   private pebbleSpots: Array<{ x: number; z: number; pondX: number; pondZ: number; label: string }> = [];
   private meditationSpots: Array<{ x: number; z: number; lookX: number; lookZ: number; label: string }> = [];
   private mayaDeviHighlights: {
@@ -2202,6 +2204,38 @@ export class WorldEngine {
     }
   }
 
+  private spawnPrayerWheelParticles(x: number, y: number, z: number, intensity = 1.0): void {
+    const count = Math.round(14 + 10 * Math.min(1.5, intensity));
+    for (let k = 0; k < count; k++) {
+      const ang = (k / count) * Math.PI * 2 + Math.random() * 0.4;
+      const rad = 0.22 + Math.random() * 0.28;
+      // Tangential swirl velocity + gentle upward lift mimicking sacred mantra ember spirals
+      const tangentX = -Math.sin(ang);
+      const tangentZ = Math.cos(ang);
+      const radialOut = 0.32 + Math.random() * 0.55;
+      const swirl = (0.75 + Math.random() * 0.65) * Math.min(1.4, intensity);
+      const isLotusTint = k % 5 === 0;
+      this.pushBurstParticle(
+        x + Math.cos(ang) * rad,
+        y + (Math.random() - 0.5) * 0.42,
+        z + Math.sin(ang) * rad,
+        Math.cos(ang) * radialOut + tangentX * swirl,
+        0.65 + Math.random() * 0.95,
+        Math.sin(ang) * radialOut + tangentZ * swirl,
+        isLotusTint ? 0.98 : 0.98 + Math.random() * 0.02,
+        isLotusTint ? 0.72 : 0.78 + Math.random() * 0.16,
+        isLotusTint ? 0.86 : 0.28 + Math.random() * 0.18,
+        24 + Math.random() * 16,
+        0.78 + Math.random() * 0.46,
+        1,
+      );
+    }
+    this.prayerWheelParticleBursts += 1;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.prayerWheelParticles = String(this.prayerWheelParticleBursts);
+    }
+  }
+
   private spawnImpactDust(x: number, y: number, z: number, intensity = 1.0): void {
     const count = Math.round(6 + 5 * Math.min(1.3, intensity));
     for (let k = 0; k < count; k++) {
@@ -3191,6 +3225,7 @@ export class WorldEngine {
     if (this.renderer?.domElement) {
       this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
     }
+    this.spawnPrayerWheelParticles(entry.worldPos.x, entry.worldPos.y + 0.15, entry.worldPos.z, impulse / 14);
     soundEngine.playPrayerWheelSpin();
   }
 
@@ -3822,7 +3857,9 @@ export class WorldEngine {
         : 'direct';
       canvas.dataset.lotusCount = String(this.lumbiniLotusCount);
       canvas.dataset.pondRainRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value.toFixed(2);
+      canvas.dataset.pondProximityRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2);
       canvas.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
+      canvas.dataset.prayerWheelParticles = String(this.prayerWheelParticleBursts);
       canvas.dataset.playerX = this.playerPos.x.toFixed(1);
       canvas.dataset.playerZ = this.playerPos.z.toFixed(1);
       canvas.dataset.distanceWalked = String(Math.round(this.distanceWalked));
@@ -4111,11 +4148,39 @@ export class WorldEngine {
       this.renderer.domElement.dataset.meadowDisp = this.meadowDisplacementStrength.toFixed(2);
       this.renderer.domElement.dataset.waterEdgeRipples = String(this.waterEdgeRippleCount);
       this.renderer.domElement.dataset.lastWaterRippleBody = this.lastWaterRippleBody;
+      this.renderer.domElement.dataset.pondProximityRipple =
+        REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2);
       this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
+      this.renderer.domElement.dataset.prayerWheelParticles = String(this.prayerWheelParticleBursts);
       this.renderer.domElement.dataset.pebbleTosses = String(this.pebbleTossesCount);
       this.renderer.domElement.dataset.cameraMode = this.cameraMode;
       this.renderer.domElement.dataset.graphicsQuality = this.graphicsQuality;
       this.renderer.domElement.dataset.meditating = this.isMeditating ? 'true' : 'false';
+    }
+
+    const horizSpeed = Math.hypot(this.playerVx, this.playerVz);
+    const pondProximity = computeLumbiniPondProximityState(
+      this.playerPos.x,
+      this.playerPos.z,
+      horizSpeed,
+    );
+    const proxBlend = 1 - Math.exp(-8 * dt);
+    REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value = THREE.MathUtils.lerp(
+      REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value,
+      pondProximity.factor,
+      proxBlend,
+    );
+    REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed.value = THREE.MathUtils.lerp(
+      REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed.value,
+      horizSpeed,
+      proxBlend,
+    );
+    if (pondProximity.active) {
+      REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterPos.value.set(
+        THREE.MathUtils.lerp(REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterPos.value.x, pondProximity.anchorX, 0.38),
+        0.14,
+        THREE.MathUtils.lerp(REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterPos.value.z, pondProximity.anchorZ, 0.38),
+      );
     }
 
     for (let i = 0; i < this.animatedLandmarkNodes.length; i++) {
@@ -4134,10 +4199,11 @@ export class WorldEngine {
       let impulse = 0;
       if (this.gameState === 'playing' && elapsed >= wheel.cooldownUntil) {
         const d = Math.hypot(wheel.worldPos.x - this.playerPos.x, wheel.worldPos.z - this.playerPos.z);
-        if (d < 2.15 && Math.hypot(this.playerVx, this.playerVz) > 0.35) {
+        if (d < 2.15 && horizSpeed > 0.35) {
           impulse = 14.5;
           wheel.cooldownUntil = elapsed + 1.1;
           this.prayerWheelSpinsCount += 1;
+          this.spawnPrayerWheelParticles(wheel.worldPos.x, wheel.worldPos.y + 0.15, wheel.worldPos.z, 0.95);
           soundEngine.playPrayerWheelSpin();
         }
       }
@@ -4145,6 +4211,24 @@ export class WorldEngine {
       wheel.angle = nextSpin.angle;
       wheel.velocity = nextSpin.velocity;
       wheel.mesh.rotation.y = wheel.angle;
+      if (wheel.velocity > 3.6 && Math.random() < dt * 7.5) {
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 0.26 + Math.random() * 0.18;
+        this.pushBurstParticle(
+          wheel.worldPos.x + Math.cos(ang) * rad,
+          wheel.worldPos.y + (Math.random() - 0.5) * 0.36,
+          wheel.worldPos.z + Math.sin(ang) * rad,
+          -Math.sin(ang) * 0.42,
+          0.45 + Math.random() * 0.55,
+          Math.cos(ang) * 0.42,
+          0.98,
+          0.84,
+          0.36,
+          20 + Math.random() * 12,
+          0.62 + Math.random() * 0.35,
+          1,
+        );
+      }
     }
 
     for (let i = this.activeTossedPebbles.length - 1; i >= 0; i--) {

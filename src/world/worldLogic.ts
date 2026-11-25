@@ -1173,6 +1173,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
       }
       if (Math.abs(ldx + 13.0) <= 1.45 && Math.abs(ldz - 30.5) <= 1.45) return false;
       if (Math.abs(Math.abs(ldx) - 7.4) <= 0.78 && Math.abs(ldz - 39.0) <= 1.85) return false;
+      if (Math.abs(Math.abs(ldx) - 6.8) <= 0.72 && Math.abs(ldz - 1.8) <= 1.35) return false;
       if (Math.abs(ldx - 14.0) <= 2.05 && Math.abs(ldz - 46.5) <= 0.95) return false;
       for (const [plx, plz] of [
         [-7.4, 48.5], [7.4, 48.5],
@@ -5103,4 +5104,84 @@ export function stepMeditationButterflies(
     }
   }
 }
+
+/**
+ * Returns true when a world coordinate lies inside or immediately within Maya Devi Temple's
+ * interior sanctuary / upper skylight box (preventing stuck birds mid-air inside the temple).
+ */
+export function isInsideMayaDeviBirdExclusion(x: number, y: number, z: number): boolean {
+  return x >= -229.0 && x <= -191.0 && z >= 61.0 && z <= 87.0 && y < 14.5;
+}
+
+export interface LumbiniPondProximityState {
+  active: boolean;
+  factor: number;
+  anchorX: number;
+  anchorZ: number;
+  nearestPond: 'pushkarini' | 'surrounding' | 'none';
+}
+
+/**
+ * Computes continuous shader-based proximity ripple excitation for the Lumbini Sacred Garden
+ * ponds (Pushkarini Sacred Pond and Surrounding Sacred Garden Moat) based on the player's
+ * distance to the water surface and movement speed.
+ */
+export function computeLumbiniPondProximityState(
+  playerX: number,
+  playerZ: number,
+  playerSpeed: number,
+): LumbiniPondProximityState {
+  const pk = LUMBINI_PUSHKARINI_POND;
+  const clampedPkX = Math.max(pk.minX + 0.6, Math.min(pk.maxX - 0.6, playerX));
+  const clampedPkZ = Math.max(pk.minZ + 0.6, Math.min(pk.maxZ - 0.6, playerZ));
+  const distPk = Math.hypot(playerX - clampedPkX, playerZ - clampedPkZ);
+
+  const sp = LUMBINI_SACRED_POND;
+  // Nearest water band on surrounding moat (4 channel bands around inner island)
+  let bestSpDist = Infinity;
+  let bestSpX = sp.centerX;
+  let bestSpZ = sp.outerMaxZ - 1.0;
+  const bands: Array<[number, number, number, number]> = [
+    [sp.outerMinX + 0.8, sp.outerMaxX - 0.8, sp.innerMaxZ + 0.8, sp.outerMaxZ - 0.8], // South channel
+    [sp.outerMinX + 0.8, sp.outerMaxX - 0.8, sp.outerMinZ + 0.8, sp.innerMinZ - 0.8], // North channel
+    [sp.outerMinX + 0.8, sp.innerMinX - 0.8, sp.innerMinZ, sp.innerMaxZ], // West channel
+    [sp.innerMaxX + 0.8, sp.outerMaxX - 0.8, sp.innerMinZ, sp.innerMaxZ], // East channel
+  ];
+  for (const [minX, maxX, minZ, maxZ] of bands) {
+    const cx = Math.max(minX, Math.min(maxX, playerX));
+    const cz = Math.max(minZ, Math.min(maxZ, playerZ));
+    const d = Math.hypot(playerX - cx, playerZ - cz);
+    if (d < bestSpDist) {
+      bestSpDist = d;
+      bestSpX = cx;
+      bestSpZ = cz;
+    }
+  }
+
+  const maxReach = 10.5;
+  const usePushkarini = distPk <= bestSpDist;
+  const bestDist = usePushkarini ? distPk : bestSpDist;
+  if (bestDist > maxReach) {
+    return {
+      active: false,
+      factor: 0,
+      anchorX: playerX,
+      anchorZ: playerZ,
+      nearestPond: 'none',
+    };
+  }
+
+  const proximityNorm = Math.max(0, Math.min(1, 1 - bestDist / maxReach));
+  const speedNorm = Math.max(0, Math.min(1, playerSpeed / 5.5));
+  const factor = Math.min(1, proximityNorm * (0.42 + 0.58 * speedNorm));
+
+  return {
+    active: factor > 0.02,
+    factor,
+    anchorX: usePushkarini ? clampedPkX : bestSpX,
+    anchorZ: usePushkarini ? clampedPkZ : bestSpZ,
+    nearestPond: usePushkarini ? 'pushkarini' : 'surrounding',
+  };
+}
+
 

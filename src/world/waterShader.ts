@@ -30,6 +30,9 @@ export const REFLECTIVE_WATER_ENV_UNIFORMS = {
   uSunColor: { value: new THREE.Color('#fff2dc') },
   uFogColor: { value: new THREE.Color('#c9dfef') },
   uFogDensity: { value: 0.0022 },
+  uPlayerWaterPos: { value: new THREE.Vector3(0, -999, 0) },
+  uPlayerWaterSpeed: { value: 0 },
+  uPlayerPondProximity: { value: 0 },
 };
 
 let isRenderingPlanarReflection = false;
@@ -102,6 +105,9 @@ export function createReflectivePondSurface(
       uReflectivity: { value: reflectivity },
       uRippleStrength: { value: rippleStrength },
       uWaterRipples: { value: rippleSlots },
+      uPlayerWaterPos: { value: new THREE.Vector3(0, -999, 0) },
+      uPlayerWaterSpeed: { value: 0 },
+      uPlayerPondProximity: { value: 0 },
     },
     vertexShader: /* glsl */ `
       uniform mat4 textureMatrix;
@@ -137,6 +143,9 @@ export function createReflectivePondSurface(
       uniform float uReflectivity;
       uniform float uRippleStrength;
       uniform vec4 uWaterRipples[${WATER_RIPPLE_COUNT}];
+      uniform vec3 uPlayerWaterPos;
+      uniform float uPlayerWaterSpeed;
+      uniform float uPlayerPondProximity;
 
       varying vec4 vProjUv;
       varying vec3 vWorldPos;
@@ -231,6 +240,21 @@ export function createReflectivePondSurface(
           }
         }
 
+        // Continuous shader-based player proximity & movement wave field around pond shores
+        float proxStrength = clamp(uPlayerPondProximity, 0.0, 1.0);
+        if (proxStrength > 0.01) {
+          vec2 pVec = wp - uPlayerWaterPos.xz;
+          float pDist = length(pVec);
+          float pFalloff = (1.0 - smoothstep(0.8, 13.5, pDist)) * proxStrength;
+          float moveBoost = clamp(uPlayerWaterSpeed / 5.0, 0.0, 1.2);
+          float proxPhase = pDist * 7.6 - uWaterTime * (3.4 + moveBoost * 2.2);
+          float proxWave = cos(proxPhase) * pFalloff * (0.048 + 0.072 * moveBoost);
+          vec2 pDir = pVec / max(pDist, 0.001);
+          gx += pDir.x * proxWave;
+          gz += pDir.y * proxWave;
+          interactiveFoam += smoothstep(0.42, 0.95, sin(proxPhase)) * pFalloff * (0.14 + 0.24 * moveBoost);
+        }
+
         vec3 N = normalize(vec3(-gx, 1.0, -gz));
         vec3 toCam = cameraPosition - vWorldPos;
         float camDist = length(toCam);
@@ -309,6 +333,9 @@ export function createReflectivePondSurface(
   mat.uniforms.uFogColor = REFLECTIVE_WATER_ENV_UNIFORMS.uFogColor;
   mat.uniforms.uFogDensity = REFLECTIVE_WATER_ENV_UNIFORMS.uFogDensity;
   mat.uniforms.uWaterRipples = WATER_INTERACTION_UNIFORMS.uWaterRipples;
+  mat.uniforms.uPlayerWaterPos = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterPos;
+  mat.uniforms.uPlayerWaterSpeed = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed;
+  mat.uniforms.uPlayerPondProximity = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity;
   mat.transparent = true;
 
   // Guard against recursive reflector-in-reflector renders + distance & software-GL frame pacing
@@ -403,6 +430,9 @@ export function applyRealisticWaterShader(
     shader.uniforms.uWaterDeep = { value: deepColor };
     shader.uniforms.uWaterShallow = { value: shallowColor };
     shader.uniforms.uWaterRipples = WATER_INTERACTION_UNIFORMS.uWaterRipples;
+    shader.uniforms.uPlayerWaterPos = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterPos;
+    shader.uniforms.uPlayerWaterSpeed = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed;
+    shader.uniforms.uPlayerPondProximity = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity;
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -453,6 +483,9 @@ export function applyRealisticWaterShader(
          uniform vec3 uWaterDeep;
          uniform vec3 uWaterShallow;
          uniform vec4 uWaterRipples[${WATER_RIPPLE_COUNT}];
+         uniform vec3 uPlayerWaterPos;
+         uniform float uPlayerWaterSpeed;
+         uniform float uPlayerPondProximity;
          varying vec2 vWaterUv;
          varying vec3 vWaterLocal;
          varying vec3 vWaterWorldPos;
@@ -559,6 +592,19 @@ export function applyRealisticWaterShader(
              rippleGradX += dir2.x * dWave;
              rippleGradZ += dir2.y * dWave;
            }
+         }
+         float stdProx = clamp(uPlayerPondProximity, 0.0, 1.0);
+         if (stdProx > 0.01) {
+           vec2 pVec = vWaterWorldPos.xz - uPlayerWaterPos.xz;
+           float pDist = length(pVec);
+           float pFall = (1.0 - smoothstep(0.8, 13.5, pDist)) * stdProx;
+           float mvBoost = clamp(uPlayerWaterSpeed / 5.0, 0.0, 1.2);
+           float ph = pDist * 7.6 - uWaterTime * (3.4 + mvBoost * 2.2);
+           float pW = cos(ph) * pFall * (0.048 + 0.072 * mvBoost);
+           vec2 pDir = pVec / max(pDist, 0.001);
+           rippleGradX += pDir.x * pW;
+           rippleGradZ += pDir.y * pW;
+           interactiveFoam += smoothstep(0.42, 0.95, sin(ph)) * pFall * (0.16 + 0.26 * mvBoost);
          }
 
          vec3 waterCol = mix(uWaterDeep, uWaterShallow, smoothstep(0.16, 0.92, edgeNorm));
