@@ -460,12 +460,11 @@ export function createJanakiCourtyardGarden({
     soil.position.y = h + 0.03;
     soil.receiveShadow = true;
 
-    // Sculpted Nepali Brass Sukunda Diyo oil lamp on inner walkway corner of each bed
-    const diyaX = bed.x < 0 ? w * 0.44 : -w * 0.44;
-    const diyaZ = bed.z < 0 ? w * 0.44 : -w * 0.44;
+    // Sculpted Nepali Brass Sukunda Diyo oil lamp centered on inner-facing curb rim (clear of corner finials)
+    const diyaX = bed.x < 0 ? w * 0.48 : -w * 0.48;
     const bedSukunda = createDetailedBrassSukundaDiyo(goldMat, bronzeMat, diyoGlowMat, 0.72, true);
-    bedSukunda.position.set(diyaX, h + 0.09, diyaZ);
-    bedSukunda.rotation.y = Math.atan2(-bed.x, -bed.z);
+    bedSukunda.position.set(diyaX, h + 0.09, 0);
+    bedSukunda.rotation.y = bed.x < 0 ? Math.PI / 2 : -Math.PI / 2;
 
     bedGroup.add(pBox, pCurb, pBand, soil, bedSukunda);
 
@@ -512,7 +511,7 @@ export function createJanakiCourtyardGarden({
   }
 
   // =========================================================================
-  // C. TWELVE SCULPTED MUGHAL TERRACOTTA & MARBLE LOTUS URNS (WALKWAYS & THRESHOLDS CLEAR)
+  // C. SCULPTED MUGHAL TERRACOTTA & MARBLE LOTUS URNS (WALKWAYS, PIERS & PILLARS CLEAR)
   // =========================================================================
   const urnSmallGeo = createMughalLotusUrnGeo(0.38, 0.62);
   const urnTallGeo = createMughalLotusUrnGeo(0.45, 0.74);
@@ -528,20 +527,20 @@ export function createJanakiCourtyardGarden({
   }
 
   const urnSpecs: UrnSpec[] = [
-    // Flanking Central Mughal Gate outer piers (4.25m clear of 5.4m doorway span)
-    { x: -4.25, z: 0.35, tall: true, kind: 'palm', seed: 2100 },
-    { x: 4.25, z: 0.35, tall: true, kind: 'palm', seed: 2200 },
+    // Flanking Central Mughal Gate outer piers with full pad + frond clearance (>0.5m from piers & fluted columns)
+    { x: -5.25, z: 0.35, tall: true, kind: 'palm', seed: 2100 },
+    { x: 5.25, z: 0.35, tall: true, kind: 'palm', seed: 2200 },
     // Flanking Inner Simha Dwar Pishtaq along South cloister border
-    { x: -4.15, z: 10.0, tall: true, kind: 'shrub', seed: 2300 },
-    { x: 4.15, z: 10.0, tall: true, kind: 'shrub', seed: 2400 },
-    // Hugging Sanctum Jagati plinth front corners cleanly inside sanctum collision margin
-    { x: -4.85, z: -4.4, tall: false, kind: 'tulsi', seed: 2500 },
-    { x: 4.85, z: -4.4, tall: false, kind: 'tulsi', seed: 2600 },
-    // Flanking Parikrama East & West veranda edges (clear of Dalan gates, prayer-wheel racks & veranda curb)
-    { x: -13.16, z: -6.2, tall: false, kind: 'palm', seed: 2700 },
-    { x: 13.16, z: -6.2, tall: false, kind: 'palm', seed: 2800 },
-    { x: -13.16, z: 4.2, tall: false, kind: 'shrub', seed: 2900 },
-    { x: 13.16, z: 4.2, tall: false, kind: 'shrub', seed: 3000 },
+    { x: -4.45, z: 9.65, tall: true, kind: 'shrub', seed: 2300 },
+    { x: 4.45, z: 9.65, tall: true, kind: 'shrub', seed: 2400 },
+    // Flanking Sanctum Jagati plinth cleanly clear of plinth trim (±4.49m) and corner wheels
+    { x: -5.45, z: -5.2, tall: false, kind: 'tulsi', seed: 2500 },
+    { x: 5.45, z: -5.2, tall: false, kind: 'tulsi', seed: 2600 },
+    // Flanking Parikrama East & West veranda edges cleanly clear of veranda curb (±13.97m) and pillars (±14.4m)
+    { x: -12.75, z: -6.2, tall: false, kind: 'palm', seed: 2700 },
+    { x: 12.75, z: -6.2, tall: false, kind: 'palm', seed: 2800 },
+    { x: -12.75, z: 4.2, tall: false, kind: 'shrub', seed: 2900 },
+    { x: 12.75, z: 4.2, tall: false, kind: 'shrub', seed: 3000 },
   ];
 
   for (const spec of urnSpecs) {
@@ -571,9 +570,9 @@ export function createJanakiCourtyardGarden({
     uGroup.add(pad, collar, urnMesh, soilMesh);
 
     if (spec.kind === 'palm') {
-      addCourtyardPalmRosette(spec.x, soilY + 0.04, spec.z, spec.tall ? 0.96 : 0.82, spec.seed, 10);
-      addMarigoldTuft(spec.x + 0.14, soilY + 0.02, spec.z + 0.1, 0.66, spec.seed + 33);
-      addMarigoldTuft(spec.x - 0.14, soilY + 0.02, spec.z - 0.1, 0.64, spec.seed + 55);
+      addCourtyardPalmRosette(spec.x, soilY + 0.04, spec.z, spec.tall ? 0.78 : 0.70, spec.seed, 10);
+      addMarigoldTuft(spec.x + 0.14, soilY + 0.02, spec.z + 0.1, 0.62, spec.seed + 33);
+      addMarigoldTuft(spec.x - 0.14, soilY + 0.02, spec.z - 0.1, 0.60, spec.seed + 55);
     } else if (spec.kind === 'tulsi') {
       addWoodyBranchCluster(uGroup, barkMat, 0, soilY, 0, 4, 0.42, 0.22, 0.018, spec.seed);
       for (let i = 0; i < 12; i++) {

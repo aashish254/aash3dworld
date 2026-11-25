@@ -432,9 +432,9 @@ test('world obstacles prevent walking through trees, boulders, lanterns, kiosks,
   const firstRock = getWorldBoulderSpots()[0];
   assert.equal(isWalkablePosition(firstRock.x, firstRock.z), false, 'Granite field boulder blocks pass-through');
 
-  // Non-Janaki landmark monuments block solid cores while EVERY landmark approach point stays walkable
+  // Non-Janaki/Lumbini landmark monuments block solid cores while EVERY landmark approach point stays walkable
   for (const lm of LANDMARKS) {
-    if (lm.id !== 'janaki-mandir') {
+    if (lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha') {
       assert.equal(
         isWalkablePosition(lm.position.x, lm.position.z),
         false,
@@ -561,4 +561,386 @@ test('StaticPhysicsWorld BVH blocks walls and instanced trunks while allowing ar
   assert.equal(clear.pushed, true, 'Asset overlapping wall at z=-1.55 must push out flush');
   assert.ok(clear.z >= -1.7 + 0.39);
 });
+
+test('water ripple ring slots update cleanly without flooding the ring buffer', async () => {
+  const { WATER_INTERACTION_UNIFORMS, WATER_RIPPLE_COUNT, triggerWaterRipple } = await import('./waterShader');
+
+  triggerWaterRipple(28.5, -18.0, 12.4, 1.35);
+  triggerWaterRipple(28.6, -18.05, 12.41, 1.1); // throttled near same spot/time
+  triggerWaterRipple(-130.0, -118.0, 12.6, 0.9);
+  const slots = WATER_INTERACTION_UNIFORMS.uWaterRipples.value;
+  assert.equal(slots.length, WATER_RIPPLE_COUNT);
+  assert.ok(slots.some((s) => Math.abs(s.x - 28.5) < 0.01 && Math.abs(s.y + 18.0) < 0.01 && s.w > 1.0));
+  assert.ok(slots.some((s) => Math.abs(s.x + 130.0) < 0.01 && Math.abs(s.y + 118.0) < 0.01));
+});
+
+test('forest landmark proximity drives bird chirping and wind-rustling levels while meadow zones classify grassy fields', async () => {
+  const THREE = await import('three');
+  const {
+    FOREST_LANDMARK_AREAS,
+    MEADOW_ZONES,
+    computeForestProximity,
+    getMeadowZoneAt,
+  } = await import('./worldLogic');
+  const { createInstancedGrassField } = await import('./mountainAndTerrain');
+
+  assert.ok(FOREST_LANDMARK_AREAS.length >= 4);
+  const inLumbiniForest = computeForestProximity(-8, 120);
+  const inPumdikotForest = computeForestProximity(-108, -74);
+  const openSpawn = computeForestProximity(0, 6);
+
+  assert.ok(inLumbiniForest.forestProximity > 0.9);
+  assert.equal(inLumbiniForest.nearestForestId, 'lumbini-grove');
+  assert.ok(inPumdikotForest.windRustleLevel > 0.9);
+  assert.ok(openSpawn.forestProximity < 0.35);
+
+  const lumbiniMix = computeSpatialAmbienceMix(-8, 120, 0.2);
+  const pumdikotMix = computeSpatialAmbienceMix(-108, -74, 1.45);
+  const courtyardMix = computeSpatialAmbienceMix(-92, 92, 1.05);
+  assert.ok(lumbiniMix.forestLevel > 0.85 && lumbiniMix.birdLevel > 0.75);
+  assert.ok(pumdikotMix.rustleLevel > 0.75);
+  assert.ok(courtyardMix.rustleLevel < 0.12, 'Enclosed courtyard shelters against foliage rustle');
+
+  // Designated meadow zones detect grassy meadows and exclude stone roads/plazas and bridges
+  assert.ok(MEADOW_ZONES.length >= 5);
+  const westMeadow = getMeadowZoneAt(-65, 45);
+  assert.equal(westMeadow.inMeadow, true);
+  assert.equal(westMeadow.zoneId, 'western-valley-meadow');
+  assert.ok(westMeadow.factor > 0.9);
+
+  const spawnStone = getMeadowZoneAt(0, 6);
+  assert.equal(spawnStone.inMeadow, false);
+  assert.equal(spawnStone.factor, 0);
+
+  const bridgeWood = getMeadowZoneAt(30, -24);
+  assert.equal(bridgeWood.inMeadow, false);
+
+  // Grass controller updates movement vector and meadow activity uniforms cleanly
+  const grass = createInstancedGrassField();
+  const moveVec = new THREE.Vector3(4.2, -3.1, 5.22);
+  const posVec = new THREE.Vector3(-65, 0.2, 45);
+  grass.update(12.5, posVec, [], moveVec, 0.88);
+  const uniforms = grass.getShaderUniforms?.();
+  assert.ok(uniforms);
+  assert.equal(uniforms.uTime.value, 12.5);
+  assert.equal(uniforms.uMeadowActivity.value, 0.88);
+  assert.ok(Math.abs(uniforms.uPlayerMove.value.x - 4.2) < 1e-5);
+  assert.ok(Math.abs(uniforms.uPlayerPos.value.x + 65) < 1e-5);
+});
+
+test('wildflowers have rooted stems and foliage, grass, pebbles, and boulders sit grounded on terrainMesh', async () => {
+  const THREE = await import('three');
+  const {
+    createDioramaTerrain,
+    createInstancedFoliage,
+    createInstancedGrassField,
+    sampleTerrainMeshHeight,
+  } = await import('./mountainAndTerrain');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    { meadowMap: tex, meadowNormal: tex, meadowRough: tex },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const grass = createInstancedGrassField(terrainMesh);
+  const foliage = createInstancedFoliage(mockTextures, terrainMesh);
+
+  const grassIms: import('three').InstancedMesh[] = [];
+  grass.group.traverse((o) => {
+    if ((o as import('three').InstancedMesh).isInstancedMesh) {
+      grassIms.push(o as import('three').InstancedMesh);
+    }
+  });
+  assert.equal(grassIms.length, 3);
+  const [grassIm, flowerIm, pebbleIm] = grassIms;
+
+  flowerIm.geometry.computeBoundingBox();
+  const flowerBb = flowerIm.geometry.boundingBox!;
+  assert.ok(flowerBb.min.y < 0, `Wildflower stem root must extend below y=0, got ${flowerBb.min.y}`);
+  assert.ok(flowerBb.max.y > 0.35, `Wildflower blossom must reach >0.35m, got ${flowerBb.max.y}`);
+
+  const mat = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+
+  for (let i = 0; i < grassIm.count; i++) {
+    grassIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    const meshY = sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z);
+    assert.ok(pos.y - 0.05 * scl.y <= meshY + 0.005, `Grass tuft #${i} floats above terrain`);
+  }
+
+  for (let i = 0; i < flowerIm.count; i++) {
+    flowerIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    const meshY = sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z);
+    assert.ok(pos.y + flowerBb.min.y * scl.y <= meshY + 0.005, `Flower #${i} floats above terrain`);
+  }
+
+  for (let i = 0; i < pebbleIm.count; i++) {
+    pebbleIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    const meshY = sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z);
+    assert.ok(pos.y - 0.14 * scl.y <= meshY + 0.005, `Pebble #${i} floats above terrain`);
+  }
+
+  const foliageIms: import('three').InstancedMesh[] = [];
+  foliage.group.traverse((o) => {
+    if ((o as import('three').InstancedMesh).isInstancedMesh) {
+      foliageIms.push(o as import('three').InstancedMesh);
+    }
+  });
+  const rockIm = foliageIms[foliageIms.length - 1];
+  rockIm.geometry.computeBoundingBox();
+  const rockBb = rockIm.geometry.boundingBox!;
+  for (let i = 0; i < rockIm.count; i++) {
+    rockIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    const minRim = Math.min(
+      sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z),
+      sampleTerrainMeshHeight(terrainMesh, pos.x + 0.55, pos.z),
+      sampleTerrainMeshHeight(terrainMesh, pos.x - 0.55, pos.z),
+      sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z + 0.55),
+      sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z - 0.55),
+    );
+    assert.ok(pos.y + rockBb.min.y * scl.y <= minRim + 0.01, `Boulder #${i} floats above slope`);
+  }
+
+  for (let k = 0; k < foliageIms.length - 1; k++) {
+    const im = foliageIms[k];
+    if (im.userData.nonCollidable) continue;
+    im.geometry.computeBoundingBox();
+    const bb = im.geometry.boundingBox!;
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, mat);
+      mat.decompose(pos, quat, scl);
+      const meshY = sampleTerrainMeshHeight(terrainMesh, pos.x, pos.z);
+      assert.ok(pos.y + bb.min.y * scl.y <= meshY + 0.01, `Tree trunk #${i} floats above terrain`);
+    }
+  }
+});
+
+test('Janaki compound excludes wild grass/flowers, depresses terrain under Ganga Sagar/walks, attaches urn foliage, and skips snap-category floor barriers', async () => {
+  const THREE = await import('three');
+  const { OUTER_TEMPLE_ARTIFACT_SPOTS } = await import('./worldLogic');
+  const { sanitizeSceneGeometry } = await import('./physicsBvh');
+  const {
+    createDioramaTerrain,
+    createInstancedGrassField,
+    sampleTerrainMeshHeight,
+  } = await import('./mountainAndTerrain');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    { meadowMap: tex, meadowNormal: tex, meadowRough: tex },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const grass = createInstancedGrassField(terrainMesh);
+
+  const grassIms: import('three').InstancedMesh[] = [];
+  grass.group.traverse((o) => {
+    if ((o as import('three').InstancedMesh).isInstancedMesh) {
+      grassIms.push(o as import('three').InstancedMesh);
+    }
+  });
+  const [grassIm, flowerIm] = grassIms;
+  const mat = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+
+  for (let i = 0; i < grassIm.count; i++) {
+    grassIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    assert.equal(
+      pos.x > -152 && pos.x < -50 && pos.z > 54.5 && pos.z < 153,
+      false,
+      `Grass blade #${i} spawned inside Janaki compound at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+    );
+  }
+  for (let i = 0; i < flowerIm.count; i++) {
+    flowerIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    assert.equal(
+      pos.x > -152 && pos.x < -50 && pos.z > 54.5 && pos.z < 153,
+      false,
+      `Wildflower #${i} spawned inside Janaki compound at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+    );
+  }
+
+  // Terrain under Ganga Sagar basin stays cleanly below pondBed (-0.33m world)
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, -136.5, 108.0) <= -0.38);
+
+  // Janaki-precinct outer temple artifacts sit on flat lawn level (<= 0.35m) rather than inside elevated palace plinth/towers
+  for (const spot of OUTER_TEMPLE_ARTIFACT_SPOTS) {
+    if (spot.x > -152 && spot.x < -50 && spot.z > 54.5 && spot.z < 153) {
+      assert.ok(
+        groundHeightAt(spot.x, spot.z) <= 0.35,
+        `Janaki outer temple artifact ${spot.kind} at (${spot.x}, ${spot.z}) sits on elevated masonry (${groundHeightAt(spot.x, spot.z)})`,
+      );
+    }
+  }
+
+  // Thin decorative rings on snapCategory props must NOT create elevated floor barriers when excludeSnapCategories is enabled
+  const testScene = new THREE.Scene();
+  const collarGroup = new THREE.Group();
+  collarGroup.userData.snapCategory = 'bowl';
+  const collar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.04, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x117777 }),
+  );
+  collar.position.set(0, 0.35, 0);
+  collarGroup.add(collar);
+  testScene.add(collarGroup);
+  testScene.updateMatrixWorld(true);
+
+  const sanitized = sanitizeSceneGeometry(testScene, { excludeSnapCategories: true });
+  assert.equal(sanitized.sanitizedBarrierBoxes.length, 0);
+
+  // Pebbles also stay out of the entire Janaki compound & perimeter walkways
+  const pebbleIm = grassIms[2];
+  for (let i = 0; i < pebbleIm.count; i++) {
+    pebbleIm.getMatrixAt(i, mat);
+    mat.decompose(pos, quat, scl);
+    assert.equal(
+      pos.x > -152 && pos.x < -50 && pos.z > 54.5 && pos.z < 153,
+      false,
+      `Pebble #${i} spawned inside Janaki compound at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+    );
+  }
+
+  // Terrain under Janaki Chowk and perimeter compound walkways is cleanly depressed below 0.266m slab surfaces
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, -92.0, 128.5) <= 0.165);
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, -146.6, 89.65) <= 0.165);
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, -92.0, 59.7) <= 0.165);
+});
+
+test('Janaki exterior urns parent foliage rigidly and roadside lanterns use deep lockXZ footings', async () => {
+  const THREE = await import('three');
+  const { createDioramaTerrain, createCurbedRoads } = await import('./mountainAndTerrain');
+  const { createJanakiMandir } = await import('./janakiMandir');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    {
+      meadowMap: tex,
+      meadowNormal: tex,
+      meadowRough: tex,
+      createSignTexture: () => tex,
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const roads = createCurbedRoads(mockTextures, terrainMesh);
+  let roadLanternCount = 0;
+  roads.group.traverse((o) => {
+    if (o.userData?.snapCategory === 'lantern') {
+      roadLanternCount++;
+      assert.equal(o.userData.lockXZ, true);
+      assert.ok((o.userData.groundEmbed ?? 0) >= 0.44);
+      const bb = new THREE.Box3().setFromObject(o);
+      assert.ok(bb.min.y - o.position.y <= -0.44, 'Roadside lantern footing should extend >= 0.44m below pivot');
+    }
+  });
+  assert.ok(roadLanternCount >= 18);
+
+  const janaki = createJanakiMandir(mockTextures);
+  let exteriorUrnCount = 0;
+  janaki.group.traverse((o) => {
+    if (o.userData?.snapCategory === 'pot') {
+      exteriorUrnCount++;
+      assert.equal(o.userData.lockXZ, true);
+      assert.ok(o.children.length >= 12, `Expected potted foliage children directly inside urnGroup, got ${o.children.length}`);
+    }
+  });
+  assert.equal(exteriorUrnCount, 6);
+});
+
+test('Monumental Lumbini Maya Devi Temple precinct has walkable gates/stairs, blocked statues/pond, depressed pond terrain, and wild-grass exclusion', async () => {
+  const THREE = await import('three');
+  const { createDioramaTerrain, createInstancedGrassField, sampleTerrainMeshHeight } = await import('./mountainAndTerrain');
+  const { createLumbiniBuddha } = await import('./lumbiniTemple');
+
+  const lx = -8;
+  const lz = 120;
+
+  // Walkable ceremonial gates, South promenade, and Maya Devi Sanctuary entrance steps
+  assert.equal(isWalkablePosition(lx, lz + 22.5), true, 'Lumbini South approach must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 18.2), true, 'South Torana Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 12.0), true, 'Central marble promenade must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 0.5), true, 'Maya Devi Temple front steps must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 3.5), true, 'Maya Devi Sanctuary inner doorway threshold must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 14.8), true, 'North Torana Gate opening must be walkable');
+
+  // Solid statues, Ashoka Pillar, Pushkarini Pond, Bodhi Chautara & Eternal Peace Flame block walking
+  assert.equal(isWalkablePosition(lx, lz + 7.2), false, 'Hero Great Buddha Lotus Throne must block walking');
+  assert.equal(isWalkablePosition(lx - 11.4, lz - 5.0), false, 'Ashoka Pillar enclosure must block walking');
+  assert.equal(isWalkablePosition(lx + 11.6, lz - 4.6), false, 'Pushkarini Sacred Pond must block walking');
+  assert.equal(isWalkablePosition(lx - 11.8, lz + 4.2), false, 'West Naga Buddha Pavilion must block walking');
+  assert.equal(isWalkablePosition(lx + 11.8, lz + 4.2), false, 'East Standing Buddha Pavilion must block walking');
+  assert.equal(isWalkablePosition(lx - 12.4, lz + 12.6), false, 'Bodhi Tree Chautara must block walking');
+  assert.equal(isWalkablePosition(lx + 12.0, lz + 12.6), false, 'Eternal Peace Flame must block walking');
+
+  // Terrain & surface heights align cleanly
+  assert.ok(groundHeightAt(lx + 11.6, lz - 4.6) < -0.25, 'Pushkarini Pond basin must be carved below zero');
+  assert.ok(Math.abs(groundHeightAt(lx, lz + 12.0) - 0.25) < 0.02, 'Lumbini courtyard base must sit level at 0.25m');
+  assert.ok(groundHeightAt(lx, lz - 5.6) > 1.2, 'Maya Devi Temple sanctuary terrace must be elevated');
+  assert.equal(getFootstepSurfaceKind(lx, lz + 12.0), 'stone');
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    {
+      meadowMap: tex,
+      meadowNormal: tex,
+      meadowRough: tex,
+      createSignTexture: () => tex,
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx + 11.6, lz - 4.6) <= -0.45, 'Pushkarini terrain mesh depressed cleanly');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz + 12.0) <= 0.16, 'Courtyard terrain depressed below brick pavers');
+
+  const grassCtrl = createInstancedGrassField(terrainMesh);
+  const grassIms = grassCtrl.group.children.filter(
+    (c): c is import('three').InstancedMesh => c instanceof THREE.InstancedMesh,
+  );
+  const mat = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  for (const im of grassIms) {
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, mat);
+      mat.decompose(pos, quat, scl);
+      assert.equal(
+        pos.x > -28.0 && pos.x < 12.0 && pos.z > 102.0 && pos.z < 142.0,
+        false,
+        `Wild flora spawned inside Lumbini Sacred Garden at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+      );
+    }
+  }
+
+  // Headless build sanity for monumental Lumbini complex
+  const built = createLumbiniBuddha(mockTextures);
+  assert.ok(built.beaconLights.length >= 2);
+  assert.ok(built.animatedNodes.length >= 4);
+  const bells = built.group.userData.templeBells as import('three').Group[];
+  assert.ok(Array.isArray(bells) && bells.length >= 1);
+  const bb = new THREE.Box3().setFromObject(built.group);
+  const size = new THREE.Vector3();
+  bb.getSize(size);
+  assert.ok(size.x >= 35 && size.z >= 35 && size.y >= 13.5, `Expected monumental Lumbini dimensions, got ${size.toArray()}`);
+});
+
+
 

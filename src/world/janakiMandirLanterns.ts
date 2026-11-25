@@ -304,23 +304,23 @@ export function createJanakiCourtyardLanterns({
     { kind: 'standing', x: -2.85, y: 0, z: 8.85, rotY: 0, scale: 1.02, phaseIdx: 3, hasPointLight: true, lightDistance: 15 },
     { kind: 'standing', x: 2.85, y: 0, z: 8.85, rotY: 0, scale: 1.02, phaseIdx: 0, hasPointLight: true, lightDistance: 15 },
 
-    // 2 Hanging Akashdeep lanterns under Central Mughal Gate cusped arch shoulders (5.4m clear span -> ±1.22m clears arch tips)
-    { kind: 'hanging', x: -1.22, y: 4.80, z: 0.35, rotY: 0, scale: 0.76, phaseIdx: 0, hasPointLight: false },
-    { kind: 'hanging', x: 1.22, y: 4.80, z: 0.35, rotY: 0, scale: 0.76, phaseIdx: 2, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns suspended cleanly inside Central Mughal Gate arch soffit (x=±0.75, soffit y=4.69m)
+    { kind: 'hanging', x: -0.75, y: 4.66, z: 0.35, rotY: 0, scale: 0.66, phaseIdx: 0, hasPointLight: false },
+    { kind: 'hanging', x: 0.75, y: 4.66, z: 0.35, rotY: 0, scale: 0.66, phaseIdx: 2, hasPointLight: false },
 
-    // 2 Hanging Akashdeep lanterns under Inner Simha Dwar Pishtaq arch (4.0m clear span -> ±1.02m clears vault haunches)
-    { kind: 'hanging', x: -1.02, y: 4.56, z: 11.15, rotY: 0, scale: 0.78, phaseIdx: 1, hasPointLight: false },
-    { kind: 'hanging', x: 1.02, y: 4.56, z: 11.15, rotY: 0, scale: 0.78, phaseIdx: 3, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns suspended cleanly under Inner Simha Dwar Pishtaq arch soffit (x=±0.66, soffit y=4.08..4.21m)
+    { kind: 'hanging', x: -0.66, y: 4.07, z: 11.15, rotY: 0, scale: 0.68, phaseIdx: 1, hasPointLight: false },
+    { kind: 'hanging', x: 0.66, y: 4.07, z: 11.15, rotY: 0, scale: 0.68, phaseIdx: 3, hasPointLight: false },
 
-    // 2 Hanging Akashdeep lanterns in Mukhamandapa Sanctum side porch arches (clear of ±0.95m & ±2.4m columns)
-    { kind: 'hanging', x: -1.42, y: 4.42, z: -2.35, rotY: 0, scale: 0.74, phaseIdx: 2, hasPointLight: false },
-    { kind: 'hanging', x: 1.42, y: 4.42, z: -2.35, rotY: 0, scale: 0.74, phaseIdx: 0, hasPointLight: false },
+    // 2 Hanging Akashdeep lanterns anchored flush under Mukhamandapa overhanging roof slab soffit (y=4.66m, z=-2.34m)
+    { kind: 'hanging', x: -1.675, y: 4.66, z: -2.34, rotY: 0, scale: 0.68, phaseIdx: 2, hasPointLight: false },
+    { kind: 'hanging', x: 1.675, y: 4.66, z: -2.34, rotY: 0, scale: 0.68, phaseIdx: 0, hasPointLight: false },
 
-    // 4 Hanging Akashdeep lanterns centered cleanly under East & West Parikrama veranda canopy soffits (±15.48m clears ±14.4m colonnade arches)
-    { kind: 'hanging', x: -15.48, y: 4.35, z: -5.1, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 1, hasPointLight: true, lightDistance: 14 },
-    { kind: 'hanging', x: -15.48, y: 4.35, z: 1.7, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 3, hasPointLight: false },
-    { kind: 'hanging', x: 15.48, y: 4.35, z: -5.1, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 0, hasPointLight: true, lightDistance: 14 },
-    { kind: 'hanging', x: 15.48, y: 4.35, z: 1.7, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 2, hasPointLight: false },
+    // 4 Hanging Akashdeep lanterns centered flush under East & West Parikrama veranda canopy soffits (bottom y=4.33m)
+    { kind: 'hanging', x: -15.48, y: 4.33, z: -5.1, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 1, hasPointLight: true, lightDistance: 14 },
+    { kind: 'hanging', x: -15.48, y: 4.33, z: 1.7, rotY: Math.PI / 2, scale: 0.8, phaseIdx: 3, hasPointLight: false },
+    { kind: 'hanging', x: 15.48, y: 4.33, z: -5.1, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 0, hasPointLight: true, lightDistance: 14 },
+    { kind: 'hanging', x: 15.48, y: 4.33, z: 1.7, rotY: -Math.PI / 2, scale: 0.8, phaseIdx: 2, hasPointLight: false },
   ];
 
   // Register synchronous flickering PointLights + anchor groups immediately so Frame 0 pool picks them up
@@ -332,6 +332,7 @@ export function createJanakiCourtyardLanterns({
     anchor.userData.noMerge = true;
     if (spec.kind === 'standing') {
       anchor.userData.snapCategory = 'lantern';
+      anchor.userData.lockXZ = true;
     }
     lanternsRoot.add(anchor);
 

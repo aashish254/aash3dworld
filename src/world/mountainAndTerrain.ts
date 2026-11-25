@@ -10,6 +10,7 @@ import {
   SPAWN_POSITION,
   TreeSpecies,
   TreeSpot,
+  getMeadowZoneAt,
   getRiverCenterX,
   getWorldBoulderSpots,
   getWorldTreeSpots,
@@ -85,9 +86,33 @@ export interface AnimatedWaterController {
   update: (elapsed: number) => void;
 }
 
+export interface GrassInteractor {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+}
+
 export interface AnimatedGrassController {
   group: THREE.Group;
-  update: (elapsed: number) => void;
+  update: (
+    elapsed: number,
+    playerPos?: THREE.Vector3,
+    interactors?: GrassInteractor[],
+    playerMove?: THREE.Vector3,
+    meadowActivity?: number,
+  ) => void;
+  getShaderUniforms?: () => {
+    uTime: { value: number };
+    uPlayerPos: { value: THREE.Vector3 };
+    uPlayerMove: { value: THREE.Vector3 };
+    uMeadowActivity: { value: number };
+  };
+}
+
+export interface AnimatedFoliageController {
+  group: THREE.Group;
+  update: (elapsed: number, bumpPos?: THREE.Vector3, bumpStrength?: number) => void;
 }
 
 export interface MountainCloudController {
@@ -386,6 +411,40 @@ export function createMountainClouds(): MountainCloudController {
   };
 }
 
+export function sampleTerrainMeshHeight(
+  terrainMesh: THREE.Mesh | undefined,
+  x: number,
+  z: number,
+): number {
+  const grid = terrainMesh?.userData?.terrainGrid as { size: number; segs: number } | undefined;
+  const pos = terrainMesh?.geometry?.getAttribute('position');
+  if (!grid || !pos) return groundHeightAt(x, z);
+
+  const { size, segs } = grid;
+  const half = size * 0.5;
+  if (x < -half || x > half || z < -half || z > half) {
+    return groundHeightAt(x, z);
+  }
+
+  const fx = THREE.MathUtils.clamp(((x + half) / size) * segs, 0, segs - 1e-6);
+  const fz = THREE.MathUtils.clamp(((z + half) / size) * segs, 0, segs - 1e-6);
+  const ix = Math.floor(fx);
+  const iz = Math.floor(fz);
+  const u = fx - ix;
+  const v = fz - iz;
+  const stride = segs + 1;
+
+  const ya = pos.getY(ix + stride * iz);
+  const yb = pos.getY(ix + stride * (iz + 1));
+  const yc = pos.getY(ix + 1 + stride * (iz + 1));
+  const yd = pos.getY(ix + 1 + stride * iz);
+
+  if (u + v <= 1) {
+    return ya * (1 - u - v) + yd * u + yb * v;
+  }
+  return yb * (1 - u) + yd * (1 - v) + yc * (u + v - 1);
+}
+
 /**
  * Natural multi-biome valley ground transitioning from moist Himalayan turf & moss (West)
  * across exposed river shingle/silt to sun-baked Tamil Nadu laterite loam (East).
@@ -396,7 +455,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
   textures.meadowRough.repeat.set(110, 110);
 
   const size = 640;
-  const segs = 136;
+  const segs = 224;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
 
@@ -408,15 +467,40 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const x = pos.getX(i);
     const z = pos.getZ(i);
     let y = groundHeightAt(x, z);
-    const underChowk = x >= -130.5 && x <= -53.6 && z >= 107.5 && z <= 149.7;
-    const underPlinth = Math.abs(x + 92) <= 25.2 && z >= 70.0 && z <= 111.0;
+    const jx = x + 92;
+    const jz = z - 92;
+    const underChowk = jx >= -56.5 && jx <= 38.2 && jz >= 15.5 && jz <= 57.6;
+    const underPlinth = Math.abs(jx) <= 25.2 && jz >= -22.0 && jz <= 19.0;
+    const underCompoundWalk =
+      (jx >= -56.6 && jx <= 38.2 && jz >= -34.6 && jz <= -30.0) ||
+      (jx >= -56.6 && jx <= -52.6 && jz >= -30.5 && jz <= 25.6) ||
+      (jx >= 34.2 && jx <= 38.2 && jz >= -30.5 && jz <= 16.0);
+    const underBridgeWalk =
+      (jx >= -28.6 && jx <= -25.0 && jz >= -25.7 && jz <= 15.6) ||
+      (jx >= 25.0 && jx <= 28.6 && jz >= -25.7 && jz <= 15.6) ||
+      (jx >= -53.0 && jx <= 34.6 && jz >= -25.7 && jz <= -21.9) ||
+      (jx >= -2.2 && jx <= 2.2 && jz >= -30.2 && jz <= -25.5) ||
+      (jx >= 28.4 && jx <= 34.4 && jz >= -6.2 && jz <= -0.8) ||
+      (jx >= -52.8 && jx <= -34.0 && jz >= 2.8 && jz <= 25.5) ||
+      (jx >= -34.2 && jx <= -28.4 && jz >= 14.1 && jz <= 17.9);
+    const underGangaSagarBasin = jx >= -51.6 && jx <= -37.4 && jz >= 7.2 && jz <= 24.8;
+    const lx = x + 8;
+    const lz = z - 120;
+    const underPushkariniBasin = lx >= 6.8 && lx <= 16.4 && lz >= -10.0 && lz <= 0.8;
+    const underLumbiniPlaza =
+      (Math.abs(lx) <= 18.8 && lz >= -16.8 && lz <= 20.8 && !(Math.abs(lx) <= 2.6 && lz >= -1.2 && lz <= 1.6)) ||
+      (Math.abs(lx) <= 4.2 && (lz >= 19.5 && lz <= 22.4 || lz >= -18.4 && lz <= -15.5));
     const roadDist =
       x > -118 && x < 105 && z > -118 && z < 172 ? minDistanceToRoads(x, z, roadSamples) : 99;
-    if (underChowk || underPlinth) {
+    if (underGangaSagarBasin || underPushkariniBasin) {
+      y = -0.48;
+    } else if (underPlinth) {
       y = 0.08;
-    } else if (roadDist < 2.15) {
+    } else if (underChowk || underCompoundWalk || underBridgeWalk || underLumbiniPlaza) {
+      y = 0.14;
+    } else if (roadDist < 2.25) {
       // Depress roadbed sub-grade cleanly beneath the level stone road deck so grass triangles never pierce the pavers
-      y -= (1 - THREE.MathUtils.smoothstep(roadDist, 0.7, 2.15)) * 0.07;
+      y -= (1 - THREE.MathUtils.smoothstep(roadDist, 0.8, 2.25)) * 0.09;
     }
     pos.setY(i, y);
 
@@ -472,13 +556,15 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
+  mesh.userData.terrainGrid = { size, segs };
   return mesh;
 }
 
 /**
- * Realistic natural mountain grass tufts & swaying riverbank reeds.
+ * Lush, dense Bruno-Simon-inspired reactive meadow grass tufts, swaying riverbank reeds,
+ * and meadow wildflowers with root-to-tip gradients, rolling wind waves, and player/prop bending.
  */
-export function createInstancedGrassField(): AnimatedGrassController {
+export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGrassController {
   const group = new THREE.Group();
   group.userData.nonCollidable = true;
   const roadSamples = sampleRoadPoints();
@@ -487,66 +573,178 @@ export function createInstancedGrassField(): AnimatedGrassController {
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'boudhanath-stupa' ? 12 : 11,
+      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 24 : lm.id === 'boudhanath-stupa' ? 12 : 11,
     })),
   ];
 
-  // Slender tapered realistic grass blades (3 angled blades per tuft)
+  // Rich 5-blade curved tapered grass tuft (3 vertical segments per blade for smooth bending)
   const tuftPositions: number[] = [];
+  const tuftNormals: number[] = [];
+  const tuftTips: number[] = [];
   const tuftIndices: number[] = [];
   const blades = [
-    { ox: 0.0, oz: 0.0, rot: 0.0, tiltX: 0.1, h: 0.6, w: 0.06 },
-    { ox: -0.09, oz: 0.07, rot: 2.1, tiltX: 0.14, h: 0.5, w: 0.05 },
-    { ox: 0.09, oz: -0.06, rot: 4.1, tiltX: 0.13, h: 0.54, w: 0.055 },
+    { ox: 0.0, oz: 0.0, rot: 0.0, tiltX: 0.14, h: 0.72, w: 0.072 },
+    { ox: -0.11, oz: 0.08, rot: 1.35, tiltX: 0.17, h: 0.60, w: 0.062 },
+    { ox: 0.11, oz: -0.07, rot: 2.65, tiltX: 0.16, h: 0.64, w: 0.065 },
+    { ox: -0.07, oz: -0.11, rot: 3.95, tiltX: 0.15, h: 0.56, w: 0.058 },
+    { ox: 0.08, oz: 0.10, rot: 5.15, tiltX: 0.18, h: 0.58, w: 0.060 },
   ];
   blades.forEach((b, bi) => {
     const c = Math.cos(b.rot);
     const s = Math.sin(b.rot);
-    const addPt = (lx: number, ly: number, lz: number) => {
-      tuftPositions.push(b.ox + lx * c - lz * s, ly, b.oz + lx * s + lz * c);
+    const addVert = (lx: number, ly: number, lz: number, tip: number) => {
+      const wx = b.ox + lx * c - lz * s;
+      const wz = b.oz + lx * s + lz * c;
+      tuftPositions.push(wx, ly, wz);
+      // Upward-biased soft normal so meadows catch sunlight evenly from every camera angle
+      const nx = wx * 0.55;
+      const ny = 1.0;
+      const nz = wz * 0.55;
+      const invLen = 1 / Math.hypot(nx, ny, nz);
+      tuftNormals.push(nx * invLen, ny * invLen, nz * invLen);
+      tuftTips.push(tip);
     };
-    addPt(-b.w, 0.0, 0.0);
-    addPt(b.w, 0.0, 0.0);
-    addPt(-b.w * 0.65, b.h * 0.42, b.tiltX * 0.25);
-    addPt(b.w * 0.65, b.h * 0.42, b.tiltX * 0.25);
-    addPt(0.0, b.h, b.tiltX);
-    const base = bi * 5;
-    tuftIndices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base + 2, base + 3, base + 4);
+    addVert(-b.w, -0.05, 0.0, 0.0);
+    addVert(b.w, -0.05, 0.0, 0.0);
+    addVert(-b.w * 0.74, b.h * 0.36, b.tiltX * 0.20, 0.36);
+    addVert(b.w * 0.74, b.h * 0.36, b.tiltX * 0.20, 0.36);
+    addVert(-b.w * 0.42, b.h * 0.72, b.tiltX * 0.58, 0.72);
+    addVert(b.w * 0.42, b.h * 0.72, b.tiltX * 0.58, 0.72);
+    addVert(0.0, b.h, b.tiltX, 1.0);
+    const base = bi * 7;
+    tuftIndices.push(
+      base, base + 1, base + 2,
+      base + 1, base + 3, base + 2,
+      base + 2, base + 3, base + 4,
+      base + 3, base + 5, base + 4,
+      base + 4, base + 5, base + 6,
+    );
   });
 
   const bladeGeo = new THREE.BufferGeometry();
   bladeGeo.setAttribute('position', new THREE.Float32BufferAttribute(tuftPositions, 3));
+  bladeGeo.setAttribute('normal', new THREE.Float32BufferAttribute(tuftNormals, 3));
+  bladeGeo.setAttribute('aTip', new THREE.Float32BufferAttribute(tuftTips, 1));
   bladeGeo.setIndex(tuftIndices);
-  bladeGeo.computeVertexNormals();
 
+  const GRASS_INTERACTOR_SLOTS = 6;
   const uTime = { value: 0 };
+  const uPlayerPos = { value: new THREE.Vector3(0, -999, 0) };
+  const uPlayerMove = { value: new THREE.Vector3(0, 0, 0) }; // (vx, vz, speed)
+  const uMeadowActivity = { value: 0 };
+  const uInteractors = {
+    value: Array.from({ length: GRASS_INTERACTOR_SLOTS }, () => new THREE.Vector4(0, -999, 0, 0)),
+  };
+
   const bladeMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.86,
+    roughness: 0.82,
     metalness: 0.01,
     side: THREE.DoubleSide,
   });
 
+  bladeMat.customProgramCacheKey = () => 'reactive-grass-v3';
   bladeMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uTime;
+    shader.uniforms.uPlayerPos = uPlayerPos;
+    shader.uniforms.uPlayerMove = uPlayerMove;
+    shader.uniforms.uMeadowActivity = uMeadowActivity;
+    shader.uniforms.uInteractors = uInteractors;
+
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
-         uniform float uTime;`,
+         attribute float aTip;
+         attribute float aMeadow;
+         uniform float uTime;
+         uniform vec3 uPlayerPos;
+         uniform vec3 uPlayerMove;
+         uniform float uMeadowActivity;
+         uniform vec4 uInteractors[${GRASS_INTERACTOR_SLOTS}];
+         varying float vTip;
+         varying float vWindWave;
+         varying float vMeadowDisp;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+         vTip = aTip;
          vec4 instOrigin = vec4(0.0, 0.0, 0.0, 1.0);
          #ifdef USE_INSTANCING
            instOrigin = instanceMatrix * instOrigin;
          #endif
-         float hFactor = clamp(position.y / 0.6, 0.0, 1.0);
-         float wave = sin(uTime * 1.9 + instOrigin.x * 0.35 + instOrigin.z * 0.28) * 0.11
-                    + cos(uTime * 3.1 + instOrigin.x * 0.7) * 0.04;
-         transformed.x += wave * hFactor * hFactor;
-         transformed.z += wave * 0.4 * hFactor * hFactor;`,
+         float hFactor = aTip * aTip;
+
+         // Rolling meadow gusts + fine blade flutter
+         float gust = sin(uTime * 1.65 + instOrigin.x * 0.14 + instOrigin.z * 0.11);
+         float swirl = cos(uTime * 2.85 + instOrigin.x * 0.42 - instOrigin.z * 0.31);
+         float wave = gust * 0.14 + swirl * 0.045;
+         vWindWave = clamp(gust * 0.5 + 0.5, 0.0, 1.0);
+         transformed.x += wave * hFactor;
+         transformed.z += (wave * 0.48 + sin(uTime * 2.2 + instOrigin.z * 0.25) * 0.04) * hFactor;
+
+         // Interactive radial parting, meadow-zone movement wake & moving props
+         vec2 bendTotal = vec2(0.0);
+         float pushDown = 0.0;
+         float meadowDispVis = 0.0;
+
+         vec2 dp = instOrigin.xz - uPlayerPos.xz;
+         float dPlayer = length(dp);
+         float dyPlayer = abs(instOrigin.y - uPlayerPos.y);
+         float meadowMask = clamp(aMeadow, 0.0, 1.0) * clamp(uMeadowActivity, 0.0, 1.35);
+         float wakeRadius = mix(1.35, 2.45, clamp(meadowMask, 0.0, 1.0));
+
+         if (dPlayer < wakeRadius && dyPlayer < 1.8) {
+           float pForce = smoothstep(wakeRadius, 0.18, dPlayer);
+           vec2 dir = dPlayer > 0.001 ? dp / dPlayer : vec2(1.0, 0.0);
+           bendTotal += dir * (pForce * (0.58 + meadowMask * 0.44));
+           pushDown = max(pushDown, pForce * (0.42 + meadowMask * 0.24));
+
+           // Directional wake & stride ripple when moving through designated 'meadow' zones
+           if (meadowMask > 0.01 && uPlayerMove.z > 0.05) {
+             vec2 moveDir = normalize(uPlayerMove.xy);
+             float strideRipple = sin(dPlayer * 5.4 - uTime * 10.5) * 0.16 * pForce * meadowMask;
+             bendTotal += (moveDir * (0.36 * pForce * meadowMask)) + dir * strideRipple;
+             meadowDispVis = pForce * clamp(meadowMask, 0.0, 1.0);
+           }
+         }
+         vMeadowDisp = meadowDispVis;
+
+         for (int k = 0; k < ${GRASS_INTERACTOR_SLOTS}; k++) {
+           vec4 inter = uInteractors[k];
+           if (inter.w > 0.01) {
+             vec2 di = instOrigin.xz - inter.xz;
+             float distI = length(di);
+             if (distI < inter.w && abs(instOrigin.y - inter.y) < 1.8) {
+               float f = smoothstep(inter.w, 0.12, distI);
+               vec2 dirI = distI > 0.001 ? di / distI : vec2(0.0, 1.0);
+               bendTotal += dirI * (f * 0.52);
+               pushDown = max(pushDown, f * 0.38);
+             }
+           }
+         }
+
+         transformed.xz += bendTotal * aTip;
+         transformed.y *= (1.0 - pushDown * aTip);`,
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         varying float vTip;
+         varying float vWindWave;
+         varying float vMeadowDisp;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+         float tipShade = mix(0.54, 1.24, smoothstep(0.0, 1.0, vTip));
+         diffuseColor.rgb *= tipShade;
+         // Sun-kissed golden-green wind crest shimmer on blade tips + parted meadow highlight
+         diffuseColor.rgb += vec3(0.08, 0.09, 0.02) * (vTip * vTip * vWindWave);
+         diffuseColor.rgb += vec3(0.09, 0.12, 0.03) * (vTip * vMeadowDisp);`,
       );
   };
 
@@ -557,84 +755,132 @@ export function createInstancedGrassField(): AnimatedGrassController {
     rot: number;
     east: boolean;
     nearRiver: boolean;
+    meadowFactor: number;
   }
 
   const grassSpots: GrassSpot[] = [];
+  const flowerSpots: Array<{
+    x: number;
+    z: number;
+    scale: number;
+    rot: number;
+    east: boolean;
+    meadowFactor: number;
+  }> = [];
   const pebbleSpots: Array<{ x: number; z: number; scale: number; rot: number }> = [];
 
+  const isExcludedFloraPoint = (px: number, pz: number, roadClearDist: number): { excluded: boolean; roadD: number; distRiver: number } => {
+    const riverCenterX = getRiverCenterX(pz);
+    const distRiver = Math.abs(px - riverCenterX);
+    if (distRiver < 8.1) return { excluded: true, roadD: 99, distRiver };
+    if (Math.hypot(px - GLACIAL_LAKE.x, pz - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 1.1) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    if (
+      px > BRIDGE_BOUNDS.minX - 4 &&
+      px < BRIDGE_BOUNDS.maxX + 4 &&
+      Math.abs(pz - BRIDGE_BOUNDS.centerZ) < 6.0
+    ) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    // Keep ENTIRE Janaki Mandir & Lumbini Maya Devi Temple precincts free of wild grass, flowers & pebbles
+    if (px > -152 && px < -50 && pz > 54.5 && pz < 153) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    if (px > -29.5 && px < 13.5 && pz > 100.5 && pz < 143.5) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
+    for (const pl of plazas) {
+      if (Math.hypot(px - pl.x, pz - pl.z) < pl.r) {
+        return { excluded: true, roadD: 99, distRiver };
+      }
+    }
+    const roadD = minDistanceToRoads(px, pz, roadSamples);
+    if (roadD < roadClearDist) return { excluded: true, roadD, distRiver };
+    return { excluded: false, roadD, distRiver };
+  };
+
   const goldenAngle = 2.39996323;
-  const maxAttempts = 8500;
-  for (let i = 0; i < maxAttempts && grassSpots.length < 2800; i++) {
+  const maxAttempts = 22000;
+  for (let i = 0; i < maxAttempts && grassSpots.length < 10500; i++) {
     const angle = i * goldenAngle;
     const t = (i + 0.5) / maxAttempts;
-    const radius = 8.0 + Math.sqrt(t) * 185.0;
-    const jx = Math.sin(i * 12.9898) * 1.6;
-    const jz = Math.cos(i * 78.233) * 1.6;
+    const radius = 7.4 + Math.sqrt(t) * 186.0;
+    const jx = Math.sin(i * 12.9898) * 1.45;
+    const jz = Math.cos(i * 78.233) * 1.45;
     const x = Math.cos(angle) * radius + jx;
     const z = Math.sin(angle) * radius + jz;
 
+    const check = isExcludedFloraPoint(x, z, 3.15);
+    if (check.excluded) continue;
+
     const riverCenterX = getRiverCenterX(z);
-    const distRiver = Math.abs(x - riverCenterX);
-    if (distRiver < 8.4) continue;
-    if (Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 1.4) continue;
-    if (
-      x > BRIDGE_BOUNDS.minX - 4 &&
-      x < BRIDGE_BOUNDS.maxX + 4 &&
-      Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.0
-    ) {
-      continue;
-    }
-    // Keep Janakpur Chowk brick plaza, temple compound & West Vivah Mandap/Ganga Sagar precinct clean
-    if (x > -150 && x < -48 && z > 60 && z < 158) continue;
-
-    let inPlaza = false;
-    for (const pl of plazas) {
-      if (Math.hypot(x - pl.x, z - pl.z) < pl.r) {
-        inPlaza = true;
-        break;
-      }
-    }
-    if (inPlaza) continue;
-
-    const roadD = minDistanceToRoads(x, z, roadSamples);
-    if (roadD < 2.6) continue;
-
-    const nearVerge = roadD < 6.2;
-    const nearRiver = distRiver < 11.5;
-    if (!nearVerge && !nearRiver && i % 3 !== 0) continue;
+    const nearVerge = check.roadD < 7.8;
+    const nearRiver = check.distRiver < 12.2;
+    const nearHero = Math.hypot(x, z) < 95;
+    const meadowInfo = getMeadowZoneAt(x, z);
+    if (!nearVerge && !nearRiver && !nearHero && !meadowInfo.inMeadow && i % 2 !== 0) continue;
 
     grassSpots.push({
       x,
       z,
-      scale: (nearRiver ? 1.38 : nearVerge ? 1.02 : 0.92) + ((i * 19) % 42) / 100,
+      scale:
+        (nearRiver ? 1.38 : meadowInfo.inMeadow ? 1.12 : nearVerge ? 1.06 : 0.96) +
+        ((i * 19) % 44) / 100,
       rot: ((i * 73) % 628) / 100,
       east: x > riverCenterX,
       nearRiver,
+      meadowFactor: meadowInfo.factor,
     });
 
-    if ((nearVerge || nearRiver) && i % 9 === 0 && pebbleSpots.length < 320) {
-      pebbleSpots.push({
-        x: x - 0.14,
-        z: z + 0.14,
-        scale: 0.8 + ((i * 11) % 50) / 100,
-        rot: (i * 0.8) % (Math.PI * 2),
-      });
+    if (!nearRiver && (i % 10 === 0 || (meadowInfo.inMeadow && i % 6 === 0)) && flowerSpots.length < 1100) {
+      const fx = x + 0.14 * Math.cos(i);
+      const fz = z + 0.14 * Math.sin(i);
+      if (!isExcludedFloraPoint(fx, fz, 3.15).excluded) {
+        flowerSpots.push({
+          x: fx,
+          z: fz,
+          scale: 0.78 + ((i * 17) % 40) / 100,
+          rot: (i * 1.1) % (Math.PI * 2),
+          east: fx > getRiverCenterX(fz),
+          meadowFactor: meadowInfo.factor,
+        });
+      }
+    }
+
+    if ((nearVerge || nearRiver) && i % 18 === 0 && pebbleSpots.length < 360) {
+      const px = x - 0.14;
+      const pz = z + 0.14;
+      if (!isExcludedFloraPoint(px, pz, 3.15).excluded) {
+        pebbleSpots.push({
+          x: px,
+          z: pz,
+          scale: 0.8 + ((i * 11) % 50) / 100,
+          rot: (i * 0.8) % (Math.PI * 2),
+        });
+      }
     }
   }
+
+  const grassMeadowAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(grassSpots.map((gs) => gs.meadowFactor)),
+    1,
+  );
+  bladeGeo.setAttribute('aMeadow', grassMeadowAttr);
 
   const grassMesh = new THREE.InstancedMesh(bladeGeo, bladeMat, grassSpots.length);
   grassMesh.castShadow = false;
   grassMesh.receiveShadow = true;
 
-  const westPalette = [0x3d5528, 0x486231, 0x526b38, 0x5c733d, 0x354a22];
-  const eastPalette = [0x7d7443, 0x8b7e4a, 0x6c6e3b, 0x948651];
-  const reedPalette = [0x4c5e2c, 0x626b34, 0x76703d];
+  const westPalette = [0x4c7032, 0x5b823c, 0x678e42, 0x769948, 0x3f612a];
+  const eastPalette = [0x928a48, 0xa39751, 0x828443, 0xb0a158];
+  const reedPalette = [0x587334, 0x6c803b, 0x828545];
 
   grassSpots.forEach((gs, idx) => {
-    const y = groundHeightAt(gs.x, gs.z);
-    _vec3.set(gs.x, y - 0.02, gs.z);
-    _quat.setFromEuler(_euler.set(0.06 * Math.sin(idx), gs.rot, 0.05 * Math.cos(idx)));
-    _scale.set(gs.scale * 0.95, gs.scale, gs.scale * 0.95);
+    const y = sampleTerrainMeshHeight(terrainMesh, gs.x, gs.z);
+    _vec3.set(gs.x, y - 0.03, gs.z);
+    _quat.setFromEuler(_euler.set(0.05 * Math.sin(idx), gs.rot, 0.05 * Math.cos(idx)));
+    _scale.set(gs.scale * 1.05, gs.scale, gs.scale * 1.05);
     _mat4.compose(_vec3, _quat, _scale);
     grassMesh.setMatrixAt(idx, _mat4);
 
@@ -647,6 +893,153 @@ export function createInstancedGrassField(): AnimatedGrassController {
   grassMesh.computeBoundingSphere();
   group.add(grassMesh);
 
+  if (flowerSpots.length > 0) {
+    // Rooted meadow wildflower: tapered green stem (-0.05..0.31) + 5-sided blossom cup (0.28..0.41)
+    const stemPart = new THREE.CylinderGeometry(0.015, 0.026, 0.36, 5, 2);
+    stemPart.translate(0, 0.13, 0);
+    const leafL = new THREE.BoxGeometry(0.09, 0.014, 0.035);
+    leafL.rotateZ(0.45);
+    leafL.translate(-0.045, 0.13, 0);
+    const leafR = new THREE.BoxGeometry(0.09, 0.014, 0.035);
+    leafR.rotateZ(-0.42);
+    leafR.translate(0.045, 0.16, 0.02);
+    const blossomPart = new THREE.CylinderGeometry(0.11, 0.03, 0.13, 5, 1);
+    blossomPart.translate(0, 0.345, 0);
+
+    const flowerParts = [
+      { geo: stemPart, isBlossom: 0.0 },
+      { geo: leafL, isBlossom: 0.0 },
+      { geo: leafR, isBlossom: 0.0 },
+      { geo: blossomPart, isBlossom: 1.0 },
+    ].map(({ geo: raw, isBlossom }) => ({
+      geo: raw.index ? raw.toNonIndexed() : raw,
+      isBlossom,
+    }));
+
+    const totalFlowerVerts = flowerParts.reduce((acc, p) => acc + p.geo.attributes.position.count, 0);
+    const fPosArr = new Float32Array(totalFlowerVerts * 3);
+    const fNormArr = new Float32Array(totalFlowerVerts * 3);
+    const fTipArr = new Float32Array(totalFlowerVerts);
+    const fBlossomArr = new Float32Array(totalFlowerVerts);
+    let fOff = 0;
+    for (const part of flowerParts) {
+      if (!part.geo.attributes.normal) part.geo.computeVertexNormals();
+      const gp = part.geo.attributes.position;
+      const gn = part.geo.attributes.normal;
+      for (let vi = 0; vi < gp.count; vi++) {
+        const vx = gp.getX(vi);
+        const vy = gp.getY(vi);
+        const vz = gp.getZ(vi);
+        fPosArr[(fOff + vi) * 3] = vx;
+        fPosArr[(fOff + vi) * 3 + 1] = vy;
+        fPosArr[(fOff + vi) * 3 + 2] = vz;
+        fNormArr[(fOff + vi) * 3] = gn.getX(vi);
+        fNormArr[(fOff + vi) * 3 + 1] = gn.getY(vi);
+        fNormArr[(fOff + vi) * 3 + 2] = gn.getZ(vi);
+        fTipArr[fOff + vi] = THREE.MathUtils.clamp((vy + 0.05) / 0.46, 0, 1);
+        fBlossomArr[fOff + vi] = part.isBlossom;
+      }
+      fOff += gp.count;
+    }
+
+    const flowerGeo = new THREE.BufferGeometry();
+    flowerGeo.setAttribute('position', new THREE.BufferAttribute(fPosArr, 3));
+    flowerGeo.setAttribute('normal', new THREE.BufferAttribute(fNormArr, 3));
+    flowerGeo.setAttribute('aTip', new THREE.BufferAttribute(fTipArr, 1));
+    flowerGeo.setAttribute('aIsBlossom', new THREE.BufferAttribute(fBlossomArr, 1));
+    flowerGeo.setAttribute(
+      'aMeadow',
+      new THREE.InstancedBufferAttribute(
+        new Float32Array(flowerSpots.map((fl) => fl.meadowFactor)),
+        1,
+      ),
+    );
+    const flowerMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.72,
+      metalness: 0.02,
+    });
+    flowerMat.customProgramCacheKey = () => 'reactive-flower-v3';
+    flowerMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uTime;
+      shader.uniforms.uPlayerPos = uPlayerPos;
+      shader.uniforms.uPlayerMove = uPlayerMove;
+      shader.uniforms.uMeadowActivity = uMeadowActivity;
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           attribute float aTip;
+           attribute float aIsBlossom;
+           attribute float aMeadow;
+           uniform float uTime;
+           uniform vec3 uPlayerPos;
+           uniform vec3 uPlayerMove;
+           uniform float uMeadowActivity;
+           varying float vTip;
+           varying float vIsBlossom;`,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           vTip = aTip;
+           vIsBlossom = aIsBlossom;
+           vec4 instOrigin = vec4(0.0, 0.0, 0.0, 1.0);
+           #ifdef USE_INSTANCING
+             instOrigin = instanceMatrix * instOrigin;
+           #endif
+           float hFactor = aTip * aTip;
+           float gust = sin(uTime * 1.65 + instOrigin.x * 0.14 + instOrigin.z * 0.11) * 0.10;
+           transformed.x += gust * hFactor;
+           vec2 dp = instOrigin.xz - uPlayerPos.xz;
+           float dPlayer = length(dp);
+           float meadowMask = clamp(aMeadow, 0.0, 1.0) * clamp(uMeadowActivity, 0.0, 1.35);
+           float wakeRadius = mix(1.25, 2.25, clamp(meadowMask, 0.0, 1.0));
+           if (dPlayer < wakeRadius && abs(instOrigin.y - uPlayerPos.y) < 1.6) {
+             float pf = smoothstep(wakeRadius, 0.2, dPlayer);
+             vec2 dir = dp / max(dPlayer, 0.001);
+             vec2 wakePush = dir * (pf * (0.34 + meadowMask * 0.34));
+             if (meadowMask > 0.01 && uPlayerMove.z > 0.05) {
+               wakePush += normalize(uPlayerMove.xy) * (0.28 * pf * meadowMask);
+             }
+             transformed.xz += wakePush * aTip;
+             transformed.y *= (1.0 - pf * (0.32 + meadowMask * 0.18) * aTip);
+           }`,
+        );
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           varying float vTip;
+           varying float vIsBlossom;`,
+        )
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+           if (vIsBlossom < 0.5) {
+             diffuseColor.rgb = mix(vec3(0.20, 0.36, 0.14), vec3(0.36, 0.56, 0.22), clamp(vTip * 1.35, 0.0, 1.0));
+           }`,
+        );
+    };
+    const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerSpots.length);
+    const flowerPalette = [0xf7f1df, 0xf6c453, 0xf2a7c1, 0xebe6d6, 0xfa9c4b];
+    flowerSpots.forEach((fl, idx) => {
+      const y = sampleTerrainMeshHeight(terrainMesh, fl.x, fl.z);
+      _vec3.set(fl.x, y - 0.02, fl.z);
+      _quat.setFromEuler(_euler.set(0.06 * Math.sin(idx), fl.rot, 0.06 * Math.cos(idx)));
+      _scale.setScalar(fl.scale);
+      _mat4.compose(_vec3, _quat, _scale);
+      flowerMesh.setMatrixAt(idx, _mat4);
+      _color.setHex(flowerPalette[idx % flowerPalette.length]);
+      flowerMesh.setColorAt(idx, _color);
+    });
+    flowerMesh.instanceMatrix.needsUpdate = true;
+    if (flowerMesh.instanceColor) flowerMesh.instanceColor.needsUpdate = true;
+    flowerMesh.computeBoundingSphere();
+    group.add(flowerMesh);
+  }
+
   if (pebbleSpots.length > 0) {
     const pebGeo = new THREE.IcosahedronGeometry(0.14, 1);
     const pebMat = new THREE.MeshStandardMaterial({
@@ -655,8 +1048,8 @@ export function createInstancedGrassField(): AnimatedGrassController {
     });
     const pebMesh = new THREE.InstancedMesh(pebGeo, pebMat, pebbleSpots.length);
     pebbleSpots.forEach((pb, idx) => {
-      const y = groundHeightAt(pb.x, pb.z);
-      _vec3.set(pb.x, y + 0.025, pb.z);
+      const y = sampleTerrainMeshHeight(terrainMesh, pb.x, pb.z);
+      _vec3.set(pb.x, y - 0.008, pb.z);
       _quat.setFromEuler(_euler.set(idx * 0.3, pb.rot, idx * 0.2));
       _scale.set(pb.scale * 1.25, pb.scale * 0.45, pb.scale * 0.95);
       _mat4.compose(_vec3, _quat, _scale);
@@ -672,8 +1065,35 @@ export function createInstancedGrassField(): AnimatedGrassController {
 
   return {
     group,
-    update: (elapsed: number) => {
+    getShaderUniforms: () => ({
+      uTime,
+      uPlayerPos,
+      uPlayerMove,
+      uMeadowActivity,
+    }),
+    update: (
+      elapsed: number,
+      playerPos?: THREE.Vector3,
+      interactors?: GrassInteractor[],
+      playerMove?: THREE.Vector3,
+      meadowActivity = 0,
+    ) => {
       uTime.value = elapsed;
+      if (playerPos) {
+        uPlayerPos.value.copy(playerPos);
+      }
+      if (playerMove) {
+        uPlayerMove.value.copy(playerMove);
+      }
+      uMeadowActivity.value = meadowActivity;
+      for (let i = 0; i < GRASS_INTERACTOR_SLOTS; i++) {
+        const item = interactors?.[i];
+        if (item) {
+          uInteractors.value[i].set(item.x, item.y, item.z, item.r);
+        } else {
+          uInteractors.value[i].set(0, -999, 0, 0);
+        }
+      }
     },
   };
 }
@@ -748,12 +1168,14 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
     const rcX = getRiverCenterX(z);
     const offset = Math.sin(i * 2.71) * 5.8;
     const x = rcX + offset;
-    const dist = Math.abs(offset);
+    const bedY = groundHeightAt(x, z);
+    const s = 0.68 + (i % 5) * 0.26;
+    const halfH = s * 0.72 * 0.56;
     stoneCoords.push({
       x,
-      y: dist > 4.2 ? -0.38 : -0.46,
+      y: bedY + halfH * 0.45,
       z,
-      s: 0.68 + (i % 5) * 0.26,
+      s,
     });
   }
 
@@ -775,10 +1197,51 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   riverStones.computeBoundingSphere();
   group.add(riverStones);
 
+  // Drifting stylized autumn & sakura leaves riding the river current
+  const leafCount = 96;
+  const leafGeo = new THREE.PlaneGeometry(0.24, 0.14);
+  leafGeo.rotateX(-Math.PI / 2);
+  const leafMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.65,
+    side: THREE.DoubleSide,
+  });
+  const floatingLeaves = new THREE.InstancedMesh(leafGeo, leafMat, leafCount);
+  floatingLeaves.userData.nonCollidable = true;
+  const leafMeta: Array<{ offset: number; zBase: number; speed: number; rot: number; phase: number }> = [];
+  const leafColors = [0xd95338, 0xe88d3a, 0xf2b5c8, 0xd4a438, 0xc7402a];
+  for (let i = 0; i < leafCount; i++) {
+    leafMeta.push({
+      offset: (Math.sin(i * 19.37) * 0.65) * 4.5,
+      zBase: -170 + (i / leafCount) * 340,
+      speed: 1.35 + (i % 5) * 0.22,
+      rot: i * 1.4,
+      phase: i * 0.87,
+    });
+    _color.setHex(leafColors[i % leafColors.length]);
+    floatingLeaves.setColorAt(i, _color);
+  }
+  if (floatingLeaves.instanceColor) floatingLeaves.instanceColor.needsUpdate = true;
+  floatingLeaves.computeBoundingSphere();
+  group.add(floatingLeaves);
+
   return {
     group,
     update: (elapsed: number) => {
       uTime.value = elapsed;
+      for (let i = 0; i < leafCount; i++) {
+        const m = leafMeta[i];
+        const span = 340;
+        const z = ((m.zBase + elapsed * m.speed + 170) % span) - 170;
+        const x = getRiverCenterX(z) + m.offset + Math.sin(elapsed * 0.9 + m.phase) * 0.45;
+        const y = -0.305 + Math.sin(elapsed * 2.2 + m.phase) * 0.014;
+        _vec3.set(x, y, z);
+        _quat.setFromEuler(_euler.set(0.05 * Math.sin(elapsed * 2 + m.phase), m.rot + elapsed * 0.35, 0.04 * Math.cos(elapsed * 1.7 + m.phase)));
+        _scale.setScalar(1.0);
+        _mat4.compose(_vec3, _quat, _scale);
+        floatingLeaves.setMatrixAt(i, _mat4);
+      }
+      floatingLeaves.instanceMatrix.needsUpdate = true;
     },
   };
 }
@@ -815,7 +1278,10 @@ function trimPathBetweenPlazas(
 /**
  * Weathered stone flagstone roads with granite edge curbing & carved Nepali stone lanterns.
  */
-export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanternsResult {
+export function createCurbedRoads(
+  textures: ProceduralTextureSet,
+  terrainMesh?: THREE.Mesh,
+): RoadAndLanternsResult {
   const group = new THREE.Group();
   const lanternLights: THREE.PointLight[] = [];
 
@@ -889,7 +1355,7 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
 
   const aprons = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 7.4, mat: roadMat },
-    ...LANDMARKS.filter((lm) => lm.id !== 'janaki-mandir').map((lm) => ({
+    ...LANDMARKS.filter((lm) => lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha').map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
       r: lm.id === 'boudhanath-stupa' ? 8.2 : lm.id === 'pumdikot-shiva' ? 7.6 : 7.0,
@@ -898,9 +1364,9 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   ];
 
   for (const ap of aprons) {
-    const y = groundHeightAt(ap.x, ap.z);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(ap.r, ap.r + 0.45, 0.14, 32), ap.mat);
-    pad.position.set(ap.x, y + 0.03, ap.z);
+    const y = sampleTerrainMeshHeight(terrainMesh, ap.x, ap.z);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(ap.r, ap.r + 0.45, 0.26, 32), ap.mat);
+    pad.position.set(ap.x, y - 0.03, ap.z);
     pad.receiveShadow = true;
     const rim = new THREE.Mesh(new THREE.TorusGeometry(ap.r, 0.16, 8, 36), curbMat);
     rim.rotation.x = Math.PI / 2;
@@ -918,7 +1384,7 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   for (const rawPts of ROAD_PATHS) {
     const pts = trimPathBetweenPlazas(rawPts, aprons);
     const curve = new THREE.CatmullRomCurve3(
-      pts.map(([x, z]) => new THREE.Vector3(x, groundHeightAt(x, z), z)),
+      pts.map(([x, z]) => new THREE.Vector3(x, sampleTerrainMeshHeight(terrainMesh, x, z), z)),
     );
     const len = curve.getLength();
     if (len < 1.5) continue;
@@ -968,8 +1434,11 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
           groundHeightAt(p.x, p.z),
           groundHeightAt(lx, lz),
           groundHeightAt(rxp, rzp),
-        ) + 0.016;
-      const skirtY = deckY - 0.22;
+          sampleTerrainMeshHeight(terrainMesh, p.x, p.z),
+          sampleTerrainMeshHeight(terrainMesh, lx, lz),
+          sampleTerrainMeshHeight(terrainMesh, rxp, rzp),
+        ) + 0.028;
+      const skirtY = deckY - 0.26;
 
       positions.push(
         slx, skirtY, slz,
@@ -1021,7 +1490,9 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
         const baseZ = side === -1 ? rm.lz : rm.rzp;
         const inChowk =
           baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
-        if (inChowk || rm.deckY <= -0.1) {
+        const inLumbini =
+          baseX > -26.5 && baseX < 10.5 && baseZ > 103.5 && baseZ < 140.5;
+        if (inChowk || inLumbini || rm.deckY <= -0.1) {
           prevRingStart = -1;
           continue;
         }
@@ -1140,11 +1611,16 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
   );
 
   lanternCoords.forEach(([lx, lz], idx) => {
-    const ly = groundHeightAt(lx, lz);
+    const ly = sampleTerrainMeshHeight(terrainMesh, lx, lz);
     const post = new THREE.Group();
     post.position.set(lx, ly, lz);
     post.userData.snapCategory = 'lantern';
+    post.userData.groundEmbed = 0.44;
+    post.userData.lockXZ = true;
 
+    const footing = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.48, 0.68), lanternStoneMat);
+    footing.position.y = -0.22;
+    footing.receiveShadow = true;
     const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.62), lanternStoneMat);
     plinth.position.y = 0.1;
     plinth.castShadow = true;
@@ -1154,6 +1630,7 @@ export function createCurbedRoads(textures: ProceduralTextureSet): RoadAndLanter
     const shaft = new THREE.Mesh(lanternShaftGeo, lanternStoneMat);
     shaft.position.y = 0.32;
     shaft.castShadow = true;
+    post.add(footing);
 
     const cageBase = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.46), lanternStoneMat);
     cageBase.position.y = 1.79;
@@ -1275,7 +1752,7 @@ function makeBotanicalCanopySprayGeo(
 ): THREE.BufferGeometry {
   const planes: THREE.BufferGeometry[] = [];
   for (const cl of clusters) {
-    for (let cross = 0; cross < 2; cross++) {
+    for (let cross = 0; cross < 3; cross++) {
       const g = new THREE.PlaneGeometry(cl.w, cl.h, 2, 3);
       const pos = g.attributes.position;
       for (let i = 0; i < pos.count; i++) {
@@ -1283,23 +1760,41 @@ function makeBotanicalCanopySprayGeo(
         const py = pos.getY(i);
         const nx = px / (cl.w * 0.5);
         const ny = py / (cl.h * 0.5);
-        const dome = (1 - (nx * nx * 0.55 + ny * ny * 0.55)) * cl.arch;
+        const dome = (1 - (nx * nx * 0.52 + ny * ny * 0.52)) * cl.arch;
         pos.setZ(i, dome);
       }
-      g.rotateX(cl.rx + (cross === 1 ? 0.28 : 0));
-      g.rotateY(cl.ry + cross * (Math.PI * 0.5));
+      g.rotateX(cl.rx + (cross === 1 ? 0.32 : cross === 2 ? -0.34 : 0));
+      g.rotateY(cl.ry + cross * (Math.PI / 3));
       g.rotateZ(cl.rz);
       g.translate(cl.x, cl.y, cl.z);
-      g.computeVertexNormals();
       planes.push(g);
     }
   }
-  return mergeStaticGeometries(planes);
+  const merged = mergeStaticGeometries(planes);
+  // Sculpted volumetric canopy normals (soft upward & outward spherical gradient so crowns read lush & sunlit)
+  const mPos = merged.attributes.position;
+  const mNorm = merged.attributes.normal;
+  let sumY = 0;
+  for (let i = 0; i < mPos.count; i++) sumY += mPos.getY(i);
+  const centerY = mPos.count > 0 ? sumY / mPos.count : 3.2;
+  for (let i = 0; i < mPos.count; i++) {
+    const px = mPos.getX(i);
+    const py = mPos.getY(i) - centerY;
+    const pz = mPos.getZ(i);
+    const sx = px * 0.65;
+    const sy = py * 0.72 + 0.85;
+    const sz = pz * 0.65;
+    const len = Math.hypot(sx, sy, sz) || 1;
+    mNorm.setXYZ(i, sx / len, sy / len, sz / len);
+  }
+  mNorm.needsUpdate = true;
+  return merged;
 }
 
 export function createInstancedFoliage(
   textures: ProceduralTextureSet,
-): THREE.Group {
+  terrainMesh?: THREE.Mesh,
+): AnimatedFoliageController {
   const group = new THREE.Group();
   const treeSpots = getWorldTreeSpots();
 
@@ -1309,6 +1804,70 @@ export function createInstancedFoliage(
     if (arr) arr.push(spot);
     else bySpecies.set(spot.type, [spot]);
   }
+
+  const uTreeTime = { value: 0 };
+  const uBumpPos = { value: new THREE.Vector3(0, -999, 0) };
+  const uBumpStrength = { value: 0 };
+
+  const applyTreeSwayShader = (
+    mat: THREE.MeshStandardMaterial | THREE.MeshDepthMaterial,
+    isDepth: boolean,
+  ) => {
+    mat.customProgramCacheKey = () => (isDepth ? 'tree-sway-depth-v1' : 'tree-sway-v1');
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTreeTime = uTreeTime;
+      shader.uniforms.uBumpPos = uBumpPos;
+      shader.uniforms.uBumpStrength = uBumpStrength;
+
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           uniform float uTreeTime;
+           uniform vec3 uBumpPos;
+           uniform float uBumpStrength;
+           varying float vCanopyHeight;`,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           vec4 instBase = vec4(0.0, 0.0, 0.0, 1.0);
+           #ifdef USE_INSTANCING
+             instBase = instanceMatrix * instBase;
+           #endif
+           float crownWeight = clamp((position.y - 1.2) / 3.4, 0.0, 1.0);
+           vCanopyHeight = crownWeight;
+           float breeze = sin(uTreeTime * 1.45 + instBase.x * 0.17 + instBase.z * 0.13 + position.y * 0.65);
+           float flutter = cos(uTreeTime * 3.4 + position.x * 2.1 + position.z * 1.9 + instBase.x) * 0.045;
+           transformed.x += (breeze * 0.11 + flutter) * crownWeight;
+           transformed.z += (breeze * 0.07 - flutter * 0.6) * crownWeight;
+
+           if (uBumpStrength > 0.001) {
+             float bDist = length(instBase.xz - uBumpPos.xz);
+             float bMask = 1.0 - smoothstep(0.5, 4.2, bDist);
+             float shake = sin(uTreeTime * 26.0) * uBumpStrength * bMask * crownWeight * 0.28;
+             transformed.x += shake;
+             transformed.z += cos(uTreeTime * 23.0) * uBumpStrength * bMask * crownWeight * 0.22;
+           }`,
+        );
+
+      if (!isDepth) {
+        shader.fragmentShader = shader.fragmentShader
+          .replace(
+            '#include <common>',
+            `#include <common>
+             varying float vCanopyHeight;`,
+          )
+          .replace(
+            '#include <color_fragment>',
+            `#include <color_fragment>
+             float crownGrad = mix(0.68, 1.22, smoothstep(0.0, 1.0, vCanopyHeight));
+             diffuseColor.rgb *= crownGrad;
+             diffuseColor.rgb += vec3(0.04, 0.03, 0.01) * vCanopyHeight;`,
+          );
+      }
+    };
+  };
 
   const barkMat = new THREE.MeshStandardMaterial({
     map: textures.barkMap,
@@ -1326,8 +1885,8 @@ export function createInstancedFoliage(
     roughness: 0.82,
   });
 
-  const makeFoliageMat = (map: THREE.Texture, roughness = 0.78) =>
-    new THREE.MeshStandardMaterial({
+  const makeFoliageMat = (map: THREE.Texture, roughness = 0.74) => {
+    const m = new THREE.MeshStandardMaterial({
       map,
       alphaTest: 0.34,
       color: 0xffffff,
@@ -1335,17 +1894,23 @@ export function createInstancedFoliage(
       metalness: 0.01,
       side: THREE.DoubleSide,
     });
+    applyTreeSwayShader(m, false);
+    return m;
+  };
 
-  const makeFoliageDepthMat = (map: THREE.Texture) =>
-    new THREE.MeshDepthMaterial({
+  const makeFoliageDepthMat = (map: THREE.Texture) => {
+    const dm = new THREE.MeshDepthMaterial({
       depthPacking: THREE.RGBADepthPacking,
       map,
       alphaTest: 0.34,
     });
+    applyTreeSwayShader(dm, true);
+    return dm;
+  };
 
   // Shared branching trunks & rich organic alpha-cutout canopy sprays across 11 real-world species
   const wideGnarledTrunkGeo = makeBranchSkeletonGeo([
-    { pts: [[0, 0, 0], [0.06, 1.05, 0.03], [-0.04, 2.05, -0.02]], rStart: 0.25, rEnd: 0.14 },
+    { pts: [[0, -0.78, 0], [0.02, 0.1, 0.01], [0.06, 1.05, 0.03], [-0.04, 2.05, -0.02]], rStart: 0.27, rEnd: 0.14 },
     { pts: [[-0.02, 1.75, 0], [-0.62, 2.38, 0.38], [-1.24, 2.75, 0.65]], rStart: 0.12, rEnd: 0.045 },
     { pts: [[0.02, 1.82, -0.02], [0.68, 2.45, -0.35], [1.28, 2.84, -0.62]], rStart: 0.12, rEnd: 0.045 },
     { pts: [[-0.03, 1.9, 0.02], [-0.42, 2.52, -0.68], [-0.76, 2.95, -1.16]], rStart: 0.11, rEnd: 0.04 },
@@ -1353,7 +1918,7 @@ export function createInstancedFoliage(
   ]);
 
   const tallForkedTrunkGeo = makeBranchSkeletonGeo([
-    { pts: [[0, 0, 0], [0.04, 1.35, -0.03], [-0.02, 2.7, 0.04], [0.03, 3.6, 0]], rStart: 0.24, rEnd: 0.08 },
+    { pts: [[0, -0.78, 0], [0.01, 0.1, 0], [0.04, 1.35, -0.03], [-0.02, 2.7, 0.04], [0.03, 3.6, 0]], rStart: 0.26, rEnd: 0.08 },
     { pts: [[0, 2.2, 0], [-0.72, 2.92, 0.34], [-1.18, 3.45, 0.56]], rStart: 0.11, rEnd: 0.04 },
     { pts: [[0, 2.4, 0], [0.75, 3.1, -0.28], [1.22, 3.62, -0.52]], rStart: 0.11, rEnd: 0.04 },
     { pts: [[0, 2.6, 0], [-0.36, 3.3, -0.72], [-0.6, 3.85, -1.05]], rStart: 0.095, rEnd: 0.035 },
@@ -1361,15 +1926,15 @@ export function createInstancedFoliage(
   ]);
 
   const birchMultiStemGeo = makeBranchSkeletonGeo([
-    { pts: [[-0.12, 0, 0.05], [-0.32, 1.6, 0.18], [-0.52, 3.45, 0.28]], rStart: 0.12, rEnd: 0.038 },
-    { pts: [[0.14, 0, -0.06], [0.36, 1.75, -0.16], [0.56, 3.7, -0.26]], rStart: 0.12, rEnd: 0.038 },
-    { pts: [[0.0, 0, 0.0], [0.05, 1.9, 0.04], [-0.08, 3.95, -0.06]], rStart: 0.14, rEnd: 0.04 },
+    { pts: [[-0.12, -0.78, 0.05], [-0.14, 0.1, 0.06], [-0.32, 1.6, 0.18], [-0.52, 3.45, 0.28]], rStart: 0.12, rEnd: 0.038 },
+    { pts: [[0.14, -0.78, -0.06], [0.16, 0.1, -0.07], [0.36, 1.75, -0.16], [0.56, 3.7, -0.26]], rStart: 0.12, rEnd: 0.038 },
+    { pts: [[0.0, -0.78, 0.0], [0.01, 0.1, 0.01], [0.05, 1.9, 0.04], [-0.08, 3.95, -0.06]], rStart: 0.14, rEnd: 0.04 },
     { pts: [[-0.25, 2.1, 0.12], [-0.78, 2.9, 0.48]], rStart: 0.05, rEnd: 0.02 },
     { pts: [[0.28, 2.3, -0.1], [0.85, 3.15, -0.45]], rStart: 0.05, rEnd: 0.02 },
   ]);
 
   const coniferTrunkGeo = makeBranchSkeletonGeo([
-    { pts: [[0, 0, 0], [0.03, 2.1, -0.02], [-0.02, 4.3, 0.02], [0, 5.5, 0]], rStart: 0.24, rEnd: 0.04 },
+    { pts: [[0, -0.78, 0], [0.01, 0.1, 0], [0.03, 2.1, -0.02], [-0.02, 4.3, 0.02], [0, 5.5, 0]], rStart: 0.26, rEnd: 0.04 },
     { pts: [[0, 1.85, 0], [-0.85, 1.72, 0.25]], rStart: 0.065, rEnd: 0.02 },
     { pts: [[0, 2.15, 0], [0.82, 2.02, -0.25]], rStart: 0.065, rEnd: 0.02 },
     { pts: [[0, 2.65, 0], [0.18, 2.52, 0.72]], rStart: 0.055, rEnd: 0.02 },
@@ -1529,11 +2094,18 @@ export function createInstancedFoliage(
     mCanopy.customDepthMaterial = depthMat;
 
     spots.forEach((p, idx) => {
-      const y = groundHeightAt(p.x, p.z);
-      _vec3.set(p.x, y - 0.06, p.z);
+      const rRim = 0.48 * p.scale;
+      const y = Math.min(
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z),
+        groundHeightAt(p.x, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x + rRim, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x - rRim, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z + rRim),
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z - rRim),
+      );
+      _vec3.set(p.x, y - 0.12, p.z);
       _quat.setFromEuler(_euler.set(0, idx * 1.47 + spIdx * 0.7, 0));
-      const hStretch = 0.92 + ((idx * 11) % 24) / 100;
-      _scale.set(p.scale, p.scale * hStretch, p.scale);
+      _scale.setScalar(p.scale);
       _mat4.compose(_vec3, _quat, _scale);
       mTrunks.setMatrixAt(idx, _mat4);
       mCanopy.setMatrixAt(idx, _mat4);
@@ -1555,7 +2127,8 @@ export function createInstancedFoliage(
   const palms = bySpecies.get('palm') ?? [];
   if (palms.length > 0) {
     const palmCurvePts = [
-      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -0.78, 0),
+      new THREE.Vector3(0.02, 0.1, 0),
       new THREE.Vector3(0.14, 1.45, 0.06),
       new THREE.Vector3(0.32, 3.05, 0.14),
       new THREE.Vector3(0.4, 4.65, 0.2),
@@ -1603,8 +2176,16 @@ export function createInstancedFoliage(
     mPalmCrowns.customDepthMaterial = makeFoliageDepthMat(textures.palmFrondMap);
 
     palms.forEach((p, idx) => {
-      const y = groundHeightAt(p.x, p.z);
-      _vec3.set(p.x, y - 0.05, p.z);
+      const rRim = 0.45 * p.scale;
+      const y = Math.min(
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z),
+        groundHeightAt(p.x, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x + rRim, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x - rRim, p.z),
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z + rRim),
+        sampleTerrainMeshHeight(terrainMesh, p.x, p.z - rRim),
+      );
+      _vec3.set(p.x, y - 0.12, p.z);
       _quat.setFromEuler(_euler.set(0, idx * 1.1, 0));
       _scale.setScalar(p.scale);
       _mat4.compose(_vec3, _quat, _scale);
@@ -1650,8 +2231,15 @@ export function createInstancedFoliage(
   rocks.receiveShadow = true;
 
   rockSpots.forEach((rp, i) => {
-    const ry = groundHeightAt(rp.x, rp.z);
-    _vec3.set(rp.x, ry + 0.08, rp.z);
+    const meshY = sampleTerrainMeshHeight(terrainMesh, rp.x, rp.z);
+    const minRimY = Math.min(
+      sampleTerrainMeshHeight(terrainMesh, rp.x + 0.55, rp.z),
+      sampleTerrainMeshHeight(terrainMesh, rp.x - 0.55, rp.z),
+      sampleTerrainMeshHeight(terrainMesh, rp.x, rp.z + 0.55),
+      sampleTerrainMeshHeight(terrainMesh, rp.x, rp.z - 0.55),
+    );
+    const ry = Math.min(meshY, minRimY) - 0.14;
+    _vec3.set(rp.x, ry, rp.z);
     _quat.setFromEuler(_euler.set(rp.idx * 0.5, rp.idx * 1.2, 0));
     _scale.set(0.7 + (rp.idx % 4) * 0.22, 0.45 + (rp.idx % 3) * 0.16, 0.7 + ((rp.idx + 1) % 4) * 0.2);
     _mat4.compose(_vec3, _quat, _scale);
@@ -1665,7 +2253,14 @@ export function createInstancedFoliage(
   rocks.computeBoundingSphere();
   group.add(rocks);
 
-  return group;
+  return {
+    group,
+    update: (elapsed: number, bumpPos?: THREE.Vector3, bumpStrength = 0) => {
+      uTreeTime.value = elapsed;
+      if (bumpPos) uBumpPos.value.copy(bumpPos);
+      uBumpStrength.value = bumpStrength;
+    },
+  };
 }
 
 /**
@@ -1761,7 +2356,7 @@ export function createHimalayanGompaAndLodge(textures: ProceduralTextureSet): TH
   const lodge = new THREE.Group();
   const lx = -98;
   const lz = -176;
-  lodge.position.set(lx, groundHeightAt(lx, lz) + 0.18, lz);
+  lodge.position.set(lx, groundHeightAt(lx, lz), lz);
   lodge.rotation.y = 0.18;
   lodge.scale.setScalar(2.15);
 
@@ -1774,8 +2369,8 @@ export function createHimalayanGompaAndLodge(textures: ProceduralTextureSet): TH
   const blueRoofMat = new THREE.MeshStandardMaterial({ color: 0x24597c, roughness: 0.62 });
   const redRoofMat = new THREE.MeshStandardMaterial({ color: 0x8c2e28, roughness: 0.64 });
 
-  const foundation = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.55, 5.0), cragMat);
-  foundation.position.y = 0.275;
+  const foundation = new THREE.Mesh(new THREE.BoxGeometry(7.6, 1.0, 5.0), cragMat);
+  foundation.position.y = 0.05;
   foundation.receiveShadow = true;
   lodge.add(foundation);
 
@@ -1895,15 +2490,15 @@ export function createGlacialLakeAndWaterfall(
   splashRing.userData.nonCollidable = true;
   group.add(fallRibbon1, fallRibbon2, splashRing);
 
-  // 3. Tal Barahi Island Mini-Pagoda at center-west of lake
+  // 3. Tal Barahi Island Mini-Pagoda at center-west of lake (bedrock extends down to lakebed)
   const islet = new THREE.Group();
   islet.position.set(-1.5, GLACIAL_LAKE.waterLevel, -1.2);
   islet.scale.setScalar(2.35);
   const islandStone = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.55, 2.05, 0.58, 12),
+    new THREE.CylinderGeometry(1.55, 2.35, 1.85, 12),
     cliffMat,
   );
-  islandStone.position.y = 0.08;
+  islandStone.position.y = -0.555;
   const brickMat = new THREE.MeshStandardMaterial({
     map: textures.brickMap,
     normalMap: textures.brickNormal,
@@ -1979,12 +2574,23 @@ export function createGlacialLakeAndWaterfall(
     });
   });
 
-  // Wooden mooring dock jetty at south-east shore
+  // Wooden mooring dock jetty at south-east shore with submerged timber pilings anchored into lakebed
+  const jettyGroup = new THREE.Group();
+  jettyGroup.position.set(14.0, GLACIAL_LAKE.waterLevel + 0.3, 15.2);
+  jettyGroup.rotation.y = -0.68;
   const jetty = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.22, 4.4), oarMat);
-  jetty.position.set(14.0, GLACIAL_LAKE.waterLevel + 0.3, 15.2);
-  jetty.rotation.y = -0.68;
   jetty.castShadow = true;
-  group.add(jetty);
+  jetty.receiveShadow = true;
+  jettyGroup.add(jetty);
+  for (const px of [-0.95, 0.95]) {
+    for (const pz of [-1.75, 1.75]) {
+      const piling = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 2.35, 8), oarMat);
+      piling.position.set(px, -1.05, pz);
+      piling.castShadow = true;
+      jettyGroup.add(piling);
+    }
+  }
+  group.add(jettyGroup);
 
   return {
     group,

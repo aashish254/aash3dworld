@@ -22,22 +22,40 @@ export interface LandmarkBuildResult {
   cameraOccluders?: THREE.Object3D[];
 }
 
+export type PropKind = 'crate' | 'pot' | 'case' | 'cairn' | 'block' | 'barrel' | 'ball';
+export type PropShape = 'box' | 'cylinder' | 'sphere';
+
 export interface InteractiveProp {
   mesh: THREE.Group;
   visualGroup: THREE.Group;
+  hitMeshes: THREE.Object3D[];
+  kind: PropKind;
+  shape: PropShape;
+  mass: number;
+  restitution: number;
+  friction: number;
+  buoyancy: number;
   x: number;
   y: number;
   z: number;
   vx: number;
   vy: number;
   vz: number;
+  quat: THREE.Quaternion;
+  angVel: THREE.Vector3;
   rotX: number;
   rotZ: number;
   rotVelX: number;
   rotVelZ: number;
   radius: number;
+  halfExtentX: number;
   halfHeight: number;
+  halfExtentZ: number;
   halfWidth: number;
+  stackLayer: number;
+  baseOffsetY: number;
+  inWater: boolean;
+  splashCooldown: number;
 }
 
 function makeShadowDisc(radius: number, shadowTex: THREE.Texture): THREE.Mesh {
@@ -74,11 +92,11 @@ function createSignpost(
     metalness: 0.78,
   });
 
-  const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 1.5, 10), postMat);
-  pL.position.set(-0.92, 0.75, 0);
+  const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 1.74, 10), postMat);
+  pL.position.set(-0.92, 0.63, 0);
   pL.castShadow = true;
-  const pR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 1.5, 10), postMat);
-  pR.position.set(0.92, 0.75, 0);
+  const pR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 1.74, 10), postMat);
+  pR.position.set(0.92, 0.63, 0);
   pR.castShadow = true;
 
   const board = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.9, 0.12), metalMat);
@@ -128,9 +146,9 @@ export function create3DNameSign(textures: ProceduralTextureSet): THREE.Group {
     metalness: 0.72,
   });
 
-  // Stepped masonry foundation apron
-  const base = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.24, 1.15), stoneMat);
-  base.position.y = 0.12;
+  // Stepped masonry foundation apron extended below grade so corners never overhang slopes
+  const base = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.56, 1.15), stoneMat);
+  base.position.y = -0.04;
   base.receiveShadow = true;
   base.castShadow = true;
   group.add(base);
@@ -204,7 +222,7 @@ export function createNoticeBoardKiosk(textures: ProceduralTextureSet): THREE.Gr
   });
 
   const pad = new THREE.Mesh(
-    new THREE.BoxGeometry(2.9, 0.16, 0.95),
+    new THREE.BoxGeometry(2.9, 0.44, 0.95),
     new THREE.MeshStandardMaterial({
       map: textures.cobbleMap,
       normalMap: textures.cobbleNormal,
@@ -212,7 +230,7 @@ export function createNoticeBoardKiosk(textures: ProceduralTextureSet): THREE.Gr
       roughness: 0.88,
     }),
   );
-  pad.position.y = 0.08;
+  pad.position.y = -0.06;
   pad.receiveShadow = true;
   kiosk.add(pad);
 
@@ -1519,342 +1537,7 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
 }
 
 export { createJanakiMandir } from './janakiMandir';
-
-
-/**
- * 1e. Lumbini Peace Garden & Great Seated Buddha (image_66bb3ee4, image_acbad04d)
- *     - Veined matte marble ceremonial walkway flanked by stone lanterns & iron railings
- *     - Multi-petal golden lotus throne atop carved stone terrace
- *     - Serene sculpted meditative basalt Buddha with monastic robe folds, Dhyana Mudra & Ushnisha
- */
-export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBuildResult {
-  const group = new THREE.Group();
-  const beaconLights: THREE.PointLight[] = [];
-  const animatedNodes: THREE.Object3D[] = [];
-
-  const marbleMat = new THREE.MeshPhysicalMaterial({
-    map: textures.marbleWalkMap,
-    normalMap: textures.marbleWalkNormal,
-    normalScale: new THREE.Vector2(0.55, 0.55),
-    roughnessMap: textures.marbleWalkRough,
-    aoMap: textures.marbleWalkAo,
-    aoMapIntensity: 0.84,
-    color: 0xf6f2ea,
-    roughness: 1.0,
-    metalness: 0.02,
-    clearcoat: 0.18,
-    clearcoatRoughness: 0.4,
-    ior: 1.48,
-  });
-  const sandstoneMat = new THREE.MeshStandardMaterial({
-    map: textures.sandstoneMap,
-    normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.72, 0.72),
-    roughnessMap: textures.sandstoneRough,
-    aoMap: textures.sandstoneAo,
-    aoMapIntensity: 0.82,
-    color: 0xc4baaa,
-    roughness: 1.0,
-  });
-  // High-fidelity photogrammetry basalt stone with carved chisel micro-relief
-  const buddhaStoneMat = new THREE.MeshStandardMaterial({
-    map: textures.basaltCarvedMap,
-    normalMap: textures.basaltCarvedNormal,
-    normalScale: new THREE.Vector2(0.88, 0.88),
-    roughnessMap: textures.basaltCarvedRough,
-    aoMap: textures.basaltCarvedAo,
-    aoMapIntensity: 0.84,
-    color: 0x8d939c,
-    roughness: 0.62,
-    metalness: 0.08,
-  });
-  const goldMat = new THREE.MeshStandardMaterial({
-    map: textures.agedBronzeMap,
-    normalMap: textures.agedBronzeNormal,
-    normalScale: new THREE.Vector2(0.72, 0.72),
-    roughnessMap: textures.agedBronzeRough,
-    color: 0xe4b24e,
-    roughness: 0.28,
-    metalness: 0.86,
-  });
-  const lanternGlowMat = new THREE.MeshStandardMaterial({
-    color: 0xffdf99,
-    emissive: 0xe68c1e,
-    emissiveIntensity: 2.5,
-  });
-
-  // Main Sanctuary Terrace + Forward Veined Marble Walkway
-  const walkway = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, 6.6), marbleMat);
-  walkway.position.set(0, 0.11, 1.4);
-  walkway.receiveShadow = true;
-  group.add(walkway);
-
-  const altarBase = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.65, 4.4), sandstoneMat);
-  altarBase.position.set(0, 0.325, -1.65);
-  altarBase.receiveShadow = true;
-  altarBase.castShadow = true;
-  group.add(altarBase);
-
-  // Flanking stone garden lamps along Lumbini Peace Walk
-  for (const lz of [0.2, 2.2, 4.0]) {
-    for (const side of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.85, 0.28), sandstoneMat);
-      post.position.set(side * 1.82, 0.425, lz);
-      post.castShadow = true;
-      const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 0.2), lanternGlowMat);
-      bulb.position.set(side * 1.82, 0.96, lz);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.18, 4), sandstoneMat);
-      cap.rotation.y = Math.PI / 4;
-      cap.position.set(side * 1.82, 1.15, lz);
-      group.add(post, bulb, cap);
-    }
-  }
-
-  // Sculpted Double-Tier Carved Lotus Throne Pedestal (ExtrudeGeometry petals replace cone spikes)
-  const lotusCore = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.75, 1.98, 0.62, 28),
-    new THREE.MeshStandardMaterial({
-      map: textures.basaltCarvedMap,
-      normalMap: textures.basaltCarvedNormal,
-      color: 0x862b23,
-      roughness: 0.68,
-    }),
-  );
-  lotusCore.position.set(0, 0.96, -1.65);
-  lotusCore.castShadow = true;
-  group.add(lotusCore);
-
-  const petalShape = new THREE.Shape();
-  petalShape.moveTo(0, 0);
-  petalShape.bezierCurveTo(0.28, 0.1, 0.34, 0.44, 0, 0.66);
-  petalShape.bezierCurveTo(-0.34, 0.44, -0.28, 0.1, 0, 0);
-  const sculptedPetalGeo = new THREE.ExtrudeGeometry(petalShape, {
-    depth: 0.075,
-    bevelEnabled: true,
-    bevelThickness: 0.032,
-    bevelSize: 0.028,
-    bevelSegments: 3,
-    curveSegments: 10,
-  });
-  sculptedPetalGeo.center();
-
-  for (let tier = 0; tier < 2; tier++) {
-    const count = 16;
-    const rad = tier === 0 ? 1.88 : 1.72;
-    const py = tier === 0 ? 0.92 : 1.14;
-    const tilt = tier === 0 ? 0.85 : 0.42;
-    for (let p = 0; p < count; p++) {
-      const a = ((p + tier * 0.5) / count) * Math.PI * 2;
-      const petalPivot = new THREE.Group();
-      petalPivot.position.set(Math.sin(a) * rad, py, -1.65 + Math.cos(a) * rad);
-      petalPivot.rotation.y = a;
-      const petal = new THREE.Mesh(sculptedPetalGeo, goldMat);
-      petal.rotation.x = tilt;
-      petal.castShadow = true;
-      petalPivot.add(petal);
-      group.add(petalPivot);
-    }
-  }
-
-  // Monumental Photogrammetry-Style Meditative Seated Buddha (Dhyana Mudra) + Dharma Halo Arch
-  const buddha = new THREE.Group();
-  buddha.position.set(0, 1.28, -1.65);
-
-  const basePts: THREE.Vector2[] = [
-    new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(1.48, 0.0),
-    new THREE.Vector2(1.42, 0.24),
-    new THREE.Vector2(1.16, 0.48),
-    new THREE.Vector2(0.78, 0.62),
-  ];
-  const crossedBase = new THREE.Mesh(new THREE.LatheGeometry(basePts, 32), buddhaStoneMat);
-  crossedBase.scale.set(1.18, 1, 0.78);
-  crossedBase.castShadow = true;
-
-  for (const side of [-1, 1]) {
-    const legFoldCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 1.24, 0.24, 0.14),
-      new THREE.Vector3(side * 0.88, 0.28, 0.54),
-      new THREE.Vector3(side * 0.18, 0.34, 0.58),
-    ]);
-    const legFold = new THREE.Mesh(new THREE.TubeGeometry(legFoldCurve, 20, 0.24, 16, false), buddhaStoneMat);
-    legFold.castShadow = true;
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 16), buddhaStoneMat);
-    knee.position.set(side * 1.05, 0.28, 0.16);
-    knee.scale.set(1.22, 0.72, 1.02);
-    buddha.add(legFold, knee);
-  }
-
-  const buddhaTorsoPts: THREE.Vector2[] = [
-    new THREE.Vector2(0.0, 0.48),
-    new THREE.Vector2(0.84, 0.56),
-    new THREE.Vector2(0.72, 0.96),
-    new THREE.Vector2(0.68, 1.38),
-    new THREE.Vector2(0.78, 1.84),
-    new THREE.Vector2(0.66, 2.08),
-    new THREE.Vector2(0.28, 2.22),
-    new THREE.Vector2(0.21, 2.40),
-  ];
-  const torso = new THREE.Mesh(new THREE.LatheGeometry(buddhaTorsoPts, 32), buddhaStoneMat);
-  torso.scale.set(1.14, 1, 0.72);
-  torso.castShadow = true;
-
-  // Flowing Sanghati monastic robe sash & layered chest drapery folds
-  for (const rOff of [0, 0.11, 0.22, 0.33]) {
-    const foldCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.68 + rOff * 0.28, 2.04 - rOff * 0.28, 0.18),
-      new THREE.Vector3(-0.18, 1.68 - rOff * 0.52, 0.55),
-      new THREE.Vector3(0.46, 1.40 - rOff * 0.42, 0.46),
-      new THREE.Vector3(0.72, 1.18 - rOff * 0.28, 0.08),
-    ]);
-    const fold = new THREE.Mesh(new THREE.TubeGeometry(foldCurve, 22, 0.048, 12, false), buddhaStoneMat);
-    buddha.add(fold);
-  }
-
-  // Smooth curved meditative arms descending into cupped Dhyana Mudra hands in lap
-  for (const side of [-1, 1]) {
-    const armCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 0.72, 1.98, 0.04),
-      new THREE.Vector3(side * 0.88, 1.36, 0.14),
-      new THREE.Vector3(side * 0.68, 0.88, 0.42),
-      new THREE.Vector3(side * 0.26, 0.68, 0.58),
-    ]);
-    const arm = new THREE.Mesh(new THREE.TubeGeometry(armCurve, 22, 0.165, 14, false), buddhaStoneMat);
-    arm.castShadow = true;
-    const sleeveFold = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), buddhaStoneMat);
-    sleeveFold.position.set(side * 0.50, 0.78, 0.50);
-    sleeveFold.rotation.y = side * 0.6;
-    buddha.add(arm, sleeveFold);
-  }
-
-  // Cupped Dhyana Mudra Palms & Joined Thumbs
-  const lowerPalm = new THREE.Mesh(new THREE.SphereGeometry(0.24, 18, 14), buddhaStoneMat);
-  lowerPalm.scale.set(1.45, 0.32, 0.92);
-  lowerPalm.position.set(0, 0.62, 0.60);
-  const upperPalm = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), buddhaStoneMat);
-  upperPalm.scale.set(1.32, 0.28, 0.84);
-  upperPalm.position.set(0, 0.69, 0.58);
-  for (const side of [-1, 1]) {
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.036, 0.14, 6, 10), buddhaStoneMat);
-    thumb.rotation.z = side * 1.1;
-    thumb.rotation.x = 0.25;
-    thumb.position.set(side * 0.10, 0.77, 0.60);
-    buddha.add(thumb);
-  }
-
-  // Serene sculpted head with brow arches, half-closed eyelids, nose bridge, lips, 4-tier snail curls & Ushnisha
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 28, 24), buddhaStoneMat);
-  head.position.y = 2.66;
-  head.scale.set(0.92, 1.08, 0.96);
-  head.castShadow = true;
-  const nose = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.115, 6, 10), buddhaStoneMat);
-  nose.rotation.x = -0.22;
-  nose.position.set(0, 2.66, 0.42);
-  const lips = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.085, 6, 10), buddhaStoneMat);
-  lips.rotation.z = Math.PI / 2;
-  lips.position.set(0, 2.51, 0.415);
-
-  for (const side of [-1, 1]) {
-    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.11, 4, 8), buddhaStoneMat);
-    brow.rotation.z = Math.PI / 2 - side * 0.1;
-    brow.position.set(side * 0.13, 2.75, 0.39);
-    const eyelid = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.075, 4, 8), buddhaStoneMat);
-    eyelid.rotation.z = Math.PI / 2;
-    eyelid.position.set(side * 0.128, 2.70, 0.395);
-    buddha.add(brow, eyelid);
-  }
-
-  const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 16), buddhaStoneMat);
-  ushnisha.position.y = 3.16;
-  const crownGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.078, 1), goldMat);
-  crownGem.position.y = 3.38;
-  // 4 concentric snail-curl hair lock tiers
-  const curlGeo = new THREE.SphereGeometry(0.052, 8, 8);
-  const curlRows: Array<[number, number, number]> = [
-    [16, 0.40, 2.84],
-    [14, 0.36, 2.95],
-    [10, 0.27, 3.06],
-    [7, 0.16, 3.22],
-  ];
-  curlRows.forEach(([count, rr, ry], rIdx) => {
-    for (let c = 0; c < count; c++) {
-      const a = (c / count) * Math.PI * 2 + rIdx * 0.25;
-      const curl = new THREE.Mesh(curlGeo, buddhaStoneMat);
-      curl.position.set(Math.sin(a) * rr * 0.9, ry, Math.cos(a) * rr * 0.92);
-      buddha.add(curl);
-    }
-  });
-
-  // Sculpted rounded elongated ears & lobes
-  for (const side of [-1, 1]) {
-    const earCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 0.41, 2.74, 0.0),
-      new THREE.Vector3(side * 0.45, 2.54, 0.01),
-      new THREE.Vector3(side * 0.42, 2.34, 0.03),
-    ]);
-    const earLoop = new THREE.Mesh(new THREE.TubeGeometry(earCurve, 14, 0.048, 10, false), buddhaStoneMat);
-    const earLobe = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 8), buddhaStoneMat);
-    earLobe.position.set(side * 0.42, 2.33, 0.03);
-    buddha.add(earLoop, earLobe);
-  }
-  const urna = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), goldMat);
-  urna.position.set(0, 2.76, 0.43);
-
-  // Carved Filigree Bronze Dharma Halo with radial spokes & outer lotus-flame beads
-  const haloOuter = new THREE.Mesh(new THREE.TorusGeometry(1.22, 0.065, 12, 40), goldMat);
-  haloOuter.position.set(0, 2.68, -0.58);
-  const haloInner = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.042, 12, 36), goldMat);
-  haloInner.position.set(0, 2.68, -0.58);
-  const spokeGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.72, 6);
-  const flameBeadGeo = new THREE.SphereGeometry(0.042, 8, 8);
-  for (let s = 0; s < 12; s++) {
-    const sa = (s / 12) * Math.PI * 2;
-    const spoke = new THREE.Mesh(spokeGeo, goldMat);
-    spoke.position.set(Math.cos(sa) * 0.84, 2.68 + Math.sin(sa) * 0.84, -0.58);
-    spoke.rotation.z = sa - Math.PI / 2;
-    const bead = new THREE.Mesh(flameBeadGeo, goldMat);
-    bead.position.set(Math.cos(sa) * 1.29, 2.68 + Math.sin(sa) * 1.29, -0.58);
-    buddha.add(spoke, bead);
-  }
-
-  buddha.add(
-    crossedBase,
-    torso,
-    lowerPalm,
-    upperPalm,
-    head,
-    nose,
-    lips,
-    ushnisha,
-    crownGem,
-    urna,
-    haloOuter,
-    haloInner,
-  );
-  group.add(buddha);
-
-  const sign = createSignpost('LUMBINI SANCTUARY', 'Birthplace of Buddha · Peace', '#10b981', textures);
-  sign.position.set(2.95, 0, 3.8);
-  sign.rotation.y = -0.32;
-  group.add(sign);
-
-  const warmLight = new THREE.PointLight(0xffe0a3, 1.9, 18, 1.6);
-  warmLight.position.set(0, 3.6, 0.8);
-  group.add(warmLight);
-  beaconLights.push(warmLight);
-
-  group.add(makeShadowDisc(5.6, textures.contactShadowMap));
-
-  const hitMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(7.0, 6.2, 9.2),
-    new THREE.MeshBasicMaterial({ visible: false }),
-  );
-  hitMesh.position.set(0, 2.8, -0.5);
-  hitMesh.layers.set(1);
-  group.add(hitMesh);
-
-  return { group, hitMesh, beaconLights, animatedNodes };
-}
+export { createLumbiniBuddha } from './lumbiniTemple';
 
 /**
  * 2. VIT Vellore Clock Tower: Authentic Indo-Saracenic Red-Brick & Chunar Sandstone
@@ -2559,8 +2242,8 @@ export function createSuspensionBridge(textures: ProceduralTextureSet): THREE.Gr
 
   for (const bx of [minX - 0.35, maxX + 0.35]) {
     const anchorSign = bx < (minX + maxX) / 2 ? -1 : 1;
-    const anchorBlock = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.35, halfWidth * 2 + 1.1), stoneMat);
-    anchorBlock.position.set(bx + anchorSign * 0.55, 0.22, centerZ);
+    const anchorBlock = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.85, halfWidth * 2 + 1.1), stoneMat);
+    anchorBlock.position.set(bx + anchorSign * 0.55, -0.03, centerZ);
     anchorBlock.receiveShadow = true;
     anchorBlock.castShadow = true;
     bridge.add(anchorBlock);
@@ -2675,8 +2358,8 @@ export function createPrayerFlagLine(
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x4b3826, roughness: 0.86 });
   for (const p of [start, end]) {
     const y = groundHeightAt(p.x, p.z);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, p.y - y + 0.4, 8), poleMat);
-    pole.position.set(p.x, (p.y + y) / 2, p.z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, p.y - y + 0.65, 8), poleMat);
+    pole.position.set(p.x, (p.y + y) / 2 - 0.125, p.z);
     pole.castShadow = true;
     group.add(pole);
   }
@@ -2745,9 +2428,10 @@ export function createCustomWaypointFlag(colorHex: string): THREE.Group {
 }
 
 /**
- * Interactive real-world expedition props:
+ * Interactive real-world expedition & playground props:
  * Weathered stenciled timber shipping crates, terracotta Gagri water vessels,
- * anodized aluminum lab cases, and stacked stone trail cairns.
+ * anodized aluminum lab cases, stacked stone trail cairns, stacked architectural blocks,
+ * buoyant banded river barrels, and high-bounce expedition balls.
  */
 export function createInteractiveProps(textures: ProceduralTextureSet): InteractiveProp[] {
   const props: InteractiveProp[] = [];
@@ -2760,8 +2444,8 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
   const potMat = new THREE.MeshStandardMaterial({
     normalMap: textures.brickNormal,
     normalScale: new THREE.Vector2(0.45, 0.45),
-    color: 0x7f442d,
-    roughness: 0.86,
+    color: 0x8c4a30,
+    roughness: 0.84,
     metalness: 0.03,
   });
   const caseMat = new THREE.MeshStandardMaterial({
@@ -2779,14 +2463,84 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
     color: 0x9b9589,
     roughness: 1.0,
   });
+  const blockLightMat = new THREE.MeshStandardMaterial({
+    color: 0xf4ede2,
+    normalMap: textures.sandstoneNormal,
+    normalScale: new THREE.Vector2(0.28, 0.28),
+    roughness: 0.66,
+    metalness: 0.04,
+  });
+  const blockWarmMat = new THREE.MeshStandardMaterial({
+    color: 0xe6886c,
+    normalMap: textures.sandstoneNormal,
+    normalScale: new THREE.Vector2(0.28, 0.28),
+    roughness: 0.64,
+    metalness: 0.04,
+  });
+  const barrelWoodMat = new THREE.MeshStandardMaterial({
+    map: textures.woodMap,
+    normalMap: textures.woodNormal,
+    color: 0xa67346,
+    roughness: 0.8,
+  });
+  const barrelBandMat = new THREE.MeshStandardMaterial({
+    color: 0x2b3038,
+    roughness: 0.42,
+    metalness: 0.78,
+  });
+  const ballMainMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    roughness: 0.38,
+    metalness: 0.05,
+  });
+  const ballStripeMat = new THREE.MeshStandardMaterial({
+    color: 0xfef3c7,
+    roughness: 0.42,
+    metalness: 0.05,
+  });
 
-  const placements: Array<{ x: number; z: number; kind: 'crate' | 'pot' | 'case' | 'cairn' }> = [
-    { x: -4.2, z: 4.0, kind: 'crate' },
-    { x: -3.4, z: 3.1, kind: 'crate' },
-    { x: -4.8, z: 3.2, kind: 'crate' },
+  interface PropPlacement {
+    x: number;
+    z: number;
+    kind: PropKind;
+    stackLayer?: number;
+    baseOffsetY?: number;
+    yaw?: number;
+    variant?: number;
+  }
+
+  const blockH = 0.56;
+  const crateH = 0.7;
+
+  const placements: PropPlacement[] = [
+    // Spawn meadow crate stack & expedition toys
+    { x: -4.2, z: 4.0, kind: 'crate', stackLayer: 0 },
+    { x: -3.45, z: 3.1, kind: 'crate', stackLayer: 0 },
+    { x: -4.85, z: 3.15, kind: 'crate', stackLayer: 0 },
+    { x: -4.15, z: 3.55, kind: 'crate', stackLayer: 1, baseOffsetY: crateH },
+    { x: -6.4, z: 7.4, kind: 'block', stackLayer: 0, yaw: 0.22, variant: 0 },
+    { x: -7.35, z: 7.6, kind: 'block', stackLayer: 0, yaw: 0.22, variant: 1 },
+    { x: -6.88, z: 7.5, kind: 'block', stackLayer: 1, baseOffsetY: blockH, yaw: 0.22, variant: 0 },
+    { x: 4.8, z: 7.8, kind: 'ball' },
+    { x: -2.4, z: 9.2, kind: 'ball' },
     { x: 3.4, z: 4.5, kind: 'pot' },
     { x: 4.1, z: 3.7, kind: 'pot' },
     { x: 2.3, z: 2.8, kind: 'cairn' },
+
+    // Riverbank Bruno-Simon-style stacked architectural blocks & buoyant river barrels
+    { x: 20.6, z: -13.6, kind: 'block', stackLayer: 0, yaw: -0.35, variant: 0 },
+    { x: 21.55, z: -13.95, kind: 'block', stackLayer: 0, yaw: -0.35, variant: 1 },
+    { x: 21.08, z: -14.62, kind: 'block', stackLayer: 0, yaw: -0.35, variant: 0 },
+    { x: 21.05, z: -13.78, kind: 'block', stackLayer: 1, baseOffsetY: blockH, yaw: -0.2, variant: 1 },
+    { x: 21.3, z: -14.32, kind: 'block', stackLayer: 1, baseOffsetY: blockH, yaw: -0.45, variant: 0 },
+    { x: 21.18, z: -14.05, kind: 'block', stackLayer: 2, baseOffsetY: blockH * 2, yaw: -0.1, variant: 0 },
+    { x: 19.6, z: -20.2, kind: 'barrel' },
+    { x: 20.4, z: -19.5, kind: 'barrel' },
+    { x: 21.8, z: -18.8, kind: 'ball' },
+    { x: 40.4, z: -20.8, kind: 'barrel' },
+    { x: 41.2, z: -20.1, kind: 'crate' },
+
+    // Temple & valley outposts
     { x: -53.5, z: -18.5, kind: 'pot' },
     { x: -54.2, z: -17.8, kind: 'pot' },
     { x: -50.5, z: 132.5, kind: 'pot' },
@@ -2803,85 +2557,226 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
     { x: -112.5, z: 10.5, kind: 'cairn' },
   ];
 
+  // Center ALL lathe geometries around (0, 0, 0) for accurate 3D rigid-body tumbling
   const potPts = [
-    new THREE.Vector2(0.01, 0),
-    new THREE.Vector2(0.24, 0.05),
-    new THREE.Vector2(0.32, 0.28),
-    new THREE.Vector2(0.18, 0.52),
-    new THREE.Vector2(0.24, 0.62),
+    new THREE.Vector2(0.01, -0.31),
+    new THREE.Vector2(0.24, -0.26),
+    new THREE.Vector2(0.32, -0.03),
+    new THREE.Vector2(0.18, 0.21),
+    new THREE.Vector2(0.24, 0.31),
   ];
   const potGeo = new THREE.LatheGeometry(potPts, 16);
   const crateGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
   const caseGeo = new THREE.BoxGeometry(0.62, 0.42, 0.46);
+  const blockGeo = new THREE.BoxGeometry(0.88, 0.56, 0.62);
   const cairnGeo = new THREE.LatheGeometry(
     [
-      new THREE.Vector2(0.01, 0),
-      new THREE.Vector2(0.32, 0.08),
-      new THREE.Vector2(0.24, 0.24),
-      new THREE.Vector2(0.22, 0.34),
-      new THREE.Vector2(0.15, 0.48),
-      new THREE.Vector2(0.06, 0.62),
-      new THREE.Vector2(0, 0.65),
+      new THREE.Vector2(0.01, -0.325),
+      new THREE.Vector2(0.32, -0.245),
+      new THREE.Vector2(0.24, -0.085),
+      new THREE.Vector2(0.22, 0.015),
+      new THREE.Vector2(0.15, 0.155),
+      new THREE.Vector2(0.06, 0.295),
+      new THREE.Vector2(0, 0.325),
     ],
     12,
   );
+  const barrelBodyGeo = new THREE.CylinderGeometry(0.31, 0.31, 0.78, 14);
+  const barrelHoopGeo = new THREE.TorusGeometry(0.316, 0.02, 6, 16);
+  barrelHoopGeo.rotateX(Math.PI / 2);
+  const ballGeo = new THREE.SphereGeometry(0.34, 18, 14);
+  const ballBandGeo = new THREE.TorusGeometry(0.338, 0.022, 6, 22);
 
-  for (const pl of placements) {
+  placements.forEach((pl, idx) => {
     const g = new THREE.Group();
     const visualGroup = new THREE.Group();
-    let mesh: THREE.Mesh;
+    const hitMeshes: THREE.Object3D[] = [];
+
+    let shape: PropShape = 'box';
+    let halfExtentX = 0.35;
     let halfHeight = 0.35;
+    let halfExtentZ = 0.35;
     let halfWidth = 0.35;
+    let radius = 0.5;
+    let mass = 1.0;
+    let restitution = 0.35;
+    let friction = 0.75;
+    let buoyancy = 0;
 
     if (pl.kind === 'crate') {
-      mesh = new THREE.Mesh(crateGeo, crateMat);
+      const mesh = new THREE.Mesh(crateGeo, crateMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      visualGroup.add(mesh);
+      shape = 'box';
+      halfExtentX = 0.35;
       halfHeight = 0.35;
+      halfExtentZ = 0.35;
       halfWidth = 0.35;
+      radius = 0.49;
+      mass = 1.0;
+      restitution = 0.32;
+      friction = 0.76;
+      buoyancy = 1.18;
+    } else if (pl.kind === 'block') {
+      const mesh = new THREE.Mesh(blockGeo, pl.variant === 1 ? blockWarmMat : blockLightMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      visualGroup.add(mesh);
+      shape = 'box';
+      halfExtentX = 0.44;
+      halfHeight = 0.28;
+      halfExtentZ = 0.31;
+      halfWidth = 0.44;
+      radius = 0.52;
+      mass = 1.35;
+      restitution = 0.28;
+      friction = 0.82;
+      buoyancy = 0;
     } else if (pl.kind === 'pot') {
-      mesh = new THREE.Mesh(potGeo, potMat);
+      const mesh = new THREE.Mesh(potGeo, potMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      visualGroup.add(mesh);
+      shape = 'cylinder';
+      halfExtentX = 0.32;
       halfHeight = 0.31;
+      halfExtentZ = 0.32;
       halfWidth = 0.32;
-      mesh.position.y = -halfHeight;
+      radius = 0.38;
+      mass = 0.85;
+      restitution = 0.26;
+      friction = 0.78;
+      buoyancy = 0;
     } else if (pl.kind === 'cairn') {
-      mesh = new THREE.Mesh(cairnGeo, cairnMat);
+      const mesh = new THREE.Mesh(cairnGeo, cairnMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      visualGroup.add(mesh);
+      shape = 'cylinder';
+      halfExtentX = 0.32;
       halfHeight = 0.325;
+      halfExtentZ = 0.32;
       halfWidth = 0.32;
-      mesh.position.y = -halfHeight;
+      radius = 0.38;
+      mass = 1.6;
+      restitution = 0.22;
+      friction = 0.88;
+      buoyancy = 0;
+    } else if (pl.kind === 'barrel') {
+      const body = new THREE.Mesh(barrelBodyGeo, barrelWoodMat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      const hoopTop = new THREE.Mesh(barrelHoopGeo, barrelBandMat);
+      hoopTop.position.y = 0.24;
+      const hoopBot = new THREE.Mesh(barrelHoopGeo, barrelBandMat);
+      hoopBot.position.y = -0.24;
+      visualGroup.add(body, hoopTop, hoopBot);
+      shape = 'cylinder';
+      halfExtentX = 0.32;
+      halfHeight = 0.39;
+      halfExtentZ = 0.32;
+      halfWidth = 0.32;
+      radius = 0.4;
+      mass = 1.1;
+      restitution = 0.42;
+      friction = 0.62;
+      buoyancy = 1.35;
+    } else if (pl.kind === 'ball') {
+      const sphere = new THREE.Mesh(ballGeo, ballMainMat);
+      sphere.castShadow = true;
+      sphere.receiveShadow = true;
+      const stripeA = new THREE.Mesh(ballBandGeo, ballStripeMat);
+      const stripeB = new THREE.Mesh(ballBandGeo, ballStripeMat);
+      stripeB.rotation.y = Math.PI / 2;
+      visualGroup.add(sphere, stripeA, stripeB);
+      shape = 'sphere';
+      halfExtentX = 0.34;
+      halfHeight = 0.34;
+      halfExtentZ = 0.34;
+      halfWidth = 0.34;
+      radius = 0.36;
+      mass = 0.55;
+      restitution = 0.78;
+      friction = 0.45;
+      buoyancy = 1.6;
     } else {
-      mesh = new THREE.Mesh(caseGeo, caseMat);
+      const mesh = new THREE.Mesh(caseGeo, caseMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      visualGroup.add(mesh);
+      shape = 'box';
+      halfExtentX = 0.31;
       halfHeight = 0.21;
+      halfExtentZ = 0.23;
       halfWidth = 0.31;
+      radius = 0.4;
+      mass = 0.95;
+      restitution = 0.38;
+      friction = 0.72;
+      buoyancy = 0.9;
     }
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    visualGroup.add(mesh);
-    visualGroup.position.y = halfHeight;
 
-    const contact = makeShadowDisc(0.64, textures.contactShadowMap);
+    const quat = new THREE.Quaternion();
+    if (typeof pl.yaw === 'number') {
+      quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), pl.yaw);
+      visualGroup.quaternion.copy(quat);
+    }
+
+    visualGroup.position.y = halfHeight;
+    visualGroup.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.layers.enable(3);
+        child.userData.propIndex = idx;
+        hitMeshes.push(child);
+      }
+    });
+
+    const contact = makeShadowDisc(Math.max(0.54, radius * 1.15), textures.contactShadowMap);
     g.add(visualGroup, contact);
     g.userData.isInteractiveProp = true;
-    g.userData.snapCategory = 'pot';
+    const stackLayer = pl.stackLayer ?? 0;
+    const baseOffsetY = pl.baseOffsetY ?? 0;
+    if (stackLayer === 0) {
+      g.userData.snapCategory = 'pot';
+    }
 
-    const y = getSurfaceHeightAt(pl.x, pl.z);
+    const y = getSurfaceHeightAt(pl.x, pl.z) + baseOffsetY;
     g.position.set(pl.x, y, pl.z);
+
     props.push({
       mesh: g,
       visualGroup,
+      hitMeshes,
+      kind: pl.kind,
+      shape,
+      mass,
+      restitution,
+      friction,
+      buoyancy,
       x: pl.x,
       y,
       z: pl.z,
       vx: 0,
       vy: 0,
       vz: 0,
+      quat,
+      angVel: new THREE.Vector3(),
       rotX: 0,
       rotZ: 0,
       rotVelX: 0,
       rotVelZ: 0,
-      radius: 0.52,
+      radius,
+      halfExtentX,
       halfHeight,
+      halfExtentZ,
       halfWidth,
+      stackLayer,
+      baseOffsetY,
+      inWater: false,
+      splashCooldown: 0,
     });
-  }
+  });
 
   return props;
 }

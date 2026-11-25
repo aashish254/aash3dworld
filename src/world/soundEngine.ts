@@ -5,7 +5,7 @@ class SoundEngine {
   private enabled = false;
   private lastStepTime = 0;
 
-  // Continuous Himalayan wind, stream murmur & ambient nature pad graph
+  // Continuous Himalayan wind, foliage rustle, stream murmur, bird bus & ambient nature pad graph
   private windStarted = false;
   private windNoiseSrc: AudioBufferSourceNode | null = null;
   private windGain: GainNode | null = null;
@@ -13,7 +13,12 @@ class SoundEngine {
   private windFilterLow: BiquadFilterNode | null = null;
   private windFilterHowl: BiquadFilterNode | null = null;
   private windLfo: OscillatorNode | null = null;
+  private rustleFilter1: BiquadFilterNode | null = null;
+  private rustleFilter2: BiquadFilterNode | null = null;
+  private rustleGain: GainNode | null = null;
+  private rustleLfo: OscillatorNode | null = null;
   private streamGain: GainNode | null = null;
+  private birdBusGain: GainNode | null = null;
   private ambientPadGain: GainNode | null = null;
   private ambientPadOsc1: OscillatorNode | null = null;
   private ambientPadOsc2: OscillatorNode | null = null;
@@ -38,7 +43,14 @@ class SoundEngine {
       this.playTone(528, 0.14, 'sine', 0.07);
     } else if (this.ctx) {
       const t = this.ctx.currentTime;
-      for (const gNode of [this.windGain, this.windHowlGain, this.streamGain, this.ambientPadGain]) {
+      for (const gNode of [
+        this.windGain,
+        this.windHowlGain,
+        this.rustleGain,
+        this.streamGain,
+        this.birdBusGain,
+        this.ambientPadGain,
+      ]) {
         if (gNode) {
           gNode.gain.cancelScheduledValues(t);
           gNode.gain.setTargetAtTime(0.0, t, 0.15);
@@ -132,6 +144,43 @@ class SoundEngine {
     const streamGain = ctx.createGain();
     streamGain.gain.value = 0;
 
+    // Dual-band procedural wind-rustling foliage leaves chain modulated by swaying gust LFO
+    const rustleFilter1 = ctx.createBiquadFilter();
+    rustleFilter1.type = 'bandpass';
+    rustleFilter1.frequency.value = 1650;
+    rustleFilter1.Q.value = 1.65;
+
+    const rustleFilter2 = ctx.createBiquadFilter();
+    rustleFilter2.type = 'bandpass';
+    rustleFilter2.frequency.value = 3050;
+    rustleFilter2.Q.value = 2.05;
+
+    const rustleSwellGain = ctx.createGain();
+    rustleSwellGain.gain.value = 0.72;
+
+    const rustleGain = ctx.createGain();
+    rustleGain.gain.value = 0;
+
+    const rustleLfo = ctx.createOscillator();
+    rustleLfo.type = 'sine';
+    rustleLfo.frequency.value = 0.29;
+
+    const rustleFreqDepth = ctx.createGain();
+    rustleFreqDepth.gain.value = 380;
+    rustleLfo.connect(rustleFreqDepth);
+    rustleFreqDepth.connect(rustleFilter1.frequency);
+    rustleFreqDepth.connect(rustleFilter2.frequency);
+
+    const rustleAmpDepth = ctx.createGain();
+    rustleAmpDepth.gain.value = 0.26;
+    rustleLfo.connect(rustleAmpDepth);
+    rustleAmpDepth.connect(rustleSwellGain.gain);
+
+    // Master birdsong bus so volume adapts smoothly in real time with forest proximity
+    const birdBusGain = ctx.createGain();
+    birdBusGain.gain.value = 0.5;
+    birdBusGain.connect(ctx.destination);
+
     // Gentle breeze swell LFO modulating filter cutoff
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
@@ -153,6 +202,13 @@ class SoundEngine {
     src.connect(streamFilter);
     streamFilter.connect(streamGain);
     streamGain.connect(ctx.destination);
+
+    src.connect(rustleFilter1);
+    src.connect(rustleFilter2);
+    rustleFilter1.connect(rustleSwellGain);
+    rustleFilter2.connect(rustleSwellGain);
+    rustleSwellGain.connect(rustleGain);
+    rustleGain.connect(ctx.destination);
 
     // Subtle open-fifth ambient nature harmonic pad (132Hz + 198Hz)
     const padFilter = ctx.createBiquadFilter();
@@ -182,6 +238,7 @@ class SoundEngine {
 
     src.start();
     lfo.start();
+    rustleLfo.start();
     padOsc1.start();
     padOsc2.start();
     padLfo.start();
@@ -192,7 +249,12 @@ class SoundEngine {
     this.windGain = windGain;
     this.windHowlGain = howlGain;
     this.windLfo = lfo;
+    this.rustleFilter1 = rustleFilter1;
+    this.rustleFilter2 = rustleFilter2;
+    this.rustleGain = rustleGain;
+    this.rustleLfo = rustleLfo;
     this.streamGain = streamGain;
+    this.birdBusGain = birdBusGain;
     this.ambientPadGain = padGain;
     this.ambientPadOsc1 = padOsc1;
     this.ambientPadOsc2 = padOsc2;
@@ -200,7 +262,8 @@ class SoundEngine {
   }
 
   /**
-   * Continuously updates spatial Himalayan wind, mountain stream, nature harmonic pad & birdsong.
+   * Continuously updates spatial Himalayan wind, wind-rustling foliage, mountain stream,
+   * nature harmonic pad & forest-proximity birdsong.
    */
   public updateAmbience(mix: SpatialAmbienceMix, _dt: number): void {
     this.currentZone = mix.activeZone;
@@ -210,6 +273,8 @@ class SoundEngine {
 
     this.ensureWindGraph(ctx);
     const t = ctx.currentTime;
+    const forestLevel = Math.max(0, Math.min(1, mix.forestLevel ?? 0));
+    const rustleLevel = Math.max(0, Math.min(1, mix.rustleLevel ?? forestLevel * mix.windLevel));
 
     if (this.windGain && this.windHowlGain && this.windFilterLow && this.windFilterHowl) {
       const baseVol = Math.pow(mix.windLevel, 1.25) * 0.068;
@@ -220,9 +285,21 @@ class SoundEngine {
       this.windFilterHowl.frequency.setTargetAtTime(220 + mix.windLevel * 290, t, 0.6);
     }
 
+    if (this.rustleGain && this.rustleFilter1 && this.rustleFilter2) {
+      const rustleVol = Math.pow(rustleLevel, 1.15) * 0.056;
+      this.rustleGain.gain.setTargetAtTime(rustleVol, t, 0.35);
+      this.rustleFilter1.frequency.setTargetAtTime(1400 + rustleLevel * 620, t, 0.45);
+      this.rustleFilter2.frequency.setTargetAtTime(2650 + rustleLevel * 850, t, 0.45);
+    }
+
     if (this.streamGain) {
       const streamVol = Math.pow(Math.max(0, mix.streamLevel ?? 0), 1.15) * 0.048;
       this.streamGain.gain.setTargetAtTime(streamVol, t, 0.45);
+    }
+
+    if (this.birdBusGain) {
+      const birdBusVol = Math.max(0.18, Math.min(1.25, 0.25 + mix.birdLevel * 0.65 + forestLevel * 0.35));
+      this.birdBusGain.gain.setTargetAtTime(birdBusVol, t, 0.32);
     }
 
     if (this.ambientPadGain) {
@@ -230,39 +307,41 @@ class SoundEngine {
       this.ambientPadGain.gain.setTargetAtTime(padVol, t, 0.8);
     }
 
-    if (mix.birdLevel > 0.20 && t >= this.nextBirdAtSec) {
+    const effectiveBirdActivity = Math.max(mix.birdLevel, forestLevel * 0.85);
+    if (effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
       if (mix.activeZone === 'temple-courtyard' && Math.random() < 0.55) {
         this.triggerDoveCoo(ctx, mix.birdLevel);
       } else {
-        this.triggerSongbirdChirp(ctx, mix.birdLevel);
+        this.triggerSongbirdChirp(ctx, mix.birdLevel, forestLevel);
       }
-      const interval = Math.max(1.05, 3.5 - mix.birdLevel * 2.1 + Math.random() * 2.1);
+      const interval = Math.max(0.85, 3.4 - effectiveBirdActivity * 2.25 + Math.random() * 1.9);
       this.nextBirdAtSec = t + interval;
     }
   }
 
-  private triggerSongbirdChirp(ctx: AudioContext, level: number): void {
+  private triggerSongbirdChirp(ctx: AudioContext, level: number, forestLevel = 0): void {
     const t = ctx.currentTime;
-    const pan = (Math.random() - 0.5) * 1.3;
+    const bus: AudioNode = this.birdBusGain ?? ctx.destination;
+    const pan = (Math.random() - 0.5) * 1.35;
     const panner = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null;
     if (panner) {
       panner.pan.value = pan;
-      panner.connect(ctx.destination);
+      panner.connect(bus);
     }
-    const out: AudioNode = panner ?? ctx.destination;
+    const out: AudioNode = panner ?? bus;
 
-    const notes = 2 + Math.floor(Math.random() * 3);
-    const baseFreq = 2150 + Math.random() * 1150;
-    const vol = (0.014 + level * 0.022) * (0.7 + Math.random() * 0.45);
+    const notes = 2 + Math.floor(Math.random() * (forestLevel > 0.45 ? 4 : 3));
+    const baseFreq = 2050 + Math.random() * 1250;
+    const vol = (0.013 + level * 0.021 + forestLevel * 0.014) * (0.72 + Math.random() * 0.42);
 
     for (let i = 0; i < notes; i++) {
-      const start = t + i * (0.09 + Math.random() * 0.05);
-      const dur = 0.055 + Math.random() * 0.04;
+      const start = t + i * (0.085 + Math.random() * 0.05);
+      const dur = 0.055 + Math.random() * 0.045;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      const f0 = baseFreq * (1 + (Math.random() - 0.5) * 0.22);
-      const f1 = f0 * (1.22 + Math.random() * 0.24);
+      const f0 = baseFreq * (1 + (Math.random() - 0.5) * 0.24);
+      const f1 = f0 * (1.22 + Math.random() * 0.26);
       osc.frequency.setValueAtTime(f0, start);
       osc.frequency.exponentialRampToValueAtTime(f1, start + dur * 0.55);
       osc.frequency.exponentialRampToValueAtTime(f0 * 0.94, start + dur);
@@ -280,12 +359,13 @@ class SoundEngine {
 
   private triggerDoveCoo(ctx: AudioContext, level: number): void {
     const t = ctx.currentTime;
+    const bus: AudioNode = this.birdBusGain ?? ctx.destination;
     const panner = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null;
     if (panner) {
       panner.pan.value = (Math.random() - 0.5) * 1.1;
-      panner.connect(ctx.destination);
+      panner.connect(bus);
     }
-    const out: AudioNode = panner ?? ctx.destination;
+    const out: AudioNode = panner ?? bus;
 
     const syllables = [
       { offset: 0, dur: 0.22, fStart: 375, fEnd: 330 },
@@ -442,10 +522,78 @@ class SoundEngine {
   }
 
   public playPropBump(): void {
+    this.playPropImpact('crate', 0.8);
+  }
+
+  public playPropImpact(kind: string, intensity = 1.0): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
-    const pitch = 190 + (Math.random() - 0.5) * 45;
-    this.playTone(pitch, 0.075, 'triangle', 0.055);
+    const vol = Math.max(0.015, Math.min(0.09, 0.052 * intensity));
+    if (kind === 'pot') {
+      const f = 320 + Math.random() * 80;
+      this.playTone(f, 0.11, 'sine', vol);
+      this.playTone(f * 1.52, 0.07, 'triangle', vol * 0.55);
+    } else if (kind === 'case') {
+      const f = 410 + Math.random() * 90;
+      this.playTone(f, 0.08, 'triangle', vol * 0.9);
+      this.playTone(f * 2.2, 0.05, 'sine', vol * 0.4);
+    } else if (kind === 'block' || kind === 'cairn') {
+      const f = 135 + Math.random() * 35;
+      this.playTone(f, 0.085, 'triangle', vol * 1.1);
+      this.playTone(f * 1.85, 0.04, 'sine', vol * 0.45);
+    } else if (kind === 'ball') {
+      const f = 185 + Math.random() * 40;
+      this.playTone(f, 0.12, 'sine', vol);
+    } else {
+      const f = 195 + (Math.random() - 0.5) * 45;
+      this.playTone(f, 0.075, 'triangle', vol);
+      this.playTone(f * 2.1, 0.035, 'sine', vol * 0.35);
+    }
+  }
+
+  public playWaterSplash(intensity = 1.0): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const vol = Math.max(0.02, Math.min(0.11, 0.065 * intensity));
+    const buf = this.createPinkNoiseBuffer(ctx, 0.24);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1250, t);
+    bp.frequency.exponentialRampToValueAtTime(480, t + 0.22);
+    bp.Q.value = 0.95;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.23);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+    src.start(t);
+    src.stop(t + 0.24);
+    this.playTone(540 + Math.random() * 180, 0.09, 'sine', vol * 0.35);
+  }
+
+  public playFoliageRustle(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const buf = this.createPinkNoiseBuffer(ctx, 0.22);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(1400, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.004, t);
+    g.gain.linearRampToValueAtTime(0.042, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.21);
+    src.connect(hp);
+    hp.connect(g);
+    g.connect(ctx.destination);
+    src.start(t);
+    src.stop(t + 0.22);
   }
 
   private playTone(
@@ -473,6 +621,7 @@ class SoundEngine {
     for (const node of [
       this.windNoiseSrc,
       this.windLfo,
+      this.rustleLfo,
       this.ambientPadOsc1,
       this.ambientPadOsc2,
       this.ambientPadLfo,

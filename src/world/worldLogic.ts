@@ -100,9 +100,9 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
-  [[0, 6], [-4, 62], [-8, 120]],
-  // Smooth Lumbini boulevard arriving perpendicularly at Janaki Chowk South Gate (-92, 149.5)
-  [[-8, 120], [-22, 144], [-50, 163], [-82, 164], [-92, 160], [-92, 154.5], [-92, 149.5]],
+  [[0, 6], [-4, 62], [-6.5, 86], [-8, 104]],
+  // Smooth Lumbini boulevard departing straight from South Torana Gate toward Janaki Chowk South Gate (-92, 149.5)
+  [[-8, 140], [-8, 145], [-8, 149.5], [-16, 158], [-32, 163], [-56, 164], [-82, 164], [-92, 160], [-92, 154.5], [-92, 149.5]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -178,7 +178,7 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -142.5, z: 90.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
   { x: -141.5, z: 151.5, kind: 'prayer-flags', rotY: -0.4, scale: 1.05 },
   { x: -133.5, z: 147.0, kind: 'offering-bowl', rotY: 0.3, scale: 1.0 },
-  { x: -69.0, z: 71.5, kind: 'incense-stand', rotY: 0.15, scale: 1.0 },
+  { x: -63.0, z: 71.5, kind: 'incense-stand', rotY: 0.15, scale: 1.0 },
   { x: -58.5, z: 118.0, kind: 'offering-bowl', rotY: -0.5, scale: 1.05 },
   { x: -59.5, z: 144.5, kind: 'prayer-flags', rotY: 0.35, scale: 1.0 },
   { x: -68.5, z: 152.5, kind: 'offering-bowl', rotY: -0.2, scale: 1.05 },
@@ -193,11 +193,11 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
   { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
   { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
-  // Lumbini Peace Garden outer grounds (-8, 120)
-  { x: -18.5, z: 113.5, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
-  { x: 2.5, z: 113.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
-  { x: -17.5, z: 127.5, kind: 'prayer-flags', rotY: 0.6, scale: 1.0 },
-  { x: 3.0, z: 127.5, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
+  // Lumbini Peace Garden outer grounds (-8, 120) flanking the 36m x 36m Maya Devi precinct
+  { x: -29.0, z: 106.0, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
+  { x: 13.0, z: 106.0, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -29.0, z: 136.0, kind: 'prayer-flags', rotY: 0.6, scale: 1.0 },
+  { x: 13.0, z: 136.0, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
 ];
 
 function catmullRomValue(p0: number, p1: number, p2: number, p3: number, t: number): number {
@@ -272,6 +272,9 @@ export function getWorldTreeSpots(): TreeSpot[] {
       const dz = z - lm.position.z;
       if (lm.id === 'janaki-mandir') {
         return dx > -64 && dx < 46 && dz > -42 && dz < 78;
+      }
+      if (lm.id === 'lumbini-buddha') {
+        return dx > -22.5 && dx < 22.5 && dz > -20.5 && dz < 25.5;
       }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
@@ -348,7 +351,9 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
     const nearLandmark = LANDMARKS.some((lm) =>
       lm.id === 'janaki-mandir'
         ? rx - lm.position.x > -64 && rx - lm.position.x < 46 && rz - lm.position.z > -42 && rz - lm.position.z < 75
-        : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
+        : lm.id === 'lumbini-buddha'
+          ? rx - lm.position.x > -22 && rx - lm.position.x < 22 && rz - lm.position.z > -20 && rz - lm.position.z < 25
+          : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
     const riverCenterX = getRiverCenterX(rz);
@@ -416,13 +421,13 @@ export function groundHeightAt(x: number, z: number): number {
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      radius: lm.id === 'janaki-mandir' ? 58 : 18,
+      radius: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 32 : 18,
       targetY:
         lm.id === 'pumdikot-shiva'
           ? 1.45
           : lm.id === 'recruiter-beacon'
             ? 0.75
-            : lm.id === 'janaki-mandir'
+            : lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha'
               ? 0.25
               : 0.2,
     })),
@@ -433,6 +438,37 @@ export function groundHeightAt(x: number, z: number): number {
     if (d < anchor.radius) {
       const blend = 1 - smoothstep(anchor.radius * 0.52, anchor.radius, d);
       h = lerp(h, anchor.targetY, blend);
+    }
+  }
+
+  // Level Lumbini 36m x 36m Maya Devi precinct, carve Pushkarini sacred pool basin & front temple stairs
+  const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
+  if (lumbini) {
+    const ldx = x - lumbini.position.x;
+    const ldz = z - lumbini.position.z;
+    const outX = Math.max(0, Math.abs(ldx) - 21.5);
+    const outZ = ldz < -19.5 ? -19.5 - ldz : ldz > 23.5 ? ldz - 23.5 : 0;
+    const outDist = Math.hypot(outX, outZ);
+    if (outDist < 12) {
+      const lBlend = 1 - smoothstep(0, 12, outDist);
+      h = lerp(h, 0.25, lBlend);
+    }
+
+    // Carve stepped Pushkarini sacred bathing pool on East grounds (local +11.6, -4.6)
+    if (ldx >= 6.8 && ldx <= 16.4 && ldz >= -10.0 && ldz <= 0.8) {
+      const px = Math.max(0, Math.abs(ldx - 11.6) - 3.6);
+      const pz = Math.max(0, Math.abs(ldz + 4.6) - 4.2);
+      const pondDist = Math.hypot(px, pz);
+      const pondCarve = 1 - smoothstep(0, 1.2, pondDist);
+      h = lerp(h, -0.35, pondCarve);
+    }
+
+    // Maya Devi Temple terraced sanctuary & South ceremonial stairs (local z: -10.2 -> +1.4)
+    if (Math.abs(ldx) <= 6.6 && ldz >= -10.2 && ldz <= -1.0) {
+      h = 1.35;
+    } else if (Math.abs(ldx) <= 2.4 && ldz > -1.0 && ldz <= 1.45) {
+      const stairT = 1 - (ldz + 1.0) / 2.45;
+      h = lerp(0.25, 1.35, stairT);
     }
   }
 
@@ -548,16 +584,31 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     surfaceY = Math.max(surfaceY, groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) + 0.105);
   }
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir') continue;
+    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha') continue;
     const r = lm.id === 'boudhanath-stupa' ? 8.25 : lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
     if (Math.hypot(x - lm.position.x, z - lm.position.z) <= r) {
       surfaceY = Math.max(surfaceY, groundHeightAt(lm.position.x, lm.position.z) + 0.105);
     }
   }
 
-  // Raised level cobblestone road decks outside Janaki Chowk plaza
+  // Lumbini 36m x 36m brick courtyard & raised veined-marble axial walks
+  const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
+  if (lumbini) {
+    const ldx = x - lumbini.position.x;
+    const ldz = z - lumbini.position.z;
+    const inPushkarini = ldx >= 7.1 && ldx <= 16.1 && ldz >= -9.7 && ldz <= 0.5;
+    if (!inPushkarini && Math.abs(ldx) <= 18.0 && ldz >= -16.0 && ldz <= 20.0) {
+      surfaceY = Math.max(surfaceY, 0.35);
+      if (Math.abs(ldx) <= 3.1 && (ldz >= 0.4 || ldz <= -10.8)) {
+        surfaceY = Math.max(surfaceY, 0.385);
+      }
+    }
+  }
+
+  // Raised level cobblestone road decks outside Janaki Chowk & Lumbini Sacred Garden
   const inJanakiChowk = x >= -131.0 && x <= -53.5 && z >= 70.0 && z <= 150.2;
-  if (!inJanakiChowk) {
+  const inLumbiniPrecinct = x >= -26.5 && x <= 10.5 && z >= 103.5 && z <= 140.5;
+  if (!inJanakiChowk && !inLumbiniPrecinct) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
     let bestDeckY = surfaceY;
@@ -632,7 +683,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
 
   // Non-Janaki landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir') continue;
+    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha') continue;
     const dx = x - lm.position.x;
     const dz = z - lm.position.z;
     if (Math.hypot(dx, dz) > 12.0) continue;
@@ -659,13 +710,6 @@ export function isWalkablePosition(x: number, z: number): boolean {
         }
         if (Math.hypot(dx + 3.4, dz - 4.9) <= 0.95) return false;
         break;
-      case 'lumbini-buddha':
-        if (Math.abs(dx) <= 3.1 && dz >= -4.0 && dz <= 0.7) return false;
-        for (const lz of [0.2, 2.2, 4.0]) {
-          if (Math.abs(Math.abs(dx) - 1.82) <= 0.45 && Math.abs(dz - lz) <= 0.45) return false;
-        }
-        if (Math.hypot(dx - 2.95, dz - 3.8) <= 0.95) return false;
-        break;
       case 'vit-vellore-tower':
         if (Math.abs(dx) <= 2.95 && Math.abs(dz) <= 2.75) return false;
         if (Math.hypot(dx + 3.3, dz - 3.85) <= 0.95) return false;
@@ -690,6 +734,70 @@ export function isWalkablePosition(x: number, z: number): boolean {
         if (Math.abs(dx) <= 0.65 && Math.abs(dz - 2.05) <= 0.55) return false;
         if (Math.hypot(dx - 2.75, dz + 2.1) <= 0.95) return false;
         break;
+    }
+  }
+
+  // Monumental Lumbini Maya Devi Temple & Sacred Garden obstacle boundaries
+  const lumbiniLm = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
+  if (lumbiniLm) {
+    const ldx = x - lumbiniLm.position.x;
+    const ldz = z - lumbiniLm.position.z;
+    if (Math.abs(ldx) <= 19.0 && ldz >= -17.0 && ldz <= 21.0) {
+      // 1. Perimeter low brick balustrade (keep South/North axial gates |ldx| <= 3.1 and West/East gates ldz in [6.8, 9.8] wide open)
+      if (Math.abs(ldz - 19.7) <= 0.58 && Math.abs(ldx) >= 3.1 && Math.abs(ldx) <= 18.2) return false;
+      if (Math.abs(ldz + 15.7) <= 0.58 && Math.abs(ldx) >= 3.1 && Math.abs(ldx) <= 18.2) return false;
+      if (Math.abs(Math.abs(ldx) - 17.7) <= 0.58 && (ldz < 6.8 || ldz > 9.8) && ldz >= -16.0 && ldz <= 20.0) {
+        return false;
+      }
+
+      // 2. South & North Dharmachakra Torana Gate piers
+      if (Math.abs(Math.abs(ldx) - 3.55) <= 0.78 && (Math.abs(ldz - 18.2) <= 0.78 || Math.abs(ldz + 14.8) <= 0.78)) {
+        return false;
+      }
+
+      // 3. Hero Great Shakyamuni Buddha Lotus Throne (0, +7.2)
+      if (Math.hypot(ldx, ldz - 7.2) <= 3.38) return false;
+
+      // 4. Maya Devi Temple Maurya plinth & sanctuary walls (keep central stair & inner sanctum doorway |ldx| <= 1.45, ldz >= -6.2 open!)
+      if (Math.abs(ldx) <= 7.45 && ldz >= -11.0 && ldz <= -0.35) {
+        const onFrontApproach = Math.abs(ldx) <= 1.45 && ldz >= -6.2;
+        if (!onFrontApproach) return false;
+      }
+      if (Math.abs(Math.abs(ldx) - 2.55) <= 0.45 && ldz >= -0.5 && ldz <= 1.55) return false;
+
+      // 5. Historic Ashoka Pillar fenced enclosure (-11.4, -5.0)
+      if (ldx >= -13.65 && ldx <= -9.15 && ldz >= -7.25 && ldz <= -2.75) return false;
+
+      // 6. Sacred Pushkarini Bathing Pool (+11.6, -4.6)
+      if (ldx >= 6.45 && ldx <= 16.75 && ldz >= -10.35 && ldz <= 1.15) return false;
+
+      // 7. West Naga Buddha Pavilion (-11.8, +4.2) & East Standing Buddha Pavilion (+11.8, +4.2)
+      if (Math.abs(ldx + 11.8) <= 2.45 && Math.abs(ldz - 4.2) <= 2.45) return false;
+      if (Math.abs(ldx - 11.8) <= 2.45 && Math.abs(ldz - 4.2) <= 2.45) return false;
+
+      // 8. Sacred Bodhi Tree Chautara (-12.4, +12.6) & Eternal Peace Flame (+12.0, +12.6)
+      if (Math.hypot(ldx + 12.4, ldz - 12.6) <= 2.85) return false;
+      if (Math.hypot(ldx - 12.0, ldz - 12.6) <= 1.92) return false;
+
+      // 9. Votive Stupas, Spinning Prayer Wheel Racks, Peace Lanterns & Shilalekh Stele
+      for (const [vx, vz] of [
+        [-5.6, -1.6], [5.6, -1.6],
+        [-5.6, 8.8], [5.6, 8.8],
+        [-5.6, -12.2], [5.6, -12.2],
+      ] as Array<[number, number]>) {
+        if (Math.abs(ldx - vx) <= 0.92 && Math.abs(ldz - vz) <= 0.92) return false;
+      }
+      if (Math.abs(Math.abs(ldx) - 5.6) <= 0.72 && Math.abs(ldz - 12.6) <= 1.62) return false;
+      for (const [plx, plz] of [
+        [-3.7, 15.2], [3.7, 15.2],
+        [-3.7, 10.6], [3.7, 10.6],
+        [-3.7, 2.4], [3.7, 2.4],
+        [-3.7, -11.4], [3.7, -11.4],
+        [-8.4, 7.6], [8.4, 7.6],
+      ] as Array<[number, number]>) {
+        if (Math.hypot(ldx - plx, ldz - plz) <= 0.56) return false;
+      }
+      if (ldx >= 4.8 && ldx <= 8.4 && ldz >= 15.6 && ldz <= 17.2) return false;
     }
   }
 
@@ -1534,10 +1642,242 @@ export function decodeWaypointsFromHash(hash: string): CustomWaypoint[] {
 
 export type FootstepSurfaceKind = 'stone' | 'wood' | 'grass';
 
+export interface ForestLandmarkArea {
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  innerRadius: number;
+  outerRadius: number;
+  birdDensity: number;
+  rustleDensity: number;
+}
+
+export const FOREST_LANDMARK_AREAS: ForestLandmarkArea[] = [
+  {
+    id: 'lumbini-grove',
+    name: 'Lumbini Sacred Grove',
+    x: -8,
+    z: 120,
+    innerRadius: 24,
+    outerRadius: 58,
+    birdDensity: 1.0,
+    rustleDensity: 0.78,
+  },
+  {
+    id: 'pumdikot-forest',
+    name: 'Pumdikot Alpine Forest',
+    x: -108,
+    z: -74,
+    innerRadius: 12,
+    outerRadius: 52,
+    birdDensity: 0.72,
+    rustleDensity: 1.0,
+  },
+  {
+    id: 'pashupati-woodland',
+    name: 'Pashupati Bagmati Woodland',
+    x: -48,
+    z: -24,
+    innerRadius: 10,
+    outerRadius: 44,
+    birdDensity: 0.88,
+    rustleDensity: 0.84,
+  },
+  {
+    id: 'boudha-grove',
+    name: 'Boudhanath Pine & Sakura Grove',
+    x: -108,
+    z: 4,
+    innerRadius: 12,
+    outerRadius: 44,
+    birdDensity: 0.8,
+    rustleDensity: 0.76,
+  },
+  {
+    id: 'bagmati-willow-woods',
+    name: 'Bagmati Willow & Birch Woods',
+    x: 20,
+    z: 42,
+    innerRadius: 10,
+    outerRadius: 34,
+    birdDensity: 0.84,
+    rustleDensity: 0.74,
+  },
+];
+
+export interface ForestProximityInfo {
+  forestProximity: number;
+  birdForestBoost: number;
+  windRustleLevel: number;
+  nearestForestId: string | null;
+  nearestForestName: string | null;
+  nearbyTreeCount: number;
+}
+
+/**
+ * Computes proximity (0..1) to named forest landmark areas and local tree-canopy density
+ * for driving dynamic bird chirping and wind-rustling foliage ambience.
+ */
+export function computeForestProximity(x: number, z: number): ForestProximityInfo {
+  let maxAreaProx = 0;
+  let maxBirdBoost = 0;
+  let maxRustle = 0;
+  let nearestForestId: string | null = null;
+  let nearestForestName: string | null = null;
+
+  for (let i = 0; i < FOREST_LANDMARK_AREAS.length; i++) {
+    const area = FOREST_LANDMARK_AREAS[i];
+    const d = Math.hypot(x - area.x, z - area.z);
+    const prox = 1 - smoothstep(area.innerRadius, area.outerRadius, d);
+    if (prox > maxAreaProx) {
+      maxAreaProx = prox;
+      nearestForestId = prox > 0.05 ? area.id : nearestForestId;
+      nearestForestName = prox > 0.05 ? area.name : nearestForestName;
+    }
+    maxBirdBoost = Math.max(maxBirdBoost, prox * area.birdDensity);
+    maxRustle = Math.max(maxRustle, prox * area.rustleDensity);
+  }
+
+  // Blend in local woodland canopy density from procedural valley trees
+  const trees = getWorldTreeSpots();
+  let nearbyTreeCount = 0;
+  for (let i = 0; i < trees.length; i++) {
+    const tr = trees[i];
+    const dx = x - tr.x;
+    const dz = z - tr.z;
+    if (dx * dx + dz * dz <= 24 * 24) {
+      nearbyTreeCount++;
+    }
+  }
+  const canopyDensity = Math.max(0, Math.min(1, (nearbyTreeCount - 3) / 14));
+
+  const forestProximity = Math.max(0, Math.min(1, Math.max(maxAreaProx, canopyDensity * 0.72)));
+  const birdForestBoost = Math.max(0, Math.min(1, Math.max(maxBirdBoost, canopyDensity * 0.65)));
+  const windRustleLevel = Math.max(0, Math.min(1, Math.max(maxRustle, canopyDensity * 0.68)));
+
+  return {
+    forestProximity,
+    birdForestBoost,
+    windRustleLevel,
+    nearestForestId: forestProximity > 0.05 ? nearestForestId : null,
+    nearestForestName: forestProximity > 0.05 ? nearestForestName : null,
+    nearbyTreeCount,
+  };
+}
+
+export interface MeadowZone {
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  radiusX: number;
+  radiusZ: number;
+  falloff: number;
+}
+
+export const MEADOW_ZONES: MeadowZone[] = [
+  {
+    id: 'western-valley-meadow',
+    name: 'Western Valley Meadow',
+    x: -65,
+    z: 45,
+    radiusX: 30,
+    radiusZ: 28,
+    falloff: 10,
+  },
+  {
+    id: 'lumbini-clover-meadow',
+    name: 'Lumbini Clover Meadow',
+    x: 14,
+    z: 96,
+    radiusX: 24,
+    radiusZ: 26,
+    falloff: 9,
+  },
+  {
+    id: 'bagmati-wildflower-meadow',
+    name: 'Bagmati Wildflower Meadow',
+    x: 16,
+    z: 24,
+    radiusX: 16,
+    radiusZ: 28,
+    falloff: 8,
+  },
+  {
+    id: 'kathmandu-south-meadow',
+    name: 'Kathmandu Valley Meadow',
+    x: -22,
+    z: 18,
+    radiusX: 16,
+    radiusZ: 16,
+    falloff: 7,
+  },
+  {
+    id: 'vellore-foothill-meadow',
+    name: 'Vellore Foothill Meadow',
+    x: 64,
+    z: 16,
+    radiusX: 26,
+    radiusZ: 26,
+    falloff: 9,
+  },
+  {
+    id: 'annapurna-foothill-meadow',
+    name: 'Annapurna Foothill Meadow',
+    x: -76,
+    z: -46,
+    radiusX: 22,
+    radiusZ: 22,
+    falloff: 8,
+  },
+];
+
+export interface MeadowZoneQuery {
+  inMeadow: boolean;
+  zoneId: string | null;
+  zoneName: string | null;
+  factor: number;
+}
+
+/**
+ * Evaluates whether world coordinates (x, z) fall inside a designated grassy 'meadow' zone
+ * (excluding paved stone roads, plazas, and wooden bridge decks).
+ */
+export function getMeadowZoneAt(x: number, z: number): MeadowZoneQuery {
+  if (getFootstepSurfaceKind(x, z) !== 'grass') {
+    return { inMeadow: false, zoneId: null, zoneName: null, factor: 0 };
+  }
+
+  let bestFactor = 0;
+  let bestZone: MeadowZone | null = null;
+  for (let i = 0; i < MEADOW_ZONES.length; i++) {
+    const mz = MEADOW_ZONES[i];
+    const normDist = Math.hypot((x - mz.x) / mz.radiusX, (z - mz.z) / mz.radiusZ);
+    const outerRatio = 1 + mz.falloff / Math.min(mz.radiusX, mz.radiusZ);
+    const f = 1 - smoothstep(0.68, outerRatio, normDist);
+    if (f > bestFactor) {
+      bestFactor = f;
+      bestZone = mz;
+    }
+  }
+
+  const inMeadow = bestFactor > 0.05 && bestZone !== null;
+  return {
+    inMeadow,
+    zoneId: inMeadow && bestZone ? bestZone.id : null,
+    zoneName: inMeadow && bestZone ? bestZone.name : null,
+    factor: bestFactor,
+  };
+}
+
 export interface SpatialAmbienceMix {
   windLevel: number;
   birdLevel: number;
   streamLevel: number;
+  forestLevel: number;
+  rustleLevel: number;
+  nearestForestId: string | null;
   activeZone:
     | 'himalayan-ridge'
     | 'peace-garden'
@@ -1550,7 +1890,6 @@ const STONE_PLAZA_RADII: Record<string, number> = {
   'kathmandu-stupa': 9.2,
   'boudhanath-stupa': 10.5,
   'pumdikot-shiva': 9.5,
-  'lumbini-buddha': 10.2,
   'vit-vellore-tower': 11.2,
   'aniflow-studio': 8.2,
   'agent-infra-monolith': 8.4,
@@ -1582,6 +1921,13 @@ function pointToSegmentDist(
 export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKind {
   if (isOnBridgeDeck(x, z)) return 'wood';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
+
+  const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
+  if (lumbini) {
+    const ldx = x - lumbini.position.x;
+    const ldz = z - lumbini.position.z;
+    if (Math.abs(ldx) <= 18.5 && ldz >= -16.5 && ldz <= 20.5) return 'stone';
+  }
 
   const janaki = LANDMARKS.find((l) => l.id === 'janaki-mandir');
   if (janaki) {
@@ -1618,8 +1964,8 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
 }
 
 /**
- * Computes spatial ambient wind, stream water murmur, & birdsong mix based on proximity to
- * nature-focused landmarks, alpine lake/ridge elevation, river corridor, and Janaki courtyard sanctuary.
+ * Computes spatial ambient wind, wind-rustling foliage, stream water murmur, & birdsong mix
+ * based on proximity to forest landmark areas, alpine lake/ridge elevation, river corridor, and Janaki courtyard.
  */
 export function computeSpatialAmbienceMix(
   x: number,
@@ -1652,6 +1998,8 @@ export function computeSpatialAmbienceMix(
   );
   const riverFactor = 1 - smoothstep(6, 26, dRiver);
 
+  const forestInfo = computeForestProximity(x, z);
+
   let inJanakiCourtyard = 0;
   let inJanakiChowk = 0;
   let nearJanakiWater = 0;
@@ -1671,19 +2019,36 @@ export function computeSpatialAmbienceMix(
     );
   }
 
-  let windLevel = 0.16 + ridgeFactor * 0.76 + riverFactor * 0.24 + peaceGardenFactor * 0.08;
+  let windLevel =
+    0.14 +
+    ridgeFactor * 0.74 +
+    riverFactor * 0.22 +
+    peaceGardenFactor * 0.08 +
+    forestInfo.forestProximity * 0.12;
   windLevel = lerp(windLevel, 0.07, inJanakiCourtyard * 0.85);
   windLevel = Math.max(0, Math.min(1, windLevel));
 
+  const forestLevel = Math.max(
+    0,
+    Math.min(1, forestInfo.forestProximity * (1 - inJanakiCourtyard * 0.82)),
+  );
+
+  let rustleLevel =
+    forestInfo.windRustleLevel * (0.42 + windLevel * 0.58) +
+    forestLevel * 0.25;
+  rustleLevel = lerp(rustleLevel, 0.04, inJanakiCourtyard * 0.9);
+  rustleLevel = Math.max(0, Math.min(1, rustleLevel));
+
   let birdLevel =
-    0.16 +
-    peaceGardenFactor * 0.74 +
-    stupaSanctuaryFactor * 0.42 +
-    inJanakiCourtyard * 0.62 +
+    0.14 +
+    forestInfo.birdForestBoost * 0.56 +
+    peaceGardenFactor * 0.48 +
+    stupaSanctuaryFactor * 0.28 +
+    inJanakiCourtyard * 0.64 +
     inJanakiChowk * 0.34 +
-    riverFactor * 0.34 +
-    (1 - smoothstep(26, 48, dLake)) * 0.22;
-  birdLevel *= 1 - ridgeFactor * 0.45;
+    riverFactor * 0.26 +
+    (1 - smoothstep(26, 48, dLake)) * 0.18;
+  birdLevel *= 1 - ridgeFactor * 0.38;
   birdLevel = Math.max(0, Math.min(1, birdLevel));
 
   const streamLevel = Math.max(
@@ -1704,7 +2069,15 @@ export function computeSpatialAmbienceMix(
   else if (inJanakiCourtyard > 0.5 || inJanakiChowk > 0.35) activeZone = 'temple-courtyard';
   else if (riverFactor >= 0.45) activeZone = 'river-valley';
 
-  return { windLevel, birdLevel, streamLevel, activeZone };
+  return {
+    windLevel,
+    birdLevel,
+    streamLevel,
+    forestLevel,
+    rustleLevel,
+    nearestForestId: forestInfo.nearestForestId,
+    activeZone,
+  };
 }
 
 function lerp(a: number, b: number, t: number): number {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { JanakiMandirTextures } from './janakiMandirTextures';
+import { ProceduralTextureSet } from './proceduralTextures';
 import {
   createChowkChautaraTree,
   createChowkStoneBench,
@@ -97,6 +98,7 @@ function addExtWoodyStems(
 
 export interface JanakiExteriorParams {
   group: THREE.Group;
+  textures: ProceduralTextureSet;
   jTex: JanakiMandirTextures;
   plazaY: number;
   waterUTime: { value: number };
@@ -137,6 +139,7 @@ export interface JanakiExteriorParams {
  */
 export function createJanakiMandirExterior({
   group,
+  textures,
   jTex,
   plazaY,
   waterUTime,
@@ -357,73 +360,72 @@ export function createJanakiMandirExterior({
   // -------------------------------------------------------------------------
   // 1. OUTER PARIKRAMA FLAGSTONE WALKWAY BORDER & CONTINUOUS STONE CURBS
   // -------------------------------------------------------------------------
-  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 41.1), flagstoneMat);
-  westWalk.position.set(-26.8, -0.036, -5.05);
+  // Flagstone connecting walkways sit cleanly proud (top = +0.024) of base brick plaza (+0.016) & terrain (0.0), zero coplanar overlap!
+  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.10, 37.5), flagstoneMat);
+  westWalk.position.set(-26.8, -0.026, -3.25);
   westWalk.receiveShadow = true;
 
-  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 41.1), flagstoneMat);
-  eastWalk.position.set(26.8, -0.036, -5.05);
+  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.10, 37.5), flagstoneMat);
+  eastWalk.position.set(26.8, -0.026, -3.25);
   eastWalk.receiveShadow = true;
 
-  const northWalk = new THREE.Mesh(new THREE.BoxGeometry(57.0, 0.08, 3.6), flagstoneMat);
-  northWalk.position.set(0, -0.036, -23.8);
+  const northWalk = new THREE.Mesh(new THREE.BoxGeometry(57.0, 0.10, 3.6), flagstoneMat);
+  northWalk.position.set(0, -0.026, -23.8);
   northWalk.receiveShadow = true;
 
-  // Connecting transverse paths sitting flush (top = +0.004) with continuous white marble lawn curbs
-  const northStambhaPath = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.08, 8.6), flagstoneMat);
-  northStambhaPath.position.set(0, -0.036, -28.0);
+  // Connecting transverse paths sitting flush (top = +0.024) between compound perimeter walk & Parikrama loop
+  const northStambhaPath = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.10, 4.5), flagstoneMat);
+  northStambhaPath.position.set(0, -0.026, -27.85);
   northStambhaPath.receiveShadow = true;
 
-  const westBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(27.8, 0.08, 3.2), flagstoneMat);
-  westBridgeWalk.position.set(-40.8, -0.036, -23.8);
+  const westBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(24.2, 0.10, 3.2), flagstoneMat);
+  westBridgeWalk.position.set(-40.6, -0.026, -23.8);
   westBridgeWalk.receiveShadow = true;
 
-  const eastBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.08, 3.2), flagstoneMat);
-  eastBridgeWalk.position.set(32.0, -0.036, -23.8);
+  const eastBridgeWalk = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.10, 3.2), flagstoneMat);
+  eastBridgeWalk.position.set(31.4, -0.026, -23.8);
   eastBridgeWalk.receiveShadow = true;
 
-  const pyaauLinkWalk = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.08, 5.2), flagstoneMat);
-  pyaauLinkWalk.position.set(31.8, -0.036, -3.5);
+  const pyaauLinkWalk = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.10, 5.2), flagstoneMat);
+  pyaauLinkWalk.position.set(31.4, -0.026, -3.5);
   pyaauLinkWalk.receiveShadow = true;
 
-  const southWestLink = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.08, 3.6), brickPlazaMat);
-  southWestLink.position.set(-32.2, -0.036, 16.0);
+  const southWestLink = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.10, 3.6), flagstoneMat);
+  southWestLink.position.set(-31.3, -0.026, 16.0);
   southWestLink.receiveShadow = true;
 
   // Continuous white marble edging curbs separating flagstone walks from grass lawns
   for (const [cx, cz, cw, cd] of [
-    [-28.58, -5.05, 0.22, 41.1],
-    [28.58, -5.05, 0.22, 41.1],
+    [-28.58, -3.25, 0.22, 37.5],
+    [28.58, -3.25, 0.22, 37.5],
     [0, -25.68, 57.0, 0.22],
-    [-40.8, -22.12, 24.4, 0.22],
-    [-40.8, -25.48, 24.4, 0.22],
-    [32.0, -22.12, 7.4, 0.22],
-    [32.0, -25.48, 7.4, 0.22],
+    [-40.6, -22.12, 24.2, 0.22],
+    [-40.6, -25.48, 24.2, 0.22],
+    [31.4, -22.12, 5.8, 0.22],
+    [31.4, -25.48, 5.8, 0.22],
     [31.4, -0.82, 5.8, 0.22],
     [31.4, -6.18, 5.8, 0.22],
   ] as Array<[number, number, number, number]>) {
-    const lawnCurb = new THREE.Mesh(new THREE.BoxGeometry(cw, 0.06, cd), marbleWallMat);
-    lawnCurb.position.set(cx, 0.015, cz);
+    const lawnCurb = new THREE.Mesh(new THREE.BoxGeometry(cw, 0.16, cd), marbleWallMat);
+    lawnCurb.position.set(cx, -0.02, cz);
     lawnCurb.receiveShadow = true;
     exterior.add(lawnCurb);
   }
 
-  // 4 Perimeter brick apron strips framing Ganga Sagar coping rim (flush with plazaY)
-  const gsNorthApron = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.08, 3.8), brickPlazaMat);
-  gsNorthApron.position.set(-45.3, -0.036, 16.0 - 11.2);
+  // Non-overlapping brick aprons framing Ganga Sagar kund (top = +0.016, cleanly butted against westCompoundWalk & westSouthChowkFloor)
+  const gsNorthApron = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.10, 3.8), brickPlazaMat);
+  gsNorthApron.position.set(-43.4, -0.034, 4.8);
   gsNorthApron.receiveShadow = true;
-  const gsSouthApron = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.08, 3.8), brickPlazaMat);
-  gsSouthApron.position.set(-45.3, -0.036, 16.0 + 11.2);
-  gsSouthApron.receiveShadow = true;
-  const gsWestApron = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.08, 18.6), brickPlazaMat);
-  gsWestApron.position.set(-53.7, -0.036, 16.0);
+  const gsWestApron = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.10, 18.7), brickPlazaMat);
+  gsWestApron.position.set(-51.8, -0.034, 16.05);
   gsWestApron.receiveShadow = true;
-  const gsEastApron = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 18.6), brickPlazaMat);
-  gsEastApron.position.set(-35.4, -0.036, 16.0);
+  const gsEastApron = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.10, 8.8), brickPlazaMat);
+  gsEastApron.position.set(-35.6, -0.034, 11.1);
   gsEastApron.receiveShadow = true;
 
-  const vivahApron = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.08, 13.5), brickPlazaMat);
-  vivahApron.position.set(-45.0, -0.036, 40.0);
+  // Flagstone surround dais apron framing Vivah Mandap plinth (top = +0.024, clear of brick floor below)
+  const vivahApron = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.10, 13.5), flagstoneMat);
+  vivahApron.position.set(-45.0, -0.026, 40.0);
   vivahApron.receiveShadow = true;
 
   exterior.add(
@@ -436,7 +438,6 @@ export function createJanakiMandirExterior({
     pyaauLinkWalk,
     southWestLink,
     gsNorthApron,
-    gsSouthApron,
     gsWestApron,
     gsEastApron,
     vivahApron,
@@ -516,42 +517,44 @@ export function createJanakiMandirExterior({
 
   addGardenLawnBed(-42.5, -16.5, 9.6, 7.6);
   addGardenLawnBed(-42.5, -2.5, 9.6, 7.2);
-  addGardenLawnBed(32.5, 7.5, 5.4, 7.2);
+  addGardenLawnBed(31.4, 7.5, 4.2, 7.2);
 
   // Outer stone benches & low carved stone lantern bollards along West, North, and East Parikrama
-  const benchPlacements: Array<[number, number, number]> = [
-    [-27.8, -9.0, 0],
-    [-27.8, 5.5, 0],
-    [27.8, -9.0, Math.PI],
-    [27.8, 5.5, Math.PI],
-    [-6.5, -24.8, Math.PI / 2],
-    [6.5, -24.8, Math.PI / 2],
-    [-40.5, -29.2, Math.PI / 2],
-    [26.5, -29.2, Math.PI / 2],
+  const benchPlacements: Array<[number, number, number, number]> = [
+    [-27.8, -9.0, 0, 0.024],
+    [-27.8, 5.5, 0, 0.024],
+    [27.8, -9.0, Math.PI, 0.024],
+    [27.8, 5.5, Math.PI, 0.024],
+    [-6.5, -24.8, Math.PI / 2, 0.024],
+    [6.5, -24.8, Math.PI / 2, 0.024],
+    [-40.5, -29.2, Math.PI / 2, 0.0],
+    [26.5, -29.2, Math.PI / 2, 0.0],
   ];
-  for (const [bx, bz, rotY] of benchPlacements) {
+  for (const [bx, bz, rotY, by] of benchPlacements) {
     const bench = createChowkStoneBench(marbleWallMat, marbleWallMat, tealTrimMat);
-    bench.position.set(bx, 0.004, bz);
+    bench.position.set(bx, by, bz);
     bench.rotation.y = rotY;
     bench.userData.noMerge = true;
     bench.userData.snapCategory = 'sitting';
+    bench.userData.lockXZ = true;
     exterior.add(bench);
   }
 
-  for (const [lx, lz] of [
-    [-28.2, -21.5],
-    [28.2, -21.5],
-    [-28.2, 16.5],
-    [28.2, 16.5],
-    [-10.5, -25.2],
-    [10.5, -25.2],
-    [-51.8, -29.8],
-    [33.8, -29.8],
-  ] as Array<[number, number]>) {
+  for (const [lx, lz, ly] of [
+    [-28.2, -21.5, 0.024],
+    [28.2, -21.5, 0.024],
+    [-28.2, 16.5, 0.016],
+    [28.2, 16.5, 0.016],
+    [-10.5, -25.2, 0.024],
+    [10.5, -25.2, 0.024],
+    [-51.8, -29.8, 0.0],
+    [33.8, -29.8, 0.0],
+  ] as Array<[number, number, number]>) {
     const bollard = new THREE.Group();
-    bollard.position.set(lx, 0.004, lz);
+    bollard.position.set(lx, ly, lz);
     bollard.userData.noMerge = true;
     bollard.userData.snapCategory = 'lantern';
+    bollard.userData.lockXZ = true;
     const ped = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.62), marbleWallMat);
     ped.position.set(0, 0.28, 0);
     ped.castShadow = true;
@@ -563,22 +566,23 @@ export function createJanakiMandirExterior({
     exterior.add(bollard);
   }
 
-  // Carved Stone & Terracotta Mughal Lotus Urns with arching fern rosettes & marigolds
+  // Carved Stone & Terracotta Mughal Lotus Urns with fern rosettes & marigolds parented directly inside urnGroup
   const urnBodyGeo = createExtMughalUrnGeo(0.36, 0.7);
-  for (const [uIdx, [ux, uz]] of (
+  for (const [uIdx, [ux, uz, uy]] of (
     [
-      [-20.5, -25.6],
-      [20.5, -25.6],
-      [-33.5, -21.2],
-      [-33.5, 8.5],
-      [-52.0, 29.0],
-      [-52.0, 50.0],
-    ] as Array<[number, number]>
+      [-20.5, -26.35, 0.0],
+      [20.5, -26.35, 0.0],
+      [-33.5, -21.2, 0.0],
+      [-33.5, 8.5, 0.0],
+      [-52.0, 29.0, 0.016],
+      [-52.0, 50.0, 0.016],
+    ] as Array<[number, number, number]>
   ).entries()) {
     const urnGroup = new THREE.Group();
-    urnGroup.position.set(ux, 0.004, uz);
+    urnGroup.position.set(ux, uy, uz);
     urnGroup.userData.noMerge = true;
     urnGroup.userData.snapCategory = 'pot';
+    urnGroup.userData.lockXZ = true;
     const uPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.24, 0.68), marbleWallMat);
     uPlinth.position.set(0, 0.12, 0);
     const uPot = new THREE.Mesh(urnBodyGeo, extUrnMat);
@@ -587,28 +591,38 @@ export function createJanakiMandirExterior({
     const uSoil = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.06, 18), extSoilMat);
     uSoil.position.set(0, 0.87, 0);
     urnGroup.add(uPlinth, uPot, uSoil);
-    exterior.add(urnGroup);
 
     const seed = 700 + uIdx * 53;
     for (let f = 0; f < 9; f++) {
       const yaw = f * GOLDEN_ANG + extHash01(seed + f) * 0.25;
       const pitch = f < 5 ? 0.34 : 0.06;
       const s = 0.56 + extHash01(seed + f * 3) * 0.18;
-      pushExtSprig(
-        extFernList,
-        ux + Math.sin(yaw) * 0.05,
-        0.89,
-        uz + Math.cos(yaw) * 0.05,
-        yaw,
-        pitch,
-        (extHash01(seed + f * 5) - 0.5) * 0.16,
-        s,
-        s,
-        s,
-        seed + f * 7,
-      );
+      const frondMesh = new THREE.Mesh(extFernSprigGeo, extFernMat);
+      frondMesh.position.set(Math.sin(yaw) * 0.05, 0.89, Math.cos(yaw) * 0.05);
+      frondMesh.rotation.set(pitch, yaw, (extHash01(seed + f * 5) - 0.5) * 0.16, 'YXZ');
+      frondMesh.scale.setScalar(s);
+      frondMesh.castShadow = true;
+      frondMesh.userData.nonCollidable = true;
+      urnGroup.add(frondMesh);
     }
-    addExtMarigoldCluster(ux, 0.90, uz, 0.72, seed + 29);
+    const baseYaw = extHash01(seed + 29) * Math.PI * 2;
+    for (let k = 0; k < 3; k++) {
+      const yaw = baseYaw + k * 2.09 + (extHash01(seed + 29 + k * 3) - 0.5) * 0.35;
+      const s = 0.72 * (0.86 + extHash01(seed + 29 + k * 7) * 0.26);
+      const marigoldMesh = new THREE.Mesh(extMarigoldSprigGeo, extMarigoldMat);
+      marigoldMesh.position.set(Math.sin(yaw) * 0.022, 0.90, Math.cos(yaw) * 0.022);
+      marigoldMesh.rotation.set(
+        0.26 + extHash01(seed + 29 + k * 5) * 0.18,
+        yaw,
+        (extHash01(seed + 29 + k * 11) - 0.5) * 0.16,
+        'YXZ',
+      );
+      marigoldMesh.scale.setScalar(s);
+      marigoldMesh.userData.nonCollidable = true;
+      urnGroup.add(marigoldMesh);
+    }
+
+    exterior.add(urnGroup);
   }
 
   // -------------------------------------------------------------------------
@@ -845,7 +859,7 @@ export function createJanakiMandirExterior({
 
   // Carved Stone Dana Bird-Feeding Pedestal & Bowl on Ganga Sagar East Apron (-35.2, 16.0)
   const dana = new THREE.Group();
-  dana.position.set(-35.2, 0.04, 16.0);
+  dana.position.set(-35.2, 0.016, 16.0);
   const danaBase = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.2, 0.92), marbleWallMat);
   danaBase.position.y = 0.1;
   danaBase.castShadow = true;
@@ -900,7 +914,7 @@ export function createJanakiMandirExterior({
   // 3. VIVAH MANDAP WEDDING PAVILION (local -45.0, 40.0) & VEDIC HAVAN KUND
   // -------------------------------------------------------------------------
   const vivah = new THREE.Group();
-  vivah.position.set(-45.0, 0, 40.0);
+  vivah.position.set(-45.0, 0.024, 40.0);
 
   const vmStep1 = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.24, 8.2), passageStoneMat);
   vmStep1.position.y = 0.12;
@@ -1027,8 +1041,8 @@ export function createJanakiMandirExterior({
   for (let m = -0.82; m <= 0.83; m += 0.38) {
     for (const side of [-0.94, 0.94]) {
       const mSeed = Math.round((m + 2) * 37 + (side > 0 ? 11 : 23));
-      addExtMarigoldCluster(-45.0 + m, 0.78, 40.0 + side, 0.44, mSeed);
-      addExtMarigoldCluster(-45.0 + side, 0.78, 40.0 + m, 0.44, mSeed + 97);
+      addExtMarigoldCluster(-45.0 + m, 0.804, 40.0 + side, 0.44, mSeed);
+      addExtMarigoldCluster(-45.0 + side, 0.804, 40.0 + m, 0.44, mSeed + 97);
     }
   }
 
@@ -1255,6 +1269,7 @@ export function createJanakiMandirExterior({
     chautara.position.set(tx, 0, tz);
     chautara.userData.noMerge = true;
     chautara.userData.snapCategory = 'sitting';
+    chautara.userData.lockXZ = true;
     exterior.add(chautara);
   }
 
@@ -1262,10 +1277,11 @@ export function createJanakiMandirExterior({
   // 5. ORNATE NEWARI / MITHILA WEST PILGRIM PATI (PHALCHA) REST PAVILION (-33.5, 50.5)
   // -------------------------------------------------------------------------
   const pati = new THREE.Group();
-  pati.position.set(-33.5, 0, 50.5);
+  pati.position.set(-33.5, 0.016, 50.5);
   pati.rotation.y = Math.PI / 2;
   pati.userData.noMerge = true;
   pati.userData.snapCategory = 'sitting';
+  pati.userData.lockXZ = true;
 
   // Two-tier carved white Makrana marble & stone plinth with front steps + cheek walls
   const patiStep = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.24, 4.0), passageStoneMat);
@@ -1489,7 +1505,7 @@ export function createJanakiMandirExterior({
   // 6. EAST HERITAGE PYAAU WATER KIOSK (+32.0, -3.5) — Lathe Gagri/Matka Vessels, Carved Teak & Brass Taps
   // -------------------------------------------------------------------------
   const pyaau = new THREE.Group();
-  pyaau.position.set(32.0, 0, -3.5);
+  pyaau.position.set(32.0, 0.024, -3.5);
   pyaau.rotation.y = -Math.PI / 2;
 
   const pyStep = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.18, 2.9), passageStoneMat);
@@ -1645,7 +1661,7 @@ export function createJanakiMandirExterior({
   // -------------------------------------------------------------------------
   // Carved Stone Pakhala Foot-Wash Trough & Hiti Brass Tap Wall (+15.5, 22.8)
   const pakhala = new THREE.Group();
-  pakhala.position.set(15.5, 0, 22.8);
+  pakhala.position.set(15.5, 0.016, 22.8);
   const pkSlab = new THREE.Mesh(new THREE.BoxGeometry(3.05, 0.12, 1.95), flagstoneMat);
   pkSlab.position.y = 0.06;
   pkSlab.receiveShadow = true;
@@ -1745,7 +1761,7 @@ export function createJanakiMandirExterior({
 
   // Covered Carved Sal-Wood Paduka / Chappal Shoe Rack (-15.5, 22.8)
   const shoeRack = new THREE.Group();
-  shoeRack.position.set(-15.5, 0, 22.8);
+  shoeRack.position.set(-15.5, 0.016, 22.8);
   const srBase = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.14, 1.15), marbleWallMat);
   srBase.position.y = 0.07;
   srBase.receiveShadow = true;

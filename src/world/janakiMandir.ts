@@ -503,8 +503,8 @@ export function createJanakiMandir(
     metalness: 0.02,
     alphaTest: 0.45,
     polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
   const flagstoneMat = new THREE.MeshStandardMaterial({
     map: jTex.flagstoneMap,
@@ -610,32 +610,32 @@ export function createJanakiMandir(
   // 1. JANAKPUR CHOWK BRICK PLAZA & FULL ENCLOSED SACRED COMPOUND GROUNDS
   // =========================================================================
   const plazaY = -0.80;
-  // Main South Chowk Brick Plaza (-38.1..+38.1, z: 15.5..57.5) + West-South Compound Brick Extension (-56.5..-38.1, z: 25.4..57.5)
-  const chowkFloor = new THREE.Mesh(new THREE.BoxGeometry(76.2, 0.08, 42.0), brickPlazaMat);
-  chowkFloor.position.set(0, plazaY - 0.036, 36.5);
+  // Base Chowk Brick Plaza & Perimeter Compound Walks (top = plazaY + 0.016, non-overlapping footprint)
+  const chowkFloor = new THREE.Mesh(new THREE.BoxGeometry(76.2, 0.10, 42.0), brickPlazaMat);
+  chowkFloor.position.set(0, plazaY - 0.034, 36.5);
   chowkFloor.receiveShadow = true;
-  const westSouthChowkFloor = new THREE.Mesh(new THREE.BoxGeometry(18.4, 0.08, 32.1), brickPlazaMat);
-  westSouthChowkFloor.position.set(-47.3, plazaY - 0.036, 41.45);
+  const westSouthChowkFloor = new THREE.Mesh(new THREE.BoxGeometry(18.4, 0.10, 32.1), brickPlazaMat);
+  westSouthChowkFloor.position.set(-47.3, plazaY - 0.034, 41.45);
   westSouthChowkFloor.receiveShadow = true;
-  // North, East & West Perimeter Flagstone Compound Border Paths flush with chowkFloor (top = plazaY + 0.004)
-  const northCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(94.6, 0.08, 4.4), flagstoneMat);
-  northCompoundWalk.position.set(-9.2, plazaY - 0.036, -32.3);
+  // North, East & West Perimeter Flagstone Compound Border Paths cleanly butted to chowkFloor (top = plazaY + 0.016)
+  const northCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(94.6, 0.10, 4.4), flagstoneMat);
+  northCompoundWalk.position.set(-9.2, plazaY - 0.034, -32.3);
   northCompoundWalk.receiveShadow = true;
-  const westCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 55.6), flagstoneMat);
-  westCompoundWalk.position.set(-54.6, plazaY - 0.036, -2.3);
+  const westCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.10, 55.5), flagstoneMat);
+  westCompoundWalk.position.set(-54.6, plazaY - 0.034, -2.35);
   westCompoundWalk.receiveShadow = true;
-  const eastCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 45.6), flagstoneMat);
-  eastCompoundWalk.position.set(36.2, plazaY - 0.036, -7.3);
+  const eastCompoundWalk = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.10, 45.6), flagstoneMat);
+  eastCompoundWalk.position.set(36.2, plazaY - 0.034, -7.3);
   eastCompoundWalk.receiveShadow = true;
   // Continuous inner stone curbs along compound perimeter paths so lawn borders never show jagged gaps
-  const northCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(87.0, 0.06, 0.24), marbleWallMat);
-  northCompoundCurb.position.set(-9.2, plazaY + 0.015, -30.05);
+  const northCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(87.0, 0.16, 0.24), marbleWallMat);
+  northCompoundCurb.position.set(-9.2, plazaY - 0.02, -30.05);
   northCompoundCurb.receiveShadow = true;
-  const westCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 34.4), marbleWallMat);
-  westCompoundCurb.position.set(-52.65, plazaY + 0.015, -12.8);
+  const westCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 34.4), marbleWallMat);
+  westCompoundCurb.position.set(-52.65, plazaY - 0.02, -12.8);
   westCompoundCurb.receiveShadow = true;
-  const eastCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 45.6), marbleWallMat);
-  eastCompoundCurb.position.set(34.25, plazaY + 0.015, -7.3);
+  const eastCompoundCurb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 45.6), marbleWallMat);
+  eastCompoundCurb.position.set(34.25, plazaY - 0.02, -7.3);
   eastCompoundCurb.receiveShadow = true;
   group.add(
     chowkFloor,
@@ -648,25 +648,25 @@ export function createJanakiMandir(
     eastCompoundCurb,
   );
 
-  // Ceremonial Makrana Marble Approach Carpet Runner (South Gate -> Front Steps) & East Gate Link
-  const mainCarpet = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.024, 35.6), passageStoneMat);
-  mainCarpet.position.set(0, plazaY + 0.006, 39.8);
+  // Ceremonial Makrana Marble Approach Carpet Runner (top = plazaY + 0.032, zero overlap with eastWalkway)
+  const mainCarpet = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.024, 35.5), passageStoneMat);
+  mainCarpet.position.set(0, plazaY + 0.020, 39.75);
   mainCarpet.receiveShadow = true;
   group.add(mainCarpet);
   for (const side of [-1, 1]) {
-    const terraBorder = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.028, 35.6), terracottaTrimMat);
-    terraBorder.position.set(side * 2.74, plazaY + 0.008, 39.8);
-    const tealBorder = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.028, 35.6), tealTrimMat);
-    tealBorder.position.set(side * 2.98, plazaY + 0.008, 39.8);
+    const terraBorder = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.028, 35.5), terracottaTrimMat);
+    terraBorder.position.set(side * 2.74, plazaY + 0.022, 39.75);
+    const tealBorder = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.028, 35.5), tealTrimMat);
+    tealBorder.position.set(side * 2.98, plazaY + 0.022, 39.75);
     group.add(terraBorder, tealBorder);
   }
-  const eastWalkway = new THREE.Mesh(new THREE.BoxGeometry(35.2, 0.022, 3.6), passageStoneMat);
-  eastWalkway.position.set(20.6, plazaY + 0.004, 36.5);
+  const eastWalkway = new THREE.Mesh(new THREE.BoxGeometry(35.04, 0.024, 3.6), passageStoneMat);
+  eastWalkway.position.set(20.58, plazaY + 0.020, 36.5);
   eastWalkway.receiveShadow = true;
   group.add(eastWalkway);
   for (const bz of [34.55, 38.45]) {
-    const eWalkBorder = new THREE.Mesh(new THREE.BoxGeometry(34.8, 0.025, 0.22), terracottaTrimMat);
-    eWalkBorder.position.set(20.6, plazaY + 0.006, bz);
+    const eWalkBorder = new THREE.Mesh(new THREE.BoxGeometry(34.8, 0.028, 0.22), terracottaTrimMat);
+    eWalkBorder.position.set(20.6, plazaY + 0.022, bz);
     group.add(eWalkBorder);
   }
 
@@ -774,12 +774,12 @@ export function createJanakiMandir(
   }
 
   const southThreshold = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.04, 1.2), passageStoneMat);
-  southThreshold.position.set(0, plazaY + 0.002, 57.5);
+  southThreshold.position.set(0, plazaY + 0.02, 57.5);
   southThreshold.receiveShadow = true;
   group.add(southThreshold);
 
   const eastThreshold = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 5.6), passageStoneMat);
-  eastThreshold.position.set(38.1, plazaY + 0.002, 36.5);
+  eastThreshold.position.set(38.1, plazaY + 0.02, 36.5);
   eastThreshold.receiveShadow = true;
   group.add(eastThreshold);
 
@@ -911,9 +911,10 @@ export function createJanakiMandir(
       flameMat: diyoGlowMat,
       seed,
     });
-    chautara.position.set(cx, plazaY, cz);
+    chautara.position.set(cx, plazaY + 0.016, cz);
     chautara.userData.noMerge = true;
     chautara.userData.snapCategory = 'sitting';
+    chautara.userData.lockXZ = true;
     markOccluder(chautara);
     group.add(chautara);
   }
@@ -936,7 +937,7 @@ export function createJanakiMandir(
       marigoldMat,
       flameMat: diyoGlowMat,
     });
-    stall.position.set(sx, plazaY, sz);
+    stall.position.set(sx, plazaY + 0.016, sz);
     stall.rotation.y = rotY;
     markOccluder(stall);
     group.add(stall);
@@ -945,10 +946,11 @@ export function createJanakiMandir(
   // Flanking Carved Sandstone Promenade Rest Benches (±5.6, 39.5)
   for (const side of [-1, 1]) {
     const bench = createChowkStoneBench(marbleWallMat, whiteTrimMat, tealTrimMat);
-    bench.position.set(side * 5.6, plazaY, 39.5);
+    bench.position.set(side * 5.6, plazaY + 0.016, 39.5);
     bench.rotation.y = side === -1 ? 0 : Math.PI;
     bench.userData.noMerge = true;
     bench.userData.snapCategory = 'sitting';
+    bench.userData.lockXZ = true;
     group.add(bench);
   }
 
@@ -977,9 +979,10 @@ export function createJanakiMandir(
       tealTrimMat,
       diyoGlowMat,
     );
-    chowkLamp.position.set(lx, plazaY, lz);
+    chowkLamp.position.set(lx, plazaY + 0.016, lz);
     chowkLamp.userData.noMerge = true;
     chowkLamp.userData.snapCategory = 'lantern';
+    chowkLamp.userData.lockXZ = true;
     group.add(chowkLamp);
   }
 
@@ -1028,24 +1031,24 @@ export function createJanakiMandir(
     courtyardMedallionMat,
   );
   courtyardCenterMedallion.rotation.x = -Math.PI / 2;
-  courtyardCenterMedallion.position.set(0, 0.027, -1.3);
+  courtyardCenterMedallion.position.set(0, 0.031, -1.3);
   courtyardCenterMedallion.receiveShadow = true;
   group.add(courtyardCenterMedallion);
 
-  // Raised Carved Flagstone Parikrama Veranda Decks & Border Curbs around Courtyard Perimeter
+  // Raised Carved Flagstone Parikrama Veranda Decks & Border Curbs (clean non-overlapping corners)
   // Curb sits cleanly inside x = ±14.04 & z = -13.04 so colonnade pillar bases (±14.4, -13.4) sit proud on veranda!
   for (const side of [-1, 1]) {
-    const sideDeck = new THREE.Mesh(new THREE.BoxGeometry(2.56, 0.04, 26.2), flagstoneMat);
-    sideDeck.position.set(side * 15.32, 0.016, -1.8);
+    const sideDeck = new THREE.Mesh(new THREE.BoxGeometry(2.56, 0.04, 24.34), flagstoneMat);
+    sideDeck.position.set(side * 15.32, 0.016, -0.87);
     sideDeck.receiveShadow = true;
-    const sideCurb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 25.4), tealTrimMat);
-    sideCurb.position.set(side * 14.04, 0.026, -1.8);
+    const sideCurb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 24.34), tealTrimMat);
+    sideCurb.position.set(side * 14.04, 0.026, -0.87);
     group.add(sideDeck, sideCurb);
   }
-  const northDeck = new THREE.Mesh(new THREE.BoxGeometry(28.08, 0.04, 2.36), flagstoneMat);
+  const northDeck = new THREE.Mesh(new THREE.BoxGeometry(33.20, 0.04, 2.36), flagstoneMat);
   northDeck.position.set(0, 0.016, -14.22);
   northDeck.receiveShadow = true;
-  const northCurb = new THREE.Mesh(new THREE.BoxGeometry(28.08, 0.06, 0.14), tealTrimMat);
+  const northCurb = new THREE.Mesh(new THREE.BoxGeometry(28.22, 0.06, 0.14), tealTrimMat);
   northCurb.position.set(0, 0.026, -13.04);
   group.add(northDeck, northCurb);
 
@@ -2687,9 +2690,10 @@ export function createJanakiMandir(
     pushBracket(kx, 5.14, 0.35 + 0.56, 0);
     pushBracket(kx, 5.14, 0.35 - 0.56, Math.PI);
   }
-  for (const bx of [-1.85, 0, 1.85]) {
-    const gBell = registerBell(createDetailedTempleBell(goldMat, bronzeMat, 0.55, bx === 0 ? 1.15 : 0.85));
-    gBell.position.set(bx, 4.78, 0);
+  for (const bx of [-1.62, 0, 1.62]) {
+    const bellDrop = bx === 0 ? 0.55 : 0.44;
+    const gBell = registerBell(createDetailedTempleBell(goldMat, bronzeMat, bellDrop, bx === 0 ? 1.15 : 0.82));
+    gBell.position.set(bx, bx === 0 ? 4.78 : 4.51, 0);
     centralGate.add(gBell);
   }
 
@@ -2880,6 +2884,7 @@ export function createJanakiMandir(
   // =========================================================================
   createJanakiMandirExterior({
     group,
+    textures,
     jTex,
     plazaY,
     waterUTime,

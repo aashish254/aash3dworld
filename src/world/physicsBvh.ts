@@ -47,6 +47,7 @@ export interface SanitizedBarrierBox {
 
 export interface GeometrySanitizeOptions {
   excludeRoots?: Set<THREE.Object3D>;
+  excludeSnapCategories?: boolean;
   reportedTargets?: Array<string | THREE.Object3D>;
   minWallThickness?: number;
   minFloorThickness?: number;
@@ -767,6 +768,7 @@ export function sanitizeSceneGeometry(
   options: GeometrySanitizeOptions = {},
 ): GeometrySanitizeReport {
   const excludeRoots = options.excludeRoots ?? new Set<THREE.Object3D>();
+  const excludeSnapCategories = Boolean(options.excludeSnapCategories);
   const minWallThickness = options.minWallThickness ?? 0.22;
   const minFloorThickness = options.minFloorThickness ?? 0.1;
 
@@ -799,7 +801,7 @@ export function sanitizeSceneGeometry(
     if ((obj as THREE.Points).isPoints || (obj as THREE.Line).isLine || (obj as THREE.Sprite).isSprite) {
       return;
     }
-    if (isObjectExcluded(obj, excludeRoots, false)) return;
+    if (isObjectExcluded(obj, excludeRoots, excludeSnapCategories)) return;
 
     const mesh = obj as THREE.Mesh;
     const isInst = Boolean((obj as THREE.InstancedMesh).isInstancedMesh);
