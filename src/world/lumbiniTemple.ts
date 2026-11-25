@@ -657,6 +657,9 @@ export function createLumbiniBuddha(
   if (bodhi.userData.diyoLight instanceof THREE.PointLight) {
     beaconLights.push(bodhi.userData.diyoLight);
   }
+  if (bodhi.userData.animatedLeaves instanceof THREE.Object3D) {
+    animatedNodes.push(bodhi.userData.animatedLeaves);
+  }
 
   const peaceFlame = buildEternalPeaceFlame(
     chunarStoneMat,
@@ -730,6 +733,7 @@ export function createLumbiniBuddha(
     roughness: 0.34,
     metalness: 0.85,
   });
+  const prayerWheelSpinners: THREE.Object3D[] = [];
   for (const side of [-1, 1]) {
     const rack = new THREE.Group();
     rack.position.set(side * 7.4, 0.03, 39.0);
@@ -749,10 +753,37 @@ export function createLumbiniBuddha(
       const spinner = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.46, 16), prayerWheelMat);
       spinner.position.set(0, 1.12, wz);
       spinner.castShadow = true;
+      spinner.userData.noSpin = true;
+      spinner.userData.prayerWheel = { angle: Math.abs(wz), velocity: 0.22 };
       rack.add(spinner);
       animatedNodes.push(spinner);
+      prayerWheelSpinners.push(spinner);
     }
     group.add(rack);
+  }
+
+  // Smooth river-pebble offering cairns beside Pushkarini Pond Overlook & South Steps for pebble tossing
+  const pebblePileMat = new THREE.MeshStandardMaterial({ color: 0x7a7d80, roughness: 0.86 });
+  const localPebbleSpecs: Array<[number, number, number, number, string]> = [
+    [-5.5, 16.5, 5.0, 16.5, 'Pushkarini Pond'],
+    [10.0, 6.4, 10.0, 15.0, 'Pushkarini Pond'],
+    [-2.5, 52.8, -8.5, 55.0, 'Sacred Pond'],
+  ];
+  for (const [px, pz] of localPebbleSpecs) {
+    const cairn = new THREE.Group();
+    cairn.position.set(px, 0.12, pz);
+    cairn.userData.nonCollidable = true;
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.24, 0.14, 10), chunarStoneMat);
+    bowl.position.y = 0.07;
+    cairn.add(bowl);
+    for (let k = 0; k < 5; k++) {
+      const ang = (k / 5) * Math.PI * 2;
+      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.085, 0), pebblePileMat);
+      st.scale.set(1.2, 0.65, 1.0);
+      st.position.set(Math.cos(ang) * 0.12, 0.15 + (k % 2) * 0.04, Math.sin(ang) * 0.12);
+      cairn.add(st);
+    }
+    group.add(cairn);
   }
 
   // Peace Garden Stone Lanterns along axial red-brick walks, Pushkarini Overlook & Outer Sacred Bridges
@@ -855,6 +886,19 @@ export function createLumbiniBuddha(
   group.add(shilalekh);
 
   group.userData.templeBells = templeBells;
+  group.userData.prayerWheelSpinners = prayerWheelSpinners;
+  group.userData.mayaDeviHighlights = mayaDevi.group.userData.mayaDeviHighlights;
+  group.userData.pebbleSpots = localPebbleSpecs.map(([px, pz, pondX, pondZ, label]) => ({
+    x: -210 + px,
+    z: 96 + pz,
+    pondX: -210 + pondX,
+    pondZ: 96 + pondZ,
+    label,
+  }));
+  group.userData.meditationSpots = [
+    { x: -234.0, z: 112.5, lookX: -200.0, lookZ: 112.5, label: 'Sacred Bodhi Chautara' },
+    { x: -210.0, z: 65.5, lookX: -210.0, lookZ: 74.0, label: 'Maya Devi Sanctum' },
+  ];
   group.userData.lotusCount =
     (typeof pushkarini.userData.lotusCount === 'number' ? pushkarini.userData.lotusCount : 0) +
     (typeof surroundingPond.userData.lotusCount === 'number'

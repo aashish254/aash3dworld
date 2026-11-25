@@ -468,12 +468,22 @@ export function buildMayaDeviTemple(
     bevelEnabled: false,
   });
   rampGeo.translate(0, 0, -(doorHalfW + 0.24));
-  rampGeo.rotateY(-Math.PI * 0.5);
+  rampGeo.rotateY(Math.PI * 0.5);
   rampGeo.computeVertexNormals();
   const rampMesh = new THREE.Mesh(rampGeo, mats.stuccoWhiteMat);
   rampMesh.castShadow = true;
   rampMesh.receiveShadow = true;
   group.add(rampMesh);
+
+  // Flush South doorway threshold sill bridging ramp top (z = +12.0) onto interior boardwalk (z = +11.2)
+  const thresholdSill = new THREE.Mesh(
+    new THREE.BoxGeometry(doorHalfW * 2 - 0.14, 0.20, wallT + 0.16),
+    mats.stuccoWhiteMat,
+  );
+  thresholdSill.position.set(0, rampYEnd - 0.10, D * 0.5 - wallT * 0.5);
+  thresholdSill.receiveShadow = true;
+  thresholdSill.castShadow = true;
+  group.add(thresholdSill);
 
   // Signature sloped white railings with 7 golden Dharmachakra Wheel medallions on each side of ramp
   const rampAngle = Math.atan2(rampYEnd - rampYStart, rampSpanZ);
@@ -519,13 +529,24 @@ export function buildMayaDeviTemple(
   pitFloor.receiveShadow = true;
   group.add(pitFloor);
 
-  // Suspended Planked Timber & Steel Boardwalk Loop at y = 1.00m (clear inner pit: |x|<=9.0, |z|<=5.6)
+  // Suspended Carved Nepali Sal Wood & Steel Boardwalk Loop at y = 1.00m (clear inner pit: |x|<=9.0, |z|<=5.6)
   const pitHalfW = 9.0;
   const pitHalfD = 5.6;
   const walkY = 1.00;
   const deckMat = new THREE.MeshStandardMaterial({
-    color: 0x6f4a2e,
-    roughness: 0.78,
+    map: lTex.salWoodMap,
+    normalMap: lTex.salWoodNormal,
+    normalScale: new THREE.Vector2(1.05, 1.05),
+    roughnessMap: lTex.salWoodRough,
+    roughness: 0.72,
+    metalness: 0.06,
+  });
+  const salBeamMat = new THREE.MeshStandardMaterial({
+    map: lTex.salWoodMap,
+    normalMap: lTex.salWoodNormal,
+    normalScale: new THREE.Vector2(1.15, 1.15),
+    roughnessMap: lTex.salWoodRough,
+    roughness: 0.68,
     metalness: 0.05,
   });
   const addBoardwalkSlab = (cx: number, cz: number, sx: number, sz: number) => {
@@ -546,6 +567,24 @@ export function buildMayaDeviTemple(
   addBoardwalkSlab(0, pitHalfD + aisleZ * 0.5, innerSpanW, aisleZ);
   addBoardwalkSlab(-(pitHalfW + aisleX * 0.5), 0, aisleX, pitHalfD * 2);
   addBoardwalkSlab(pitHalfW + aisleX * 0.5, 0, aisleX, pitHalfD * 2);
+
+  // Carved Sal Wood interior ceiling tie-beams & South doorway inner casing
+  for (const bx of [-13.5, -9.2, 9.2, 13.5]) {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.36, innerSpanD - 0.4), salBeamMat);
+    beam.position.set(bx, 6.08, 0);
+    beam.castShadow = true;
+    group.add(beam);
+  }
+  for (const bz of [-8.8, 8.8]) {
+    const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(innerSpanW - 0.4, 0.28, 0.32), salBeamMat);
+    crossBeam.position.set(0, 6.12, bz);
+    group.add(crossBeam);
+  }
+  for (const side of [-1, 1]) {
+    const innerSalTrim = new THREE.Mesh(new THREE.BoxGeometry(0.18, doorH - 0.2, 0.24), salBeamMat);
+    innerSalTrim.position.set(side * (doorHalfW + 0.04), (doorH - 0.2) * 0.5, D * 0.5 - wallT - 0.12);
+    group.add(innerSalTrim);
+  }
 
   // Steel support piers beneath boardwalk + interior viewing balustrade around sunken pit
   for (const px of [-pitHalfW, 0, pitHalfW]) {
@@ -597,6 +636,7 @@ export function buildMayaDeviTemple(
   group.add(ruinInst);
 
   // Sacred Marker Stone (conglomerate stone slab under bulletproof glass shrine in pit center!)
+  // Note: Optional custom GLB artifact replacement hook for markerStone / reliefAltar below.
   const markerPlinth = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.52, 2.2), mats.brickMat);
   markerPlinth.position.set(0, -0.09, 0);
   const markerStone = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.16, 0.64), mats.chunarStoneMat);
@@ -645,11 +685,132 @@ export function buildMayaDeviTemple(
   reliefAltar.add(altarPlinth, reliefBacking, reliefPanel, innerSiddhartha, diyoL, diyoR);
   group.add(reliefAltar);
 
+  // 4 Corner Sukunda Brass Butter Lamps along inner viewing boardwalk corners with gentle flicker
+  const cornerLampRig = new THREE.Group();
+  cornerLampRig.userData.noMerge = true;
+  cornerLampRig.userData.nonCollidable = true;
+  const cornerLampLights: THREE.PointLight[] = [];
+  const cornerLamps: THREE.Object3D[] = [];
+  for (const [lx, lz] of [
+    [-8.4, -4.9],
+    [8.4, -4.9],
+    [-8.4, 4.9],
+    [8.4, 4.9],
+  ] as Array<[number, number]>) {
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.21, 0.34, 10), mats.warmBronzeMat);
+    ped.position.set(lx, walkY + 0.17, lz);
+    const lamp = createDetailedBrassSukundaDiyo(mats.giltGoldMat, mats.warmBronzeMat, mats.flameGlowMat, 0.62, true);
+    lamp.position.set(lx, walkY + 0.34, lz);
+    lamp.userData.nonCollidable = true;
+    cornerLampRig.add(ped, lamp);
+    cornerLamps.push(lamp);
+    if (lz > 0) {
+      const lgt = new THREE.PointLight(0xffb454, 1.35, 11.0, 1.5);
+      lgt.position.set(lx, walkY + 0.72, lz);
+      beaconLights.push(lgt);
+      cornerLampRig.add(lgt);
+      cornerLampLights.push(lgt);
+    }
+  }
+  cornerLampRig.userData.onFlickerUpdate = (t: number) => {
+    for (let i = 0; i < cornerLampLights.length; i++) {
+      const pulse = Math.sin(t * 7.2 + i * 2.1) * 0.16 + Math.sin(t * 13.7 + i) * 0.08;
+      cornerLampLights[i].intensity = 1.25 + pulse;
+    }
+    for (let i = 0; i < cornerLamps.length; i++) {
+      const s = 0.61 + Math.sin(t * 8.4 + i * 1.9) * 0.025;
+      cornerLamps[i].scale.set(0.62, s, 0.62);
+    }
+  };
+  group.add(cornerLampRig);
+  animatedNodes.push(cornerLampRig);
+
+  // Floating Golden Skylight Dust Motes drifting inside the central sanctum light shaft
+  const moteCount = 140;
+  const motePos = new Float32Array(moteCount * 3);
+  const moteSeed = new Float32Array(moteCount);
+  for (let i = 0; i < moteCount; i++) {
+    const h1 = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
+    const r1 = h1 - Math.floor(h1);
+    const h2 = Math.sin(i * 78.233 + 1.923) * 43758.5453;
+    const r2 = h2 - Math.floor(h2);
+    const h3 = Math.sin(i * 39.346 + 9.412) * 43758.5453;
+    const r3 = h3 - Math.floor(h3);
+    motePos[i * 3] = (r1 - 0.5) * 9.8;
+    motePos[i * 3 + 1] = 0.65 + r2 * 6.4;
+    motePos[i * 3 + 2] = (r3 - 0.5) * 7.2;
+    moteSeed[i] = r1 * 6.2831;
+  }
+  const moteGeo = new THREE.BufferGeometry();
+  moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+  moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(moteSeed, 1));
+  const moteUniforms = { uTime: { value: 0 } };
+  const moteMat = new THREE.ShaderMaterial({
+    uniforms: moteUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      attribute float aSeed;
+      uniform float uTime;
+      varying float vAlpha;
+      void main() {
+        vec3 p = position;
+        p.x += sin(uTime * 0.35 + aSeed) * 0.42;
+        p.y = 0.65 + mod(p.y + uTime * 0.14 + aSeed, 6.4);
+        p.z += cos(uTime * 0.28 + aSeed * 1.3) * 0.38;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = clamp(28.0 / max(1.2, -mv.z), 2.0, 9.0);
+        float heightFade = smoothstep(0.65, 1.6, p.y) * (1.0 - smoothstep(5.8, 7.05, p.y));
+        vAlpha = heightFade * (0.42 + 0.42 * sin(uTime * 1.4 + aSeed * 2.0));
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float r2 = dot(c, c);
+        if (r2 > 0.25) discard;
+        float glow = exp(-r2 * 14.0);
+        gl_FragColor = vec4(1.0, 0.87, 0.58, glow * vAlpha * 0.72);
+      }
+    `,
+  });
+  const dustMotes = new THREE.Points(moteGeo, moteMat);
+  dustMotes.name = 'MayaDeviDustMotes';
+  dustMotes.frustumCulled = false;
+  dustMotes.userData.noMerge = true;
+  dustMotes.userData.nonCollidable = true;
+  dustMotes.userData.onFlickerUpdate = (t: number) => {
+    moteUniforms.uTime.value = t;
+  };
+  group.add(dustMotes);
+  animatedNodes.push(dustMotes);
+
   // Warm Architectural Sanctuary Spotlight illuminating the Marker Stone & sunken Mauryan ruins
-  const sanctumLight = new THREE.PointLight(0xffcf87, 3.8, 24, 1.2);
+  const sanctumLight = new THREE.PointLight(0xffcf87, 4.2, 25, 1.15);
   sanctumLight.position.set(0, 5.4, -0.6);
   beaconLights.push(sanctumLight);
   group.add(sanctumLight);
 
+  group.userData.mayaDeviHighlights = {
+    markerStone: {
+      title: 'Sacred Marker Stone (3rd c. BCE)',
+      subtitle: 'Birthplace Sanctum · UNESCO World Heritage Core',
+      description:
+        'Discovered during 1992–1996 excavations beneath the Maya Devi sanctum, this conglomerate stone slab marks the exact nativity spot of Siddhartha Gautama surrounded by Mauryan brick chambers.',
+      localPos: [0, 0.24, 0],
+    },
+    nativityRelief: {
+      title: '4th-c. Gupta Nativity Bas-Relief',
+      subtitle: 'Queen Maya Devi Holding the Sal Branch',
+      description:
+        'Carved sandstone stele depicting Queen Maya Devi grasping a blossoming Sal tree branch while infant Siddhartha takes his seven symbolic steps atop sacred lotus medallions.',
+      localPos: [0, 1.5, -3.8],
+    },
+  };
+
   return { group, beaconLights, animatedNodes, cameraOccluders };
 }
+

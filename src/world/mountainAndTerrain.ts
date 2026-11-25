@@ -10,12 +10,14 @@ import { ProceduralTextureSet } from './proceduralTextures';
 import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
+  GraphicsQualityPreset,
   LUMBINI_PEACE_CANAL,
   ROAD_LANTERN_COORDS,
   ROAD_PATHS,
   SPAWN_POSITION,
   TreeSpecies,
   TreeSpot,
+  getGraphicsQualityConfig,
   getMeadowZoneAt,
   getRiverCenterX,
   getWorldBoulderSpots,
@@ -342,6 +344,7 @@ export interface AnimatedGrassController {
     playerMove?: THREE.Vector3,
     meadowActivity?: number,
   ) => void;
+  setQuality?: (preset: GraphicsQualityPreset) => void;
   getShaderUniforms?: () => {
     uTime: { value: number };
     uPlayerPos: { value: THREE.Vector3 };
@@ -1242,10 +1245,11 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-         float tipShade = mix(0.54, 1.24, smoothstep(0.0, 1.0, vTip));
-         diffuseColor.rgb *= tipShade;
-         // Sun-kissed golden-green wind crest shimmer on blade tips + parted meadow highlight
-         diffuseColor.rgb += vec3(0.08, 0.09, 0.02) * (vTip * vTip * vWindWave);
+         vec3 rootTint = vec3(0.42, 0.62, 0.38);
+         vec3 tipTint = vec3(1.26, 1.24, 0.88);
+         diffuseColor.rgb *= mix(rootTint, tipTint, smoothstep(0.0, 1.0, vTip));
+         // Sun-kissed translucent subsurface wind crest shimmer + parted meadow highlight
+         diffuseColor.rgb += vec3(0.11, 0.12, 0.03) * (vTip * vTip * vWindWave);
          diffuseColor.rgb += vec3(0.09, 0.12, 0.03) * (vTip * vMeadowDisp);`,
       );
   };
@@ -1416,6 +1420,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   grassMesh.computeBoundingSphere();
   group.add(grassMesh);
 
+  let flowerMesh: THREE.InstancedMesh | null = null;
   if (flowerSpots.length > 0) {
     // Rooted meadow wildflower: tapered green stem (-0.05..0.31) + 5-sided blossom cup (0.28..0.41)
     const stemPart = new THREE.CylinderGeometry(0.015, 0.026, 0.36, 5, 2);
@@ -1545,7 +1550,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
            }`,
         );
     };
-    const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerSpots.length);
+    flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerSpots.length);
     const flowerPalette = [0xf7f1df, 0xf6c453, 0xf2a7c1, 0xebe6d6, 0xfa9c4b];
     flowerSpots.forEach((fl, idx) => {
       const y = sampleTerrainMeshHeight(terrainMesh, fl.x, fl.z);
@@ -1553,9 +1558,9 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
       _quat.setFromEuler(_euler.set(0.06 * Math.sin(idx), fl.rot, 0.06 * Math.cos(idx)));
       _scale.setScalar(fl.scale);
       _mat4.compose(_vec3, _quat, _scale);
-      flowerMesh.setMatrixAt(idx, _mat4);
+      flowerMesh!.setMatrixAt(idx, _mat4);
       _color.setHex(flowerPalette[idx % flowerPalette.length]);
-      flowerMesh.setColorAt(idx, _color);
+      flowerMesh!.setColorAt(idx, _color);
     });
     flowerMesh.instanceMatrix.needsUpdate = true;
     if (flowerMesh.instanceColor) flowerMesh.instanceColor.needsUpdate = true;
@@ -1586,6 +1591,9 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     group.add(pebMesh);
   }
 
+  const maxGrassCount = grassMesh.count;
+  const maxFlowerCount = flowerMesh ? flowerMesh.count : 0;
+
   return {
     group,
     getShaderUniforms: () => ({
@@ -1594,6 +1602,13 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
       uPlayerMove,
       uMeadowActivity,
     }),
+    setQuality: (preset: GraphicsQualityPreset) => {
+      const cfg = getGraphicsQualityConfig(preset);
+      grassMesh.count = Math.max(1, Math.round(maxGrassCount * cfg.grassRatio));
+      if (flowerMesh) {
+        flowerMesh.count = Math.max(1, Math.round(maxFlowerCount * cfg.grassRatio));
+      }
+    },
     update: (
       elapsed: number,
       playerPos?: THREE.Vector3,

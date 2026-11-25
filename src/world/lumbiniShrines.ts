@@ -7,7 +7,12 @@ import {
   createSacredFlameGroup,
 } from './janakiMandirCraft';
 import { BuddhaMaterials, createMonumentalSeatedBuddha } from './lumbiniBuddhaSculpt';
-import { REFLECTIVE_WATER_ENV_UNIFORMS, createReflectivePondSurface } from './waterShader';
+import {
+  REFLECTIVE_WATER_ENV_UNIFORMS,
+  WATER_INTERACTION_UNIFORMS,
+  WATER_RIPPLE_COUNT,
+  createReflectivePondSurface,
+} from './waterShader';
 import { createWavingPrayerFlagGarland } from './prayerFlags';
 import {
   LUMBINI_PUSHKARINI_POND,
@@ -24,16 +29,18 @@ const _e = new THREE.Euler();
 const _colorTmp = new THREE.Color();
 
 function applyLotusFloatWaveShader(mat: THREE.MeshStandardMaterial, amplitude = 0.011): void {
-  mat.customProgramCacheKey = () => `lumbini-lotus-float-${amplitude.toFixed(3)}`;
+  mat.customProgramCacheKey = () => `lumbini-lotus-float-v2-${amplitude.toFixed(3)}`;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uWaterTime = REFLECTIVE_WATER_ENV_UNIFORMS.uWaterTime;
     shader.uniforms.uRainIntensity = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity;
+    shader.uniforms.uWaterRipples = WATER_INTERACTION_UNIFORMS.uWaterRipples;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
          uniform float uWaterTime;
-         uniform float uRainIntensity;`,
+         uniform float uRainIntensity;
+         uniform vec4 uWaterRipples[${WATER_RIPPLE_COUNT}];`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -47,10 +54,27 @@ function applyLotusFloatWaveShader(mat: THREE.MeshStandardMaterial, amplitude = 
          float phase = wPos.x * 0.85 + wPos.z * 0.72;
          float bob = sin(wt + phase) * ${amplitude.toFixed(4)}
                    + cos(wt * 1.65 - wPos.z * 1.1) * ${(amplitude * 0.42).toFixed(4)};
+         float rippleLift = 0.0;
+         vec2 rippleTilt = vec2(0.0);
+         for (int i = 0; i < ${WATER_RIPPLE_COUNT}; i++) {
+           vec4 rSlot = uWaterRipples[i];
+           if (rSlot.z > 0.0) {
+             float age = uWaterTime - rSlot.z;
+             if (age >= 0.0 && age < 3.6) {
+               vec2 rDiff = wPos.xz - rSlot.xy;
+               float dist = length(rDiff);
+               float front = age * 3.1;
+               float ring = exp(-pow((dist - front) / 1.15, 2.0)) * (1.0 - smoothstep(0.5, 3.6, age));
+               float rWave = sin((dist - front) * 5.4) * ring * rSlot.w;
+               rippleLift += rWave * ${(amplitude * 1.85).toFixed(4)};
+               rippleTilt += (rDiff / max(dist, 0.05)) * rWave * 0.06;
+             }
+           }
+         }
          float rainJiggle = clamp(uRainIntensity, 0.0, 1.0)
                           * sin(uWaterTime * 11.5 + wPos.x * 7.3 + wPos.z * 5.9)
-                          * 0.0045;
-         transformed.y += bob + rainJiggle;
+                          * 0.0055;
+         transformed.y += bob + rippleLift + rainJiggle + dot(transformed.xz, rippleTilt);
          transformed.x += sin(wt * 0.92 + phase) * ${(amplitude * 0.55).toFixed(4)};`,
       );
   };
@@ -819,11 +843,107 @@ export function buildSacredBodhiChautara(
   }
   branchEndpoints.push(new THREE.Vector3(0, 6.2, 0), new THREE.Vector3(0.25, 6.5, -0.2));
 
-  const sprigGeo = new THREE.ConeGeometry(0.34, 0.48, 5);
-  sprigGeo.scale(1.25, 0.52, 0.95);
-  const sprigMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
-  const leafPalette = [0x3d6e31, 0x4b7f3a, 0x2f5a26, 0x5c8f43, 0x679948];
-  const leafCount = 720;
+  let pipalClusterMap: THREE.CanvasTexture | null = null;
+  if (typeof document !== 'undefined') {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 256, 256);
+      // Draw a cluster of 7 heart-shaped Ficus religiosa (Pipal) leaves with slender drip tips
+      const leaves: Array<[number, number, number, number, string]> = [
+        [128, 122, 0.0, 1.05, '#dcefc6'],
+        [82, 134, -0.58, 0.92, '#c8e3aa'],
+        [174, 134, 0.58, 0.92, '#cee8b0'],
+        [98, 86, -0.35, 0.84, '#e6f5d2'],
+        [158, 86, 0.35, 0.84, '#d9edc2'],
+        [112, 168, -0.25, 0.78, '#bdd99e'],
+        [146, 168, 0.25, 0.78, '#c2df9f'],
+      ];
+      for (const [lx, ly, rot, sc, fill] of leaves) {
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(rot);
+        ctx.scale(sc, sc);
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        // Heart-shaped base + characteristic long Pipal acuminate drip tip
+        ctx.moveTo(0, -46);
+        ctx.bezierCurveTo(10, -28, 34, -18, 32, 10);
+        ctx.bezierCurveTo(30, 32, 12, 38, 0, 26);
+        ctx.bezierCurveTo(-12, 38, -30, 32, -32, 10);
+        ctx.bezierCurveTo(-34, -18, -10, -28, 0, -46);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 232, 0.45)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, 24);
+        ctx.lineTo(0, -42);
+        ctx.stroke();
+        ctx.restore();
+      }
+      pipalClusterMap = new THREE.CanvasTexture(c);
+      pipalClusterMap.colorSpace = THREE.SRGBColorSpace;
+      pipalClusterMap.needsUpdate = true;
+    }
+  }
+
+  const cardA = new THREE.PlaneGeometry(0.86, 0.96, 2, 2);
+  const posA = cardA.attributes.position;
+  for (let vi = 0; vi < posA.count; vi++) {
+    const px = posA.getX(vi);
+    const py = posA.getY(vi);
+    posA.setZ(vi, -0.09 * (px * px + py * py));
+  }
+  cardA.computeVertexNormals();
+  const cardB = cardA.clone();
+  cardB.rotateY(Math.PI * 0.48);
+  cardB.rotateX(0.24);
+  const sprigGeo = mergeGeometries([cardA, cardB], false);
+  cardA.dispose();
+  cardB.dispose();
+
+  const bodhiWindUniforms = {
+    uBodhiTime: { value: 0 },
+    uBodhiWind: { value: 0.45 },
+  };
+  const sprigMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: pipalClusterMap ?? undefined,
+    alphaTest: pipalClusterMap ? 0.36 : 0,
+    side: THREE.DoubleSide,
+    roughness: 0.64,
+    metalness: 0.02,
+  });
+  sprigMat.customProgramCacheKey = () => 'bodhi-pipal-foliage-v1';
+  sprigMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uBodhiTime = bodhiWindUniforms.uBodhiTime;
+    shader.uniforms.uBodhiWind = bodhiWindUniforms.uBodhiWind;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uBodhiTime;
+         uniform float uBodhiWind;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vec4 bOrig = vec4(0.0, 0.0, 0.0, 1.0);
+         #ifdef USE_INSTANCING
+           bOrig = instanceMatrix * bOrig;
+         #endif
+         float bPhase = bOrig.x * 1.3 + bOrig.z * 1.1 + bOrig.y * 0.7;
+         float bSway = sin(uBodhiTime * 2.1 + bPhase) * (0.045 + uBodhiWind * 0.085);
+         transformed.x += bSway * (0.5 + position.y);
+         transformed.z += cos(uBodhiTime * 1.7 + bPhase * 0.8) * (0.032 + uBodhiWind * 0.055);`,
+      );
+  };
+
+  const leafPalette = [0x4c8339, 0x5c9443, 0x3b6c2c, 0x6ba24a, 0x7cb052];
+  const leafCount = 620;
   const leafInst = new THREE.InstancedMesh(sprigGeo, sprigMat, leafCount);
   leafInst.castShadow = true;
   leafInst.receiveShadow = true;
@@ -831,15 +951,15 @@ export function buildSacredBodhiChautara(
   for (let i = 0; i < leafCount; i++) {
     const center = branchEndpoints[i % branchEndpoints.length];
     const ga = i * 2.39996323;
-    const rad = Math.sqrt(((i * 19) % 100) / 100) * 1.55;
-    const hVar = (((i * 37) % 100) / 100 - 0.35) * 1.25;
+    const rad = Math.sqrt(((i * 19) % 100) / 100) * 1.65;
+    const hVar = (((i * 37) % 100) / 100 - 0.32) * 1.32;
     _v3.set(
       center.x + Math.cos(ga) * rad,
-      Math.max(4.0, center.y + hVar),
+      Math.max(3.85, center.y + hVar),
       center.z + Math.sin(ga) * rad,
     );
     _q.setFromEuler(_e.set(((i * 7) % 10) * 0.08 - 0.4, ga, ((i * 11) % 10) * 0.06 - 0.3));
-    _s.setScalar(0.8 + ((i * 13) % 10) * 0.06);
+    _s.setScalar(0.84 + ((i * 13) % 10) * 0.06);
     _m4.compose(_v3, _q, _s);
     leafInst.setMatrixAt(i, _m4);
     _colorTmp.setHex(leafPalette[i % leafPalette.length]);
@@ -849,6 +969,75 @@ export function buildSacredBodhiChautara(
   if (leafInst.instanceColor) leafInst.instanceColor.needsUpdate = true;
   leafInst.computeBoundingSphere();
   bodhi.add(leafInst);
+
+  // Drifting golden-green falling Bodhi leaves circling down around the Chautara
+  const fallingCount = 72;
+  const fPos = new Float32Array(fallingCount * 3);
+  const fSeed = new Float32Array(fallingCount);
+  for (let i = 0; i < fallingCount; i++) {
+    const a = i * 2.39996323;
+    const r = 1.2 + ((i * 29) % 100) / 100 * 4.4;
+    fPos[i * 3] = Math.cos(a) * r;
+    fPos[i * 3 + 1] = 0.6 + ((i * 41) % 100) / 100 * 5.2;
+    fPos[i * 3 + 2] = Math.sin(a) * r;
+    fSeed[i] = ((i * 17) % 100) / 100 * 6.2831;
+  }
+  const fGeo = new THREE.BufferGeometry();
+  fGeo.setAttribute('position', new THREE.BufferAttribute(fPos, 3));
+  fGeo.setAttribute('aSeed', new THREE.BufferAttribute(fSeed, 1));
+  const fMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: bodhiWindUniforms.uBodhiTime,
+      uWind: bodhiWindUniforms.uBodhiWind,
+    },
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      attribute float aSeed;
+      uniform float uTime;
+      uniform float uWind;
+      varying float vAlpha;
+      varying float vSpin;
+      void main() {
+        vec3 p = position;
+        float cycle = mod(p.y - uTime * (0.28 + uWind * 0.16) + aSeed, 5.2);
+        p.y = 0.55 + cycle;
+        float sway = 0.45 + uWind * 0.75;
+        p.x += sin(uTime * 1.15 + aSeed * 2.0 + cycle * 1.4) * sway;
+        p.z += cos(uTime * 0.95 + aSeed * 1.7 + cycle * 1.2) * sway;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = clamp(32.0 / max(1.4, -mv.z), 3.0, 11.0);
+        vAlpha = smoothstep(0.55, 1.35, p.y) * (1.0 - smoothstep(4.9, 5.75, p.y));
+        vSpin = uTime * 2.2 + aSeed;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      varying float vSpin;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float c = cos(vSpin);
+        float s = sin(vSpin);
+        vec2 ruv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+        float heart = length(vec2(ruv.x * 1.35, ruv.y - abs(ruv.x) * 0.38));
+        if (heart > 0.34) discard;
+        vec3 col = mix(vec3(0.46, 0.72, 0.24), vec3(0.84, 0.76, 0.24), 0.4 + 0.4 * sin(vSpin));
+        gl_FragColor = vec4(col, vAlpha * 0.88);
+      }
+    `,
+  });
+  const fallingLeaves = new THREE.Points(fGeo, fMat);
+  fallingLeaves.name = 'BodhiFallingLeaves';
+  fallingLeaves.frustumCulled = false;
+  fallingLeaves.userData.noMerge = true;
+  fallingLeaves.userData.nonCollidable = true;
+  fallingLeaves.userData.onEnvironmentUpdate = (env: { elapsed: number; windSpeed: number }) => {
+    bodhiWindUniforms.uBodhiTime.value = env.elapsed;
+    bodhiWindUniforms.uBodhiWind.value = Math.min(1, Math.max(0.15, env.windSpeed * 0.28));
+  };
+  bodhi.add(fallingLeaves);
+  bodhi.userData.animatedLeaves = fallingLeaves;
 
   // 6 perimeter bollards anchoring radial & ring waving 5-color Buddhist Lungta canopies
   const canopyRadius = 3.08;

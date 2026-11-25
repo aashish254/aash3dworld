@@ -12,11 +12,14 @@ import {
   WORLD_RADIUS,
   clampToWalkable,
   computeAtmosphereParticleProfile,
+  computeContextualWorldAction,
   computeEffectiveLightingState,
+  computeForestBirdSpatialAudioState,
   computeIncenseSmokeProfile,
   computeIncenseVentOffsets,
   computeLandmarkApproachCuePanAndGain,
   computeLumbiniAudioProfile,
+  computeLumbiniCricketSpatialState,
   computeLumbiniFireflyIntensity,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
@@ -26,9 +29,11 @@ import {
   findFirstUnexploredLandmarkApproach,
   findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
+  findWaterEdgeRippleOrigin,
   generateLumbiniFireflyPlacements,
   generateLumbiniPondLotusPlacements,
   getFootstepSurfaceKind,
+  getGraphicsQualityConfig,
   getLandmarkApproachCueRadius,
   getLandmarkApproachPoint,
   getRiverCenterX,
@@ -42,6 +47,7 @@ import {
   isWalkablePosition,
   mapWmoToWeather,
   sampleBirdFlightState,
+  stepPrayerWheelSpin,
   validateContactPayload,
 } from './worldLogic';
 import { LANDMARKS } from '../data/portfolioData';
@@ -1043,6 +1049,28 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
     built.animatedNodes.some((n) => typeof n.userData?.onEnvironmentUpdate === 'function'),
     'Expected wind-driven prayer-flag sync controller',
   );
+
+  // StaticPhysicsWorld BVH must allow smooth walking up the South Ramp and through the open doorway onto the interior boardwalk
+  const { StaticPhysicsWorld } = await import('./physicsBvh');
+  built.group.position.set(lx, 0, lz);
+  built.group.updateMatrixWorld(true);
+  const lumbiniBvh = new StaticPhysicsWorld();
+  lumbiniBvh.buildFromScene(built.group);
+  let bx = lx;
+  let bz = lz - 1.5; // z = 94.5 (South forecourt approaching ramp)
+  let by = getSurfaceHeightAt(bx, bz);
+  for (let step = 0; step < 30; step++) {
+    const nextZ = bz - 0.45;
+    const res = lumbiniBvh.resolveHorizontalCollision(bx, bz, bx, nextZ, by, 1.75, 0.4, 0.26);
+    bx = res.x;
+    bz = res.z;
+    const floor = lumbiniBvh.sampleFloorHeight(bx, bz, by + 0.34);
+    by = Math.max(getSurfaceHeightAt(bx, bz), floor ?? 0);
+  }
+  assert.ok(
+    bz <= lz - 12.0 && by >= 1.20,
+    `Expected StaticPhysicsWorld walk up South Ramp through Maya Devi doorway onto 1.25m boardwalk, got bz=${bz.toFixed(2)}, by=${by.toFixed(2)}`,
+  );
 });
 
 test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace Stupa, and ambience lighting/audio presets behave coherently', async () => {
@@ -1908,5 +1936,250 @@ test('Procedural texture generator creates grass, pebble, and weathered rock PBR
     }
   }
 });
+
+test('Localized forest bird spatial audio activates across all forest areas with directional panning and weather scaling', () => {
+  const forestSpots: Array<[number, number, string]> = [
+    [-108, -74, 'forest-pumdikot'],
+    [-48, -24, 'forest-pashupati'],
+    [-108, 4, 'forest-boudha'],
+    [20, 42, 'forest-bagmati'],
+  ];
+
+  for (const [fx, fz, expectedPrefix] of forestSpots) {
+    const state = computeForestBirdSpatialAudioState(fx, 1.5, fz, 0, -1, 0.25, 'clear', 9.5);
+    assert.equal(state.inForest, true, `Expected inForest=true near ${expectedPrefix}`);
+    assert.ok(state.birdActivity > 0.45, `Expected brisk birdActivity at ${expectedPrefix}, got ${state.birdActivity}`);
+    assert.ok(state.nearestEmitter?.emitter.id.startsWith(expectedPrefix), `Expected ${expectedPrefix} emitter`);
+  }
+
+  // Emitter to the listener's right (+X when facing North -Z) should yield positive pan
+  const facingNorthLeftOfPashupati = computeForestBirdSpatialAudioState(-54, 1.5, -30, 0, -1, 0.2, 'clear', 10);
+  assert.ok(facingNorthLeftOfPashupati.nearestEmitter);
+  assert.ok(facingNorthLeftOfPashupati.nearestEmitter.pan > 0.3);
+
+  // Heavy rain strongly reduces bird chatter
+  const clearState = computeForestBirdSpatialAudioState(-48, 1.5, -24, 0, -1, 0.2, 'clear', 10);
+  const rainState = computeForestBirdSpatialAudioState(-48, 1.5, -24, 0, -1, 0.2, 'rain', 10);
+  assert.ok(rainState.birdActivity < clearState.birdActivity * 0.3);
+});
+
+test('Lumbini pond crickets peak near Pushkarini & Sacred Pond during dusk/night and attenuate by day or rain', () => {
+  const pushkariniNight = computeLumbiniCricketSpatialState(
+    -215.0,
+    1.2,
+    112.5,
+    1,
+    0,
+    21.5,
+    'moonlight-vigil',
+    'clear',
+  );
+  assert.equal(pushkariniNight.inZone, true);
+  assert.ok(pushkariniNight.cricketActivity >= 0.72, `Expected strong night cricket chorus near Pushkarini, got ${pushkariniNight.cricketActivity}`);
+  assert.equal(pushkariniNight.nearestEmitter?.emitter.id, 'lumbini-cricket-pushkarini-west');
+
+  const pushkariniDusk = computeLumbiniCricketSpatialState(
+    -215.0,
+    1.2,
+    112.5,
+    1,
+    0,
+    18.2,
+    'butter-lamp-dusk',
+    'clear',
+  );
+  const pushkariniNoon = computeLumbiniCricketSpatialState(
+    -215.0,
+    1.2,
+    112.5,
+    1,
+    0,
+    12.5,
+    'lotus-dawn',
+    'clear',
+  );
+  const pushkariniRain = computeLumbiniCricketSpatialState(
+    -215.0,
+    1.2,
+    112.5,
+    1,
+    0,
+    21.5,
+    'moonlight-vigil',
+    'rain',
+  );
+  assert.ok(pushkariniNight.cricketActivity > pushkariniDusk.cricketActivity * 0.9);
+  assert.ok(pushkariniDusk.cricketActivity > pushkariniNoon.cricketActivity * 1.4);
+  assert.ok(pushkariniRain.cricketActivity < pushkariniNight.cricketActivity * 0.25);
+
+  const farAway = computeLumbiniCricketSpatialState(40, 1.2, -50, 0, -1, 21.5, 'moonlight-vigil', 'clear');
+  assert.equal(farAway.inZone, false);
+  assert.equal(farAway.cricketActivity, 0);
+});
+
+test('findWaterEdgeRippleOrigin triggers ripples near Pushkarini, Peace Canal, Bagmati River, Glacial Lake, and Ganga Sagar', () => {
+  const pushkariniEdge = findWaterEdgeRippleOrigin(-215.5, 112.5, 1);
+  assert.equal(pushkariniEdge?.waterBody, 'pushkarini');
+
+  const canalBank = findWaterEdgeRippleOrigin(LUMBINI_PEACE_CANAL.minX - 2.0, 90, 2);
+  assert.equal(canalBank?.waterBody, 'peace-canal');
+
+  const lakeShore = findWaterEdgeRippleOrigin(GLACIAL_LAKE.x + GLACIAL_LAKE.waterRadius + 1.4, GLACIAL_LAKE.z, 3);
+  assert.equal(lakeShore?.waterBody, 'glacial-lake');
+
+  const riverZ = 20;
+  const riverBank = findWaterEdgeRippleOrigin(getRiverCenterX(riverZ) + 6.4, riverZ, 4);
+  assert.equal(riverBank?.waterBody, 'bagmati-river');
+
+  const gangaSagarRim = findWaterEdgeRippleOrigin(-127.8, 108.0, 5);
+  assert.equal(gangaSagarRim?.waterBody, 'ganga-sagar');
+
+  const inlandMeadow = findWaterEdgeRippleOrigin(-45, 55, 6);
+  assert.equal(inlandMeadow, null);
+});
+
+test('Graphics quality config, prayer wheel damped spin, and contextual Maya Devi / sanctuary actions work cleanly', () => {
+  const high = getGraphicsQualityConfig('high');
+  const med = getGraphicsQualityConfig('medium');
+  const low = getGraphicsQualityConfig('low');
+  assert.equal(high.grassRatio, 1.0);
+  assert.equal(med.grassRatio, 0.55);
+  assert.equal(low.grassRatio, 0.25);
+  assert.equal(low.shadowMapSize, 512);
+
+  const spun = stepPrayerWheelSpin(0, 0.22, 0.05, 14);
+  assert.ok(spun.velocity > 10 && spun.active);
+  const settled = stepPrayerWheelSpin(spun.angle, spun.velocity, 0.1, 0);
+  assert.ok(settled.velocity < spun.velocity);
+
+  const markerAct = computeContextualWorldAction(-210, 79.5, null, [], [], [], []);
+  assert.equal(markerAct?.kind, 'inspect-marker-stone');
+
+  const nativityAct = computeContextualWorldAction(-210, 65.8, null, [], [], [], []);
+  assert.equal(nativityAct?.kind, 'inspect-nativity-relief');
+
+  const wheelAct = computeContextualWorldAction(-217.4, 134.5, null, [{ x: -217.4, z: 135.0 }], [], [], []);
+  assert.equal(wheelAct?.kind, 'spin-prayer-wheel');
+
+  const pebbleAct = computeContextualWorldAction(
+    -215.5,
+    112.5,
+    null,
+    [],
+    [],
+    [{ x: -215.5, z: 112.5, pondX: -205, pondZ: 112.5, label: 'Pushkarini Pond' }],
+    [],
+  );
+  assert.equal(pebbleAct?.kind, 'toss-pebble');
+
+  const meditateAct = computeContextualWorldAction(
+    -239.0,
+    113.5,
+    null,
+    [],
+    [],
+    [],
+    [{ x: -239.0, z: 112.5, lookX: -200, lookZ: 112.5, label: 'Bodhi Chautara' }],
+  );
+  assert.equal(meditateAct?.kind, 'sit-meditate');
+});
+
+test('SoundEngine triggers localized 3D forest bird chirps and Lumbini pond cricket stridulations via PannerNode', async () => {
+  const prevWindow = (globalThis as { window?: unknown }).window;
+  let pannerCount = 0;
+  let nowSec = 1.0;
+  const makeParam = (init = 0) => ({
+    value: init,
+    setValueAtTime(v: number) { this.value = v; },
+    linearRampToValueAtTime(v: number) { this.value = v; },
+    exponentialRampToValueAtTime(v: number) { this.value = v; },
+    setTargetAtTime(v: number) { this.value = v; },
+    cancelScheduledValues() {},
+  });
+  class MockAudioCtx {
+    public sampleRate = 44100;
+    public state = 'running';
+    public destination = { connect() {} };
+    public listener = {
+      positionX: makeParam(0), positionY: makeParam(0), positionZ: makeParam(0),
+      forwardX: makeParam(0), forwardY: makeParam(0), forwardZ: makeParam(-1),
+      upX: makeParam(0), upY: makeParam(1), upZ: makeParam(0),
+    };
+    get currentTime() { return nowSec; }
+    resume() { return Promise.resolve(); }
+    close() { return Promise.resolve(); }
+    createBuffer(_c: number, len: number, sr: number) {
+      return { duration: len / sr, getChannelData: () => new Float32Array(len) };
+    }
+    createBufferSource() {
+      return { buffer: null, loop: false, onended: null, connect() {}, disconnect() {}, start() {}, stop() {} };
+    }
+    createBiquadFilter() {
+      return { type: 'lowpass', frequency: makeParam(400), Q: makeParam(1), connect() {}, disconnect() {} };
+    }
+    createGain() { return { gain: makeParam(1), connect() {}, disconnect() {} }; }
+    createOscillator() {
+      return { type: 'sine', frequency: makeParam(440), onended: null, connect() {}, disconnect() {}, start() {}, stop() {} };
+    }
+    createPanner() {
+      pannerCount++;
+      return {
+        panningModel: 'equalpower', distanceModel: 'inverse', refDistance: 1, maxDistance: 100,
+        rolloffFactor: 1, coneInnerAngle: 360, coneOuterAngle: 360, coneOuterGain: 0,
+        positionX: makeParam(0), positionY: makeParam(0), positionZ: makeParam(0),
+        connect() {}, disconnect() {},
+      };
+    }
+  }
+
+  try {
+    (globalThis as { window?: unknown }).window = { AudioContext: MockAudioCtx };
+    const { soundEngine } = await import('./soundEngine');
+    soundEngine.setEnabled(true);
+
+    // Advance past startup chirp delay inside Pashupati Woodland (-48, -24)
+    nowSec = 4.0;
+    const forestMix = computeSpatialAmbienceMix(-48, -24, 0);
+    soundEngine.updateAmbience(
+      forestMix,
+      0.016,
+      'sanctuary-auto',
+      'clear',
+      { x: -48, y: 1.8, z: -24, forwardX: 0, forwardY: 0, forwardZ: -1 },
+      10,
+    );
+    const forestStatus = soundEngine.getForestBirdStatus();
+    assert.equal(forestStatus.inForest, true);
+    assert.ok(forestStatus.eventCount >= 1);
+    assert.ok(pannerCount >= 1);
+
+    // Move to Pushkarini Pond West Bank at dusk/night -> cricket stridulation fires spatially
+    nowSec = 6.5;
+    const lumbiniMix = computeSpatialAmbienceMix(-215, 112.5, 0);
+    soundEngine.updateAmbience(
+      lumbiniMix,
+      0.016,
+      'moonlight-vigil',
+      'clear',
+      { x: -215, y: 1.5, z: 112.5, forwardX: 1, forwardY: 0, forwardZ: 0 },
+      21.5,
+    );
+    const cricketStatus = soundEngine.getLumbiniCricketStatus();
+    assert.equal(cricketStatus.inZone, true);
+    assert.ok(cricketStatus.eventCount >= 1);
+    assert.equal(cricketStatus.nearestEmitterId, 'lumbini-cricket-pushkarini-west');
+    assert.ok(pannerCount >= 2);
+
+    soundEngine.setEnabled(false);
+    soundEngine.dispose();
+  } finally {
+    if (prevWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      (globalThis as { window?: unknown }).window = prevWindow;
+    }
+  }
+});
+
 
 

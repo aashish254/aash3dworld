@@ -6,9 +6,12 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { LANDMARKS, LandmarkData } from '../data/portfolioData';
 import {
+  CameraViewMode,
+  ContextualWorldAction,
   CustomWaypoint,
   FootstepSurfaceKind,
   GLACIAL_LAKE,
+  GraphicsQualityPreset,
   LUMBINI_PEACE_CANAL,
   LUMBINI_SACRED_POND,
   LumbiniAmbiencePreset,
@@ -22,15 +25,17 @@ import {
   WeatherKind,
   clampToWalkable,
   computeAtmosphereParticleProfile,
+  computeContextualWorldAction,
   computeEffectiveLightingState,
   computeLumbiniAudioProfile,
   computeLumbiniFireflyIntensity,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
   findFirstUnexploredLandmarkApproach,
-  findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
+  findWaterEdgeRippleOrigin,
   getFootstepSurfaceKind,
+  getGraphicsQualityConfig,
   getMeadowZoneAt,
   getPresetHour,
   getRiverCenterX,
@@ -41,6 +46,7 @@ import {
   isOnBridgeDeck,
   isOnLumbiniCanalBridge,
   isOnLumbiniSacredBridge,
+  stepPrayerWheelSpin,
 } from './worldLogic';
 import { LumbiniFireflySystem } from './lumbiniFireflies';
 import { WeatherParticleSystem } from './weatherParticles';
@@ -101,18 +107,28 @@ const _snapSize = new THREE.Vector3();
 
 export type WorldGameState = 'title' | 'playing' | 'paused';
 
+export interface MayaDeviHighlightInfo {
+  title: string;
+  subtitle: string;
+  description: string;
+  localPos?: [number, number, number];
+}
+
 export interface WorldHudSnapshot {
   zoneName: string;
   nearestLandmark: LandmarkData | null;
   distanceWalked: number;
   timeState: TimeLightingState;
   coords: { x: number; z: number };
+  contextualAction: ContextualWorldAction | null;
+  isMeditating: boolean;
 }
 
 export interface WorldEngineCallbacks {
   onSelectLandmark: (landmark: LandmarkData) => void;
   onHudUpdate: (snapshot: WorldHudSnapshot) => void;
   onPlaceWaypointRequest: (x: number, z: number) => void;
+  onInspectHighlight?: (highlight: { title: string; subtitle: string; description: string }) => void;
   onBellRing?: () => void;
   onWebglError?: (message: string) => void;
 }
@@ -148,6 +164,23 @@ interface TempleBellEntry {
   ringDuration: number;
   amplitude: number;
   cooldownUntil: number;
+}
+
+interface PrayerWheelEntry {
+  mesh: THREE.Object3D;
+  worldPos: THREE.Vector3;
+  angle: number;
+  velocity: number;
+  cooldownUntil: number;
+}
+
+interface TossedPebbleEntry {
+  mesh: THREE.Mesh;
+  startPos: THREE.Vector3;
+  targetPos: THREE.Vector3;
+  progress: number;
+  duration: number;
+  pondY: number;
 }
 
 export class WorldEngine {
@@ -200,6 +233,22 @@ export class WorldEngine {
   private animatedLandmarkNodes: THREE.Object3D[] = [];
   private templeBellEntries: TempleBellEntry[] = [];
   private bellRingsCount = 0;
+  private prayerWheelEntries: PrayerWheelEntry[] = [];
+  private prayerWheelHitTargets: THREE.Mesh[] = [];
+  private prayerWheelSpinsCount = 0;
+  private pebbleSpots: Array<{ x: number; z: number; pondX: number; pondZ: number; label: string }> = [];
+  private meditationSpots: Array<{ x: number; z: number; lookX: number; lookZ: number; label: string }> = [];
+  private mayaDeviHighlights: {
+    markerStone?: MayaDeviHighlightInfo;
+    nativityRelief?: MayaDeviHighlightInfo;
+  } | null = null;
+  private activeTossedPebbles: TossedPebbleEntry[] = [];
+  private tossedPebbleGeo: THREE.BufferGeometry | null = null;
+  private tossedPebbleMat: THREE.MeshStandardMaterial | null = null;
+  private pebbleTossesCount = 0;
+  private isMeditating = false;
+  private meditationTarget: { x: number; z: number; lookX: number; lookZ: number; label: string } | null = null;
+  private lastContextualAction: ContextualWorldAction | null = null;
   private prayerFlags: THREE.Mesh[] = [];
   private landmarkRings = new Map<string, THREE.Mesh>();
   private landmarkHitTargets: THREE.Mesh[] = [];
@@ -265,6 +314,8 @@ export class WorldEngine {
   private walkMarkerMesh!: THREE.Mesh;
 
   // Miniature 3/4 diorama camera framing (balanced so tall landmarks + courtyard fit cleanly)
+  private cameraMode: CameraViewMode = 'third-person';
+  private graphicsQuality: GraphicsQualityPreset = 'high';
   private cameraYaw = 0;
   private cameraPitch = 0.45;
   private cameraDistance = 13.8;
@@ -323,6 +374,8 @@ export class WorldEngine {
   private lumbiniLotusCount = 0;
   private pondRainIntensity = 0;
   private pondTrailRippleCount = 0;
+  private waterEdgeRippleCount = 0;
+  private lastWaterRippleBody = 'none';
   private lastTrailRippleAt = -10;
   private discoveredLandmarkIds = new Set<string>();
   private cuedLandmarkIds = new Set<string>();
@@ -796,8 +849,44 @@ export class WorldEngine {
       this.landmarkHitTargets.push(built.hitMesh);
       this.beaconLights.push(...built.beaconLights);
       this.animatedLandmarkNodes.push(...built.animatedNodes);
-      if (lm.id === 'lumbini-buddha' && typeof built.group.userData.lotusCount === 'number') {
-        this.lumbiniLotusCount = built.group.userData.lotusCount;
+      if (lm.id === 'lumbini-buddha') {
+        if (typeof built.group.userData.lotusCount === 'number') {
+          this.lumbiniLotusCount = built.group.userData.lotusCount;
+        }
+        const rawWheels = built.group.userData.prayerWheelSpinners as THREE.Object3D[] | undefined;
+        if (rawWheels && rawWheels.length > 0) {
+          built.group.updateMatrixWorld(true);
+          const wheelHitGeo = new THREE.SphereGeometry(0.62, 8, 8);
+          const wheelHitMat = new THREE.MeshBasicMaterial({ visible: false });
+          for (const wheel of rawWheels) {
+            const worldPos = new THREE.Vector3();
+            wheel.getWorldPosition(worldPos);
+            const wheelIdx = this.prayerWheelEntries.length;
+            const pwState = wheel.userData.prayerWheel as { angle?: number; velocity?: number } | undefined;
+            this.prayerWheelEntries.push({
+              mesh: wheel,
+              worldPos,
+              angle: pwState?.angle ?? 0,
+              velocity: pwState?.velocity ?? 0.22,
+              cooldownUntil: 0,
+            });
+            const hitSphere = new THREE.Mesh(wheelHitGeo, wheelHitMat);
+            hitSphere.position.copy(worldPos);
+            hitSphere.userData.prayerWheelIndex = wheelIdx;
+            hitSphere.layers.set(2);
+            this.scene.add(hitSphere);
+            this.prayerWheelHitTargets.push(hitSphere);
+          }
+        }
+        if (Array.isArray(built.group.userData.pebbleSpots)) {
+          this.pebbleSpots = built.group.userData.pebbleSpots;
+        }
+        if (Array.isArray(built.group.userData.meditationSpots)) {
+          this.meditationSpots = built.group.userData.meditationSpots;
+        }
+        if (built.group.userData.mayaDeviHighlights) {
+          this.mayaDeviHighlights = built.group.userData.mayaDeviHighlights;
+        }
       }
       if (built.cameraOccluders && built.cameraOccluders.length > 0) {
         this.cameraOccluders.push(...built.cameraOccluders);
@@ -2103,6 +2192,7 @@ export class WorldEngine {
     if (this.customWaypointGroup) exclude.add(this.customWaypointGroup);
     for (const hit of this.landmarkHitTargets) exclude.add(hit);
     for (const hit of this.bellHitTargets) exclude.add(hit);
+    for (const hit of this.prayerWheelHitTargets) exclude.add(hit);
     for (const prop of this.interactiveProps) exclude.add(prop.mesh);
     return exclude;
   }
@@ -2573,21 +2663,33 @@ export class WorldEngine {
     _pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (this.bellHitTargets.length > 0) {
+    if (this.bellHitTargets.length > 0 || this.prayerWheelHitTargets.length > 0) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
-      const bellHits = this.raycaster.intersectObjects(this.bellHitTargets, false);
-      if (bellHits.length > 0) {
-        const bellIndex = bellHits[0].object.userData.bellIndex as number | undefined;
-        const entry = typeof bellIndex === 'number' ? this.templeBellEntries[bellIndex] : undefined;
-        if (entry) {
-          const elapsed = (performance.now() - this.startTimeMs) / 1000;
-          const dist = Math.hypot(
-            entry.worldPos.x - this.playerPos.x,
-            entry.worldPos.z - this.playerPos.z,
-          );
-          this.triggerTempleBell(entry, elapsed, 1.0, Math.min(dist, 4.0));
-          return;
+      if (this.bellHitTargets.length > 0) {
+        const bellHits = this.raycaster.intersectObjects(this.bellHitTargets, false);
+        if (bellHits.length > 0) {
+          const bellIndex = bellHits[0].object.userData.bellIndex as number | undefined;
+          const entry = typeof bellIndex === 'number' ? this.templeBellEntries[bellIndex] : undefined;
+          if (entry) {
+            const elapsed = (performance.now() - this.startTimeMs) / 1000;
+            const dist = Math.hypot(
+              entry.worldPos.x - this.playerPos.x,
+              entry.worldPos.z - this.playerPos.z,
+            );
+            this.triggerTempleBell(entry, elapsed, 1.0, Math.min(dist, 4.0));
+            return;
+          }
+        }
+      }
+      if (this.prayerWheelHitTargets.length > 0) {
+        const wheelHits = this.raycaster.intersectObjects(this.prayerWheelHitTargets, false);
+        if (wheelHits.length > 0) {
+          const wheelIndex = wheelHits[0].object.userData.prayerWheelIndex as number | undefined;
+          if (typeof wheelIndex === 'number') {
+            this.spinPrayerWheel(wheelIndex, 16.5);
+            return;
+          }
         }
       }
     }
@@ -2693,6 +2795,184 @@ export class WorldEngine {
     this.scheduleImmediateRender();
   }
 
+  public setCameraMode(mode: CameraViewMode): void {
+    this.cameraMode = mode;
+    if (this.character?.root) {
+      this.character.root.visible = Boolean(this.focusedLandmark) || mode !== 'first-person';
+    }
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.cameraMode = mode;
+    }
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public toggleCameraMode(): CameraViewMode {
+    const next: CameraViewMode =
+      this.cameraMode === 'third-person' ? 'first-person' : 'third-person';
+    this.setCameraMode(next);
+    return next;
+  }
+
+  public setGraphicsQuality(preset: GraphicsQualityPreset): void {
+    this.graphicsQuality = preset;
+    const cfg = getGraphicsQualityConfig(preset);
+    this.grassController?.setQuality?.(preset);
+    if (this.renderer) {
+      const targetRatio = this.isSoftwareGl
+        ? Math.min(0.75, cfg.maxPixelRatio)
+        : Math.min(window.devicePixelRatio || 1, cfg.maxPixelRatio);
+      this.renderer.setPixelRatio(targetRatio);
+      this.composer?.setPixelRatio(targetRatio);
+      const shadowRes = this.isSoftwareGl ? Math.min(512, cfg.shadowMapSize) : cfg.shadowMapSize;
+      if (this.sunLight && this.sunLight.shadow.mapSize.x !== shadowRes) {
+        this.sunLight.shadow.mapSize.set(shadowRes, shadowRes);
+        this.sunLight.shadow.map?.dispose();
+        this.sunLight.shadow.map = null;
+      }
+      this.renderer.domElement.dataset.graphicsQuality = preset;
+    }
+    this.scheduleImmediateRender();
+  }
+
+  public spinPrayerWheel(index: number, impulse = 16.0): void {
+    const entry = this.prayerWheelEntries[index];
+    if (!entry) return;
+    const elapsed = (performance.now() - this.startTimeMs) / 1000;
+    entry.velocity = Math.min(28, entry.velocity + impulse);
+    entry.cooldownUntil = elapsed + 0.9;
+    this.prayerWheelSpinsCount += 1;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
+    }
+    soundEngine.playPrayerWheelSpin();
+  }
+
+  public tossPebble(spotIndex: number): void {
+    const spot = this.pebbleSpots[spotIndex];
+    if (!spot) return;
+    if (!this.tossedPebbleGeo) {
+      this.tossedPebbleGeo = new THREE.DodecahedronGeometry(0.11, 0);
+      this.tossedPebbleMat = new THREE.MeshStandardMaterial({ color: 0x6f747a, roughness: 0.8 });
+    }
+    const mesh = new THREE.Mesh(this.tossedPebbleGeo, this.tossedPebbleMat!);
+    mesh.scale.set(1.2, 0.72, 1.0);
+    mesh.userData.nonCollidable = true;
+    const startPos = new THREE.Vector3(this.playerPos.x, this.playerPos.y + 1.15, this.playerPos.z);
+    const jitterX = (Math.random() - 0.5) * 2.2;
+    const jitterZ = (Math.random() - 0.5) * 2.2;
+    const targetPos = new THREE.Vector3(spot.pondX + jitterX, 0.16, spot.pondZ + jitterZ);
+    mesh.position.copy(startPos);
+    this.scene.add(mesh);
+    this.activeTossedPebbles.push({
+      mesh,
+      startPos,
+      targetPos,
+      progress: 0,
+      duration: 0.56,
+      pondY: 0.16,
+    });
+    this.pebbleTossesCount += 1;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.pebbleTosses = String(this.pebbleTossesCount);
+    }
+    soundEngine.playClick();
+  }
+
+  public toggleMeditation(spotIndex?: number): void {
+    if (this.isMeditating) {
+      this.isMeditating = false;
+      this.meditationTarget = null;
+      this.emitHud(true);
+      return;
+    }
+    const spot =
+      typeof spotIndex === 'number'
+        ? this.meditationSpots[spotIndex]
+        : this.meditationSpots[0];
+    if (!spot) return;
+    this.isMeditating = true;
+    this.meditationTarget = spot;
+    this.walkTarget = null;
+    this.walkMarkerMesh.visible = false;
+    this.playerPos.x = spot.x;
+    this.playerPos.z = spot.z;
+    this.playerPos.y = getSurfaceHeightAt(spot.x, spot.z);
+    this.playerYaw = Math.atan2(spot.lookX - spot.x, spot.lookZ - spot.z);
+    soundEngine.playBellChime();
+    this.emitHud(true);
+  }
+
+  private getContextualAction(): ContextualWorldAction | null {
+    const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
+    const wheelSpots = this.prayerWheelEntries.map((w) => ({
+      x: w.worldPos.x,
+      z: w.worldPos.z,
+    }));
+    const bellSpots = this.templeBellEntries.map((b) => ({
+      x: b.worldPos.x,
+      z: b.worldPos.z,
+    }));
+    return computeContextualWorldAction(
+      this.playerPos.x,
+      this.playerPos.z,
+      nearest?.landmark ?? null,
+      wheelSpots,
+      bellSpots,
+      this.pebbleSpots,
+      this.meditationSpots,
+    );
+  }
+
+  public triggerContextualAction(): void {
+    if (this.gameState !== 'playing') return;
+    if (this.isMeditating) {
+      this.toggleMeditation();
+      return;
+    }
+    const action = this.getContextualAction();
+    if (!action) return;
+
+    if (action.kind === 'inspect-marker-stone' && this.mayaDeviHighlights?.markerStone) {
+      soundEngine.playBellChime();
+      this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.markerStone);
+      return;
+    }
+    if (action.kind === 'inspect-nativity-relief' && this.mayaDeviHighlights?.nativityRelief) {
+      soundEngine.playBellChime();
+      this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.nativityRelief);
+      return;
+    }
+    if (action.kind === 'spin-prayer-wheel' && typeof action.index === 'number') {
+      this.spinPrayerWheel(action.index, 17.5);
+      // Spin adjacent wheels in the rack gently for tactile wave effect
+      if (this.prayerWheelEntries[action.index - 1]) this.spinPrayerWheel(action.index - 1, 9.5);
+      if (this.prayerWheelEntries[action.index + 1]) this.spinPrayerWheel(action.index + 1, 9.5);
+      return;
+    }
+    if (action.kind === 'ring-temple-bell' && typeof action.index === 'number') {
+      const bell = this.templeBellEntries[action.index];
+      if (bell) {
+        const elapsed = (performance.now() - this.startTimeMs) / 1000;
+        const dist = Math.hypot(bell.worldPos.x - this.playerPos.x, bell.worldPos.z - this.playerPos.z);
+        this.triggerTempleBell(bell, elapsed, 1.0, dist);
+      }
+      return;
+    }
+    if (action.kind === 'toss-pebble' && typeof action.index === 'number') {
+      this.tossPebble(action.index);
+      return;
+    }
+    if (action.kind === 'sit-meditate' && typeof action.index === 'number') {
+      this.toggleMeditation(action.index);
+      return;
+    }
+    if (action.kind === 'landmark' && action.landmark) {
+      soundEngine.playClick();
+      this.callbacks.onSelectLandmark(action.landmark);
+    }
+  }
+
   public setPlacementMode(active: boolean): void {
     this.placementMode = active;
     this.renderer.domElement.style.cursor = active ? 'crosshair' : 'grab';
@@ -2757,6 +3037,9 @@ export class WorldEngine {
 
   public setFocusedLandmark(lm: LandmarkData | null): void {
     this.focusedLandmark = lm;
+    if (this.character?.root) {
+      this.character.root.visible = Boolean(lm) || this.cameraMode !== 'first-person';
+    }
     if (lm && this.justTeleported) {
       this.justTeleported = false;
       this.computeFocusedCameraTargets(lm, this.currentLookAt, this.currentCamPos);
@@ -2764,15 +3047,26 @@ export class WorldEngine {
       this.camera.lookAt(this.currentLookAt);
       this.scheduleImmediateRender();
     } else if (!lm) {
-      const horiz = Math.cos(this.cameraPitch) * this.cameraDistance;
-      const vert = Math.sin(this.cameraPitch) * this.cameraDistance;
-      this.currentLookAt.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);
-      this.currentCamPos.set(
-        this.playerPos.x + Math.sin(this.cameraYaw) * horiz,
-        this.playerPos.y + vert + 1.5,
-        this.playerPos.z + Math.cos(this.cameraYaw) * horiz,
-      );
-      this.applyCameraOcclusion(this.currentLookAt, this.currentCamPos);
+      if (this.cameraMode === 'first-person') {
+        const fpPitch = Math.max(-0.55, Math.min(0.55, 0.36 - this.cameraPitch));
+        const eyeY = this.playerPos.y + 1.56;
+        this.currentCamPos.set(this.playerPos.x, eyeY, this.playerPos.z);
+        this.currentLookAt.set(
+          this.playerPos.x - Math.sin(this.cameraYaw) * Math.cos(fpPitch) * 12,
+          eyeY + Math.sin(fpPitch) * 12,
+          this.playerPos.z - Math.cos(this.cameraYaw) * Math.cos(fpPitch) * 12,
+        );
+      } else {
+        const horiz = Math.cos(this.cameraPitch) * this.cameraDistance;
+        const vert = Math.sin(this.cameraPitch) * this.cameraDistance;
+        this.currentLookAt.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);
+        this.currentCamPos.set(
+          this.playerPos.x + Math.sin(this.cameraYaw) * horiz,
+          this.playerPos.y + vert + 1.5,
+          this.playerPos.z + Math.cos(this.cameraYaw) * horiz,
+        );
+        this.applyCameraOcclusion(this.currentLookAt, this.currentCamPos);
+      }
       this.camera.position.copy(this.currentCamPos);
       this.camera.lookAt(this.currentLookAt);
       this.scheduleImmediateRender();
@@ -2805,6 +3099,8 @@ export class WorldEngine {
 
   public triggerJump(): void {
     if (this.gameState === 'playing' && this.isGrounded) {
+      this.isMeditating = false;
+      this.meditationTarget = null;
       this.playerVelY = 7.4;
       this.isGrounded = false;
       this.squashScaleY = 1.2;
@@ -2838,6 +3134,47 @@ export class WorldEngine {
       this.camera.position.copy(this.currentCamPos);
       this.camera.lookAt(this.currentLookAt);
       this.scheduleImmediateRender();
+    }
+    const ambienceMix = computeSpatialAmbienceMix(
+      this.playerPos.x,
+      this.playerPos.z,
+      this.playerPos.y,
+    );
+    this.camera.getWorldDirection(_camForward);
+    soundEngine.updateAmbience(
+      ambienceMix,
+      0.016,
+      this.lumbiniPreset,
+      this.weather,
+      {
+        x: this.playerPos.x,
+        y: this.playerPos.y + 1.6,
+        z: this.playerPos.z,
+        forwardX: _camForward.x,
+        forwardY: _camForward.y,
+        forwardZ: _camForward.z,
+      },
+      getPresetHour(this.timePreset),
+    );
+    if (this.renderer?.domElement) {
+      const ds = this.renderer.domElement.dataset;
+      const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
+      const forestBirdStatus = soundEngine.getForestBirdStatus();
+      const cricketStatus = soundEngine.getLumbiniCricketStatus();
+      ds.ambienceZone = ambienceMix.activeZone;
+      ds.lumbiniSpatialAudio = lumbiniSpatial.inZone ? 'true' : 'false';
+      ds.forestBirdInZone = forestBirdStatus.inForest ? 'true' : 'false';
+      ds.lastForestBirdEmitter =
+        forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none';
+      ds.cricketInZone = cricketStatus.inZone ? 'true' : 'false';
+      ds.lastCricketEmitter =
+        cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none';
+      ds.insideMayaDevi =
+        Math.abs(this.playerPos.x + 210) <= 17.2 &&
+        this.playerPos.z >= 62.8 &&
+        this.playerPos.z <= 85.2
+          ? 'true'
+          : 'false';
     }
     this.emitHud(true);
   }
@@ -3243,7 +3580,14 @@ export class WorldEngine {
       forwardY: _camForward.y,
       forwardZ: _camForward.z,
     };
-    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather, listenerPose);
+    soundEngine.updateAmbience(
+      ambienceMix,
+      dt,
+      this.lumbiniPreset,
+      this.weather,
+      listenerPose,
+      getPresetHour(this.timePreset),
+    );
 
     if (this.gameState === 'playing' && !this.focusedLandmark) {
       const approachMatch = findFirstUnexploredLandmarkApproach(
@@ -3301,6 +3645,8 @@ export class WorldEngine {
       }
     }
     const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
+    const forestBirdStatus = soundEngine.getForestBirdStatus();
+    const cricketStatus = soundEngine.getLumbiniCricketStatus();
     const lumbiniAudio = computeLumbiniAudioProfile(ambienceMix, this.lumbiniPreset, this.weather);
     const surfaceKind = getFootstepSurfaceKind(this.playerPos.x, this.playerPos.z);
     if (this.renderer?.domElement) {
@@ -3318,9 +3664,25 @@ export class WorldEngine {
         lumbiniSpatial.lastRustleEmitterId ?? lumbiniSpatial.nearestRustleEmitterId ?? 'none';
       this.renderer.domElement.dataset.lumbiniBirdEvents = String(lumbiniSpatial.birdEventCount);
       this.renderer.domElement.dataset.lumbiniRustleEvents = String(lumbiniSpatial.rustleEventCount);
+      this.renderer.domElement.dataset.forestBirdInZone = forestBirdStatus.inForest ? 'true' : 'false';
+      this.renderer.domElement.dataset.forestBirdEvents = String(forestBirdStatus.eventCount);
+      this.renderer.domElement.dataset.lastForestBirdEmitter =
+        forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none';
+      this.renderer.domElement.dataset.cricketInZone = cricketStatus.inZone ? 'true' : 'false';
+      this.renderer.domElement.dataset.cricketActivity = cricketStatus.cricketActivity.toFixed(2);
+      this.renderer.domElement.dataset.cricketEvents = String(cricketStatus.eventCount);
+      this.renderer.domElement.dataset.lastCricketEmitter =
+        cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none';
       this.renderer.domElement.dataset.inMeadow = meadowInfo.inMeadow ? 'true' : 'false';
       this.renderer.domElement.dataset.meadowZone = meadowInfo.zoneId ?? 'none';
       this.renderer.domElement.dataset.meadowDisp = this.meadowDisplacementStrength.toFixed(2);
+      this.renderer.domElement.dataset.waterEdgeRipples = String(this.waterEdgeRippleCount);
+      this.renderer.domElement.dataset.lastWaterRippleBody = this.lastWaterRippleBody;
+      this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
+      this.renderer.domElement.dataset.pebbleTosses = String(this.pebbleTossesCount);
+      this.renderer.domElement.dataset.cameraMode = this.cameraMode;
+      this.renderer.domElement.dataset.graphicsQuality = this.graphicsQuality;
+      this.renderer.domElement.dataset.meditating = this.isMeditating ? 'true' : 'false';
     }
 
     for (let i = 0; i < this.animatedLandmarkNodes.length; i++) {
@@ -3331,6 +3693,44 @@ export class WorldEngine {
         !node.userData.noSpin
       ) {
         node.rotation.y += dt * (0.7 + (i % 3) * 0.2);
+      }
+    }
+
+    for (let i = 0; i < this.prayerWheelEntries.length; i++) {
+      const wheel = this.prayerWheelEntries[i];
+      let impulse = 0;
+      if (this.gameState === 'playing' && elapsed >= wheel.cooldownUntil) {
+        const d = Math.hypot(wheel.worldPos.x - this.playerPos.x, wheel.worldPos.z - this.playerPos.z);
+        if (d < 2.15 && Math.hypot(this.playerVx, this.playerVz) > 0.35) {
+          impulse = 14.5;
+          wheel.cooldownUntil = elapsed + 1.1;
+          this.prayerWheelSpinsCount += 1;
+          soundEngine.playPrayerWheelSpin();
+        }
+      }
+      const nextSpin = stepPrayerWheelSpin(wheel.angle, wheel.velocity, dt, impulse);
+      wheel.angle = nextSpin.angle;
+      wheel.velocity = nextSpin.velocity;
+      wheel.mesh.rotation.y = wheel.angle;
+    }
+
+    for (let i = this.activeTossedPebbles.length - 1; i >= 0; i--) {
+      const p = this.activeTossedPebbles[i];
+      p.progress += dt / p.duration;
+      if (p.progress >= 1) {
+        triggerWaterRipple(p.targetPos.x, p.targetPos.z, elapsed, 1.48);
+        this.spawnWaterSplash(p.targetPos.x, p.pondY + 0.04, p.targetPos.z, 1.15);
+        soundEngine.playWaterSplash(0.9);
+        this.waterEdgeRippleCount += 1;
+        this.lastWaterRippleBody = 'pebble-toss';
+        this.scene.remove(p.mesh);
+        this.activeTossedPebbles.splice(i, 1);
+      } else {
+        const t = p.progress;
+        p.mesh.position.lerpVectors(p.startPos, p.targetPos, t);
+        p.mesh.position.y += Math.sin(t * Math.PI) * 2.15;
+        p.mesh.rotation.x += dt * 9.0;
+        p.mesh.rotation.z += dt * 7.5;
       }
     }
     for (let i = 0; i < this.templeBellEntries.length; i++) {
@@ -3786,6 +4186,10 @@ export class WorldEngine {
     if (hasManualInput) {
       this.walkTarget = null;
       this.walkMarkerMesh.visible = false;
+      if (this.isMeditating) {
+        this.isMeditating = false;
+        this.meditationTarget = null;
+      }
     }
 
     const isSprinting =
@@ -3858,17 +4262,23 @@ export class WorldEngine {
           if (strideIdx !== this.lastFootstepStrideIdx) {
             this.lastFootstepStrideIdx = strideIdx;
             this.spawnFootstepBurst(surfaceKind, false, strideIdx % 2 === 0 ? 1 : -1);
-            const trailRipple = findLumbiniTrailPondRippleOrigin(
+            const edgeRipple = findWaterEdgeRippleOrigin(
               this.playerPos.x,
               this.playerPos.z,
               strideIdx,
             );
-            if (trailRipple && elapsed - this.lastTrailRippleAt >= 0.18) {
-              triggerWaterRipple(trailRipple.x, trailRipple.z, elapsed, trailRipple.strength);
+            if (edgeRipple && elapsed - this.lastTrailRippleAt >= 0.18) {
+              triggerWaterRipple(edgeRipple.x, edgeRipple.z, elapsed, edgeRipple.strength);
               this.lastTrailRippleAt = elapsed;
-              this.pondTrailRippleCount++;
+              this.waterEdgeRippleCount++;
+              this.lastWaterRippleBody = edgeRipple.waterBody;
+              if (edgeRipple.waterBody === 'pushkarini' || edgeRipple.waterBody === 'surrounding') {
+                this.pondTrailRippleCount++;
+              }
               if (this.renderer?.domElement) {
                 this.renderer.domElement.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
+                this.renderer.domElement.dataset.waterEdgeRipples = String(this.waterEdgeRippleCount);
+                this.renderer.domElement.dataset.lastWaterRippleBody = edgeRipple.waterBody;
               }
             }
           }
@@ -3954,17 +4364,52 @@ export class WorldEngine {
       ring.scale.setScalar(active ? 1.04 + Math.sin(elapsed * 4) * 0.025 : 1);
     }
 
+    const inMayaDeviInterior =
+      Math.abs(this.playerPos.x + 210) <= 17.2 &&
+      this.playerPos.z >= 62.8 &&
+      this.playerPos.z <= 85.2;
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.insideMayaDevi = inMayaDeviInterior ? 'true' : 'false';
+    }
+
     if (this.focusedLandmark) {
+      this.character.root.visible = true;
       this.computeFocusedCameraTargets(this.focusedLandmark, _camLookTarget, _camTargetPos);
+    } else if (this.isMeditating && this.meditationTarget) {
+      this.character.root.visible = this.cameraMode !== 'first-person';
+      const med = this.meditationTarget;
+      const sway = Math.sin(elapsed * 0.45) * 0.35;
+      if (this.cameraMode === 'first-person') {
+        _camTargetPos.set(med.x, this.playerPos.y + 1.05, med.z);
+        _camLookTarget.set(med.lookX + sway, this.playerPos.y + 1.25, med.lookZ);
+      } else {
+        const dx = med.x - med.lookX;
+        const dz = med.z - med.lookZ;
+        const dLen = Math.hypot(dx, dz) || 1;
+        _camTargetPos.set(
+          med.x + (dx / dLen) * 4.4 + sway * 0.6,
+          this.playerPos.y + 2.45,
+          med.z + (dz / dLen) * 4.4,
+        );
+        _camLookTarget.set(med.lookX, this.playerPos.y + 1.2, med.lookZ);
+      }
+    } else if (this.cameraMode === 'first-person') {
+      this.character.root.visible = false;
+      const fpPitch = Math.max(-0.55, Math.min(0.55, 0.36 - this.cameraPitch));
+      const bob = movedDist > 0.001 && this.isGrounded ? Math.sin(this.walkCycle * 2.0) * 0.04 : 0;
+      const eyeY = this.playerPos.y + 1.56 + bob;
+      _camTargetPos.set(this.playerPos.x, eyeY, this.playerPos.z);
+      _camLookTarget.set(
+        this.playerPos.x - Math.sin(this.cameraYaw) * Math.cos(fpPitch) * 12,
+        eyeY + Math.sin(fpPitch) * 12,
+        this.playerPos.z - Math.cos(this.cameraYaw) * Math.cos(fpPitch) * 12,
+      );
     } else {
+      this.character.root.visible = true;
       const inJanakiCourtyard =
         Math.abs(this.playerPos.x + 92) <= 13.8 &&
         this.playerPos.z >= 79.0 &&
         this.playerPos.z <= 102.6;
-      const inMayaDeviInterior =
-        Math.abs(this.playerPos.x + 210) <= 17.2 &&
-        this.playerPos.z >= 62.8 &&
-        this.playerPos.z <= 85.2;
       const activeCamDist = inMayaDeviInterior
         ? Math.min(this.cameraDistance, 6.2)
         : inJanakiCourtyard
@@ -3987,11 +4432,13 @@ export class WorldEngine {
       this.applyCameraOcclusion(_camLookTarget, _camTargetPos);
     }
 
-    const camDamp = 1 - Math.exp(-7.5 * dt);
+    const camDamp = 1 - Math.exp(-(this.cameraMode === 'first-person' ? 14.0 : 7.5) * dt);
     this.currentCamPos.lerp(_camTargetPos, camDamp);
     this.currentLookAt.lerp(_camLookTarget, camDamp);
     this.camera.position.copy(this.currentCamPos);
     this.camera.lookAt(this.currentLookAt);
+
+    this.lastContextualAction = this.getContextualAction();
 
     if (elapsed - this.lastHudEmit > 0.14) {
       this.emitHud(false);
@@ -4028,6 +4475,8 @@ export class WorldEngine {
         x: Math.round(this.playerPos.x),
         z: Math.round(this.playerPos.z),
       },
+      contextualAction: this.lastContextualAction ?? this.getContextualAction(),
+      isMeditating: this.isMeditating,
     });
   }
 
@@ -4055,6 +4504,8 @@ export class WorldEngine {
         }
       }
     });
+    this.tossedPebbleGeo?.dispose();
+    this.tossedPebbleMat?.dispose();
     this.weatherParticles?.dispose();
     this.lumbiniFireflies?.dispose();
     this.textures?.dispose();

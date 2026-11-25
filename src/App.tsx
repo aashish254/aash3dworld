@@ -4,7 +4,9 @@ import { LiveWeatherInfo, fetchLiveWeather } from './services/weatherService';
 import { WorldEngine, WorldGameState, WorldHudSnapshot } from './world/WorldEngine';
 import { soundEngine } from './world/soundEngine';
 import {
+  CameraViewMode,
   CustomWaypoint,
+  GraphicsQualityPreset,
   LumbiniAmbiencePreset,
   TimePreset,
   WeatherKind,
@@ -147,6 +149,13 @@ export default function App() {
   );
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [webglError, setWebglError] = useState<string | null>(null);
+  const [cameraMode, setCameraMode] = useState<CameraViewMode>('third-person');
+  const [graphicsQuality, setGraphicsQuality] = useState<GraphicsQualityPreset>('high');
+  const [activeHighlight, setActiveHighlight] = useState<{
+    title: string;
+    subtitle: string;
+    description: string;
+  } | null>(null);
 
   const [hud, setHud] = useState<WorldHudSnapshot>(() => ({
     zoneName: 'Kathmandu Valley',
@@ -154,6 +163,8 @@ export default function App() {
     distanceWalked: persisted.totalDistanceWalked,
     timeState: computeTimeLightingState(getPresetHour('live'), 'clear'),
     coords: { x: 0, z: 6 },
+    contextualAction: null,
+    isMeditating: false,
   }));
 
   const achievementProgress = {
@@ -255,6 +266,9 @@ export default function App() {
       setPlacementMode(false);
       setPendingWaypointCoords({ x, z });
     },
+    onInspectHighlight: (highlight: { title: string; subtitle: string; description: string }) => {
+      setActiveHighlight(highlight);
+    },
     onWebglError: (msg: string) => setWebglError(msg),
   });
 
@@ -268,6 +282,7 @@ export default function App() {
       onHudUpdate: (snap) => callbacksRef.current.onHudUpdate(snap),
       onBellRing: () => callbacksRef.current.onBellRing(),
       onPlaceWaypointRequest: (x, z) => callbacksRef.current.onPlaceWaypointRequest(x, z),
+      onInspectHighlight: (hl) => callbacksRef.current.onInspectHighlight(hl),
       onWebglError: (msg) => callbacksRef.current.onWebglError(msg),
     });
     engineRef.current = engine;
@@ -303,6 +318,14 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setPlacementMode(placementMode);
   }, [placementMode]);
+
+  useEffect(() => {
+    engineRef.current?.setCameraMode(cameraMode);
+  }, [cameraMode]);
+
+  useEffect(() => {
+    engineRef.current?.setGraphicsQuality(graphicsQuality);
+  }, [graphicsQuality]);
 
   const handleStart = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -347,9 +370,25 @@ export default function App() {
         return;
       }
 
-      if (e.code === 'KeyE' && gameState === 'playing' && hud.nearestLandmark) {
-        e.preventDefault();
-        openLandmark(hud.nearestLandmark);
+      if (e.code === 'KeyE' && gameState === 'playing') {
+        if (activeHighlight) {
+          e.preventDefault();
+          setActiveHighlight(null);
+          return;
+        }
+        if (hud.contextualAction || hud.isMeditating || hud.nearestLandmark) {
+          e.preventDefault();
+          if (hud.contextualAction || hud.isMeditating) {
+            engineRef.current?.triggerContextualAction();
+          } else if (hud.nearestLandmark) {
+            openLandmark(hud.nearestLandmark);
+          }
+          return;
+        }
+      }
+
+      if (e.code === 'KeyV' && gameState === 'playing') {
+        setCameraMode((prev) => (prev === 'third-person' ? 'first-person' : 'third-person'));
         return;
       }
 
@@ -378,6 +417,10 @@ export default function App() {
           setPendingWaypointCoords(null);
           return;
         }
+        if (activeHighlight) {
+          setActiveHighlight(null);
+          return;
+        }
         if (achievementsOpen) {
           setAchievementsOpen(false);
           return;
@@ -402,11 +445,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     achievementsOpen,
+    activeHighlight,
     atlasOpen,
     contactOpen,
     gameState,
     handleCloseLandmark,
     handleStart,
+    hud.contextualAction,
+    hud.isMeditating,
     hud.nearestLandmark,
     openLandmark,
     pendingWaypointCoords,
@@ -521,6 +567,11 @@ export default function App() {
               onOpenContact={() => setContactOpen(true)}
               onPause={() => setGameState('paused')}
               onInspectNearest={openLandmark}
+              contextualAction={hud.contextualAction}
+              isMeditating={hud.isMeditating}
+              onTriggerAction={() => engineRef.current?.triggerContextualAction()}
+              activeHighlight={activeHighlight}
+              onCloseHighlight={() => setActiveHighlight(null)}
               onJoystickMove={(x, y) => engineRef.current?.setJoystickInput(x, y)}
               onJump={() => engineRef.current?.triggerJump()}
             />
@@ -542,6 +593,12 @@ export default function App() {
               onShareTrail={handleShareTrail}
               waypointCount={persisted.customWaypoints.length}
               shareFeedback={shareFeedback}
+              cameraMode={cameraMode}
+              onToggleCameraMode={() =>
+                setCameraMode((prev) => (prev === 'third-person' ? 'first-person' : 'third-person'))
+              }
+              graphicsQuality={graphicsQuality}
+              onChangeGraphicsQuality={setGraphicsQuality}
             />
           </>
         );

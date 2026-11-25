@@ -34,6 +34,9 @@ export interface LumbiniTextureSet {
   nativityReliefMap: THREE.CanvasTexture;
   nativityReliefNormal: THREE.CanvasTexture;
   shilalekhSignMap: THREE.CanvasTexture;
+  salWoodMap: THREE.CanvasTexture;
+  salWoodNormal: THREE.CanvasTexture;
+  salWoodRough: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -47,9 +50,13 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
       strokeStyle: '',
       lineWidth: 1,
       lineCap: 'butt',
+      lineJoin: 'miter',
+      globalAlpha: 1,
       font: '',
       textAlign: 'left',
+      textBaseline: 'alphabetic',
       fillRect: noop,
+      clearRect: noop,
       strokeRect: noop,
       fillText: noop,
       beginPath: noop,
@@ -58,13 +65,16 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
       moveTo: noop,
       lineTo: noop,
       quadraticCurveTo: noop,
+      bezierCurveTo: noop,
       closePath: noop,
+      clip: noop,
       fill: noop,
       stroke: noop,
       save: noop,
       restore: noop,
       translate: noop,
       rotate: noop,
+      scale: noop,
       createLinearGradient: () => fakeGrad,
       createRadialGradient: () => fakeGrad,
       getImageData: () => fakeData,
@@ -211,6 +221,15 @@ export function createLumbiniTextures(): LumbiniTextureSet {
       const rVal = Math.round(188 + n2 * 52);
       brickRCtx.fillStyle = `rgb(${rVal},${rVal},${rVal})`;
       brickRCtx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
+
+      // Archaeological dampness & mossy patina along lower brick courses
+      if (row >= rows - 4 && n > 0.35) {
+        brickCtx.fillStyle = `rgba(68, 92, 46, ${0.14 + n * 0.16})`;
+        brickCtx.fillRect(bx + 2, by + bh * 0.45, bw - 4, bh * 0.55);
+        const dampR = Math.max(96, rVal - 68);
+        brickRCtx.fillStyle = `rgb(${dampR},${dampR},${dampR})`;
+        brickRCtx.fillRect(bx + 2, by + bh * 0.45, bw - 4, bh * 0.55);
+      }
     }
   }
   const mauryaBrickMap = toTex(brickC, true, 3, 2);
@@ -258,7 +277,38 @@ export function createLumbiniTextures(): LumbiniTextureSet {
       wbRCtx.fillRect(bx + 1.5, by + 1.5, wbw - 3, wbh - 3);
     }
   }
-  // Faint monsoon weathering stipple near mortar lines
+  // Faint monsoon rainwater streaks & hairline mortar micro-cracks
+  for (let s = 0; s < 26; s++) {
+    const sx = seededNoise(s, 19, 101) * 512;
+    const sy = seededNoise(s, 23, 107) * 260;
+    const sh = 64 + seededNoise(s, 29, 113) * 190;
+    const sw = 2 + seededNoise(s, 31, 127) * 6;
+    const sg = wbCtx.createLinearGradient(sx, sy, sx, sy + sh);
+    sg.addColorStop(0, 'rgba(138, 134, 125, 0.11)');
+    sg.addColorStop(1, 'rgba(138, 134, 125, 0)');
+    wbCtx.fillStyle = sg;
+    wbCtx.fillRect(sx, sy, sw, sh);
+  }
+  wbCtx.strokeStyle = 'rgba(116, 112, 104, 0.22)';
+  wbHCtx.strokeStyle = 'rgba(54, 54, 54, 0.55)';
+  wbCtx.lineWidth = 1;
+  wbHCtx.lineWidth = 1.2;
+  for (let c = 0; c < 18; c++) {
+    let cx = seededNoise(c, 5, 131) * 512;
+    let cy = seededNoise(c, 9, 137) * 512;
+    wbCtx.beginPath();
+    wbHCtx.beginPath();
+    wbCtx.moveTo(cx, cy);
+    wbHCtx.moveTo(cx, cy);
+    for (let seg = 0; seg < 4; seg++) {
+      cx += (seededNoise(c, seg + 1, 149) - 0.5) * 18;
+      cy += 8 + seededNoise(c, seg + 5, 151) * 16;
+      wbCtx.lineTo(cx, cy);
+      wbHCtx.lineTo(cx, cy);
+    }
+    wbCtx.stroke();
+    wbHCtx.stroke();
+  }
   for (let i = 0; i < 1200; i++) {
     const x = seededNoise(i, 3, 55) * 512;
     const y = seededNoise(i, 7, 73) * 512;
@@ -407,6 +457,37 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     stuccoRCtx.beginPath();
     stuccoRCtx.arc(x, y, rad, 0, Math.PI * 2);
     stuccoRCtx.fill();
+  }
+  // Subtle stucco vertical rainwater run-off streaks & hairline mineral craze lines
+  for (let s = 0; s < 22; s++) {
+    const sx = seededNoise(s, 41, 211) * 512;
+    const sy = seededNoise(s, 43, 223) * 256;
+    const sh = 70 + seededNoise(s, 47, 227) * 180;
+    const sg = stuccoCtx.createLinearGradient(sx, sy, sx, sy + sh);
+    sg.addColorStop(0, 'rgba(154, 146, 134, 0.12)');
+    sg.addColorStop(1, 'rgba(154, 146, 134, 0)');
+    stuccoCtx.fillStyle = sg;
+    stuccoCtx.fillRect(sx, sy, 3 + seededNoise(s, 53, 229) * 6, sh);
+  }
+  stuccoCtx.strokeStyle = 'rgba(136, 128, 116, 0.18)';
+  stuccoHCtx.strokeStyle = 'rgba(90, 90, 90, 0.45)';
+  stuccoCtx.lineWidth = 0.9;
+  stuccoHCtx.lineWidth = 1.1;
+  for (let c = 0; c < 14; c++) {
+    let cx = seededNoise(c, 11, 233) * 512;
+    let cy = seededNoise(c, 13, 239) * 512;
+    stuccoCtx.beginPath();
+    stuccoHCtx.beginPath();
+    stuccoCtx.moveTo(cx, cy);
+    stuccoHCtx.moveTo(cx, cy);
+    for (let seg = 0; seg < 4; seg++) {
+      cx += (seededNoise(c, seg + 3, 241) - 0.5) * 16;
+      cy += 9 + seededNoise(c, seg + 7, 251) * 14;
+      stuccoCtx.lineTo(cx, cy);
+      stuccoHCtx.lineTo(cx, cy);
+    }
+    stuccoCtx.stroke();
+    stuccoHCtx.stroke();
   }
   const stuccoWhiteMap = toTex(stuccoC, true, 2, 2);
   const stuccoWhiteNormal = toTex(heightCanvasToNormal(stuccoH, 1.25), false, 2, 2);
@@ -698,6 +779,67 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     shilalekhSignMap,
   ];
 
+  // 13. Carved Nepali Sal Wood & Polished Teak Planks (Interior Boardwalk, Tie-Beams & Doorway Casings)
+  const [swC, swCtx] = makeCanvas(512, 512);
+  const [swH, swHCtx] = makeCanvas(512, 512);
+  const [swR, swRCtx] = makeCanvas(512, 512);
+  swCtx.fillStyle = '#6c4529';
+  swCtx.fillRect(0, 0, 512, 512);
+  swHCtx.fillStyle = '#909090';
+  swHCtx.fillRect(0, 0, 512, 512);
+  swRCtx.fillStyle = '#a8a8a8';
+  swRCtx.fillRect(0, 0, 512, 512);
+
+  const planks = 8;
+  const plankH = 512 / planks;
+  for (let p = 0; p < planks; p++) {
+    const py = p * plankH;
+    const tone = seededNoise(p, 17, 307);
+    const pr = Math.round(98 + tone * 26);
+    const pg = Math.round(62 + tone * 18);
+    const pb = Math.round(36 + tone * 12);
+    swCtx.fillStyle = `rgb(${pr},${pg},${pb})`;
+    swCtx.fillRect(0, py + 1.5, 512, plankH - 3);
+    // Plank joint groove
+    swCtx.fillStyle = 'rgba(34, 20, 12, 0.72)';
+    swCtx.fillRect(0, py, 512, 2);
+    swHCtx.fillStyle = '#242424';
+    swHCtx.fillRect(0, py, 512, 2);
+    swRCtx.fillStyle = '#e0e0e0';
+    swRCtx.fillRect(0, py, 512, 2);
+
+    // Organic longitudinal wood grain & teak sheen variations
+    for (let g = 0; g < 18; g++) {
+      const gy = py + 4 + (g / 18) * (plankH - 8);
+      const gn = seededNoise(p * 31 + g, 3, 311);
+      swCtx.strokeStyle = gn > 0.5 ? 'rgba(54, 30, 16, 0.28)' : 'rgba(154, 106, 66, 0.16)';
+      swCtx.lineWidth = 1.0 + gn * 1.4;
+      swCtx.beginPath();
+      swHCtx.strokeStyle = gn > 0.5 ? '#727272' : '#bcbcbc';
+      swHCtx.lineWidth = 1.0;
+      swHCtx.beginPath();
+      for (let x = 0; x <= 512; x += 32) {
+        const yOff = Math.sin(x * 0.025 + gn * 8.0 + p) * 2.2;
+        if (x === 0) {
+          swCtx.moveTo(x, gy + yOff);
+          swHCtx.moveTo(x, gy + yOff);
+        } else {
+          swCtx.lineTo(x, gy + yOff);
+          swHCtx.lineTo(x, gy + yOff);
+        }
+      }
+      swCtx.stroke();
+      swHCtx.stroke();
+      const rv = Math.round(118 + gn * 64);
+      swRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.35)`;
+      swRCtx.fillRect(0, gy - 1, 512, 2);
+    }
+  }
+  const salWoodMap = toTex(swC, true, 2, 2);
+  const salWoodNormal = toTex(heightCanvasToNormal(swH, 1.85), false, 2, 2);
+  const salWoodRough = toTex(swR, false, 2, 2);
+  allTex.push(salWoodMap, salWoodNormal, salWoodRough);
+
   return {
     mauryaBrickMap,
     mauryaBrickNormal,
@@ -732,6 +874,9 @@ export function createLumbiniTextures(): LumbiniTextureSet {
     nativityReliefMap,
     nativityReliefNormal,
     shilalekhSignMap,
+    salWoodMap,
+    salWoodNormal,
+    salWoodRough,
     dispose: () => {
       for (const t of allTex) t.dispose();
     },

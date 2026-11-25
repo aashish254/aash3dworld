@@ -1,13 +1,17 @@
 import {
   type FootstepSurfaceKind,
+  type ForestBirdSpatialAudioState,
   type LumbiniAmbiencePreset,
+  type LumbiniCricketSpatialState,
   type LumbiniSpatialAudioState,
   type SpatialAmbienceMix,
   type SpatialEmitterPanGain,
   type WeatherKind,
   LANDMARK_APPROACH_CUE_SPECS,
+  computeForestBirdSpatialAudioState,
   computeLandmarkApproachCuePanAndGain,
   computeLumbiniAudioProfile,
+  computeLumbiniCricketSpatialState,
   computeLumbiniSpatialAudioState,
 } from './worldLogic';
 
@@ -38,6 +42,23 @@ export interface LandmarkApproachCueStatus {
   cueCount: number;
 }
 
+export interface ForestBirdSpatialStatus {
+  inForest: boolean;
+  activeEmitterCount: number;
+  nearestEmitterId: string | null;
+  lastEmitterId: string | null;
+  eventCount: number;
+}
+
+export interface LumbiniCricketSpatialStatus {
+  inZone: boolean;
+  cricketActivity: number;
+  activeEmitterCount: number;
+  nearestEmitterId: string | null;
+  lastEmitterId: string | null;
+  eventCount: number;
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private enabled = false;
@@ -62,6 +83,8 @@ class SoundEngine {
   private birdBusGain: GainNode | null = null;
   private lumbiniBirdBus: GainNode | null = null;
   private lumbiniRustleBus: GainNode | null = null;
+  private forestBirdBus: GainNode | null = null;
+  private lumbiniCricketBus: GainNode | null = null;
   private leafRustleBuffer: AudioBuffer | null = null;
   private ambientPadGain: GainNode | null = null;
   private ambientPadOsc1: OscillatorNode | null = null;
@@ -74,12 +97,20 @@ class SoundEngine {
   private nextBowlAtSec = 0;
   private nextLumbiniBirdAtSec = 0;
   private nextLumbiniRustleAtSec = 0;
+  private nextForestBirdAtSec = 0;
+  private nextLumbiniCricketAtSec = 0;
   private currentZone: SpatialAmbienceMix['activeZone'] = 'open-valley';
   private lumbiniSpatialState: LumbiniSpatialAudioState | null = null;
+  private forestBirdState: ForestBirdSpatialAudioState | null = null;
+  private lumbiniCricketState: LumbiniCricketSpatialState | null = null;
   private lastLumbiniBirdEmitterId: string | null = null;
   private lastLumbiniRustleEmitterId: string | null = null;
+  private lastForestBirdEmitterId: string | null = null;
+  private lastLumbiniCricketEmitterId: string | null = null;
   private lumbiniBirdEventCount = 0;
   private lumbiniRustleEventCount = 0;
+  private forestBirdEventCount = 0;
+  private lumbiniCricketEventCount = 0;
   private pendingLeafBurstEmitter: { id: string; x: number; y: number; z: number } | null = null;
   private lastApproachCueLandmarkId: string | null = null;
   private lastApproachCueMotifName: string | null = null;
@@ -101,6 +132,8 @@ class SoundEngine {
         this.nextBowlAtSec = ctx.currentTime + 1.4;
         this.nextLumbiniBirdAtSec = ctx.currentTime + 0.25;
         this.nextLumbiniRustleAtSec = ctx.currentTime + 0.45;
+        this.nextForestBirdAtSec = ctx.currentTime + 0.3;
+        this.nextLumbiniCricketAtSec = ctx.currentTime + 0.4;
       }
       this.playTone(528, 0.14, 'sine', 0.07);
     } else if (this.ctx) {
@@ -115,6 +148,8 @@ class SoundEngine {
         this.birdBusGain,
         this.lumbiniBirdBus,
         this.lumbiniRustleBus,
+        this.forestBirdBus,
+        this.lumbiniCricketBus,
         this.ambientPadGain,
       ]) {
         if (gNode) {
@@ -281,6 +316,14 @@ class SoundEngine {
     lumbiniRustleBus.gain.value = 0.78;
     lumbiniRustleBus.connect(ctx.destination);
 
+    const forestBirdBus = ctx.createGain();
+    forestBirdBus.gain.value = 0.85;
+    forestBirdBus.connect(ctx.destination);
+
+    const lumbiniCricketBus = ctx.createGain();
+    lumbiniCricketBus.gain.value = 0.82;
+    lumbiniCricketBus.connect(ctx.destination);
+
     this.leafRustleBuffer = this.createPinkNoiseBuffer(ctx, 2.4);
 
     // Gentle breeze swell LFO modulating filter cutoff
@@ -368,6 +411,8 @@ class SoundEngine {
     this.birdBusGain = birdBusGain;
     this.lumbiniBirdBus = lumbiniBirdBus;
     this.lumbiniRustleBus = lumbiniRustleBus;
+    this.forestBirdBus = forestBirdBus;
+    this.lumbiniCricketBus = lumbiniCricketBus;
     this.ambientPadGain = padGain;
     this.ambientPadOsc1 = padOsc1;
     this.ambientPadOsc2 = padOsc2;
@@ -699,6 +744,138 @@ class SoundEngine {
     return out;
   }
 
+  private triggerLocalizedForestBird(
+    ctx: AudioContext,
+    choice: SpatialEmitterPanGain,
+    forestState: ForestBirdSpatialAudioState,
+  ): void {
+    const t = ctx.currentTime;
+    const bus: AudioNode = this.forestBirdBus ?? this.birdBusGain ?? ctx.destination;
+    const { out, cleanup } = this.createLocalizedOut(ctx, bus, choice);
+
+    this.lastForestBirdEmitterId = choice.emitter.id;
+    this.forestBirdEventCount++;
+
+    const intensity = 0.58 + forestState.birdActivity * 0.58;
+    let lastOsc: OscillatorNode | null = null;
+
+    if (choice.emitter.speciesHint === 'dove') {
+      const syllables = [
+        { offset: 0, dur: 0.2, fStart: 375, fEnd: 328 },
+        { offset: 0.24, dur: 0.28, fStart: 396, fEnd: 318 },
+      ];
+      for (const s of syllables) {
+        const start = t + s.offset;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(s.fStart, start);
+        osc.frequency.exponentialRampToValueAtTime(s.fEnd, start + s.dur);
+        gain.gain.setValueAtTime(0.0005, start);
+        gain.gain.linearRampToValueAtTime(0.02 * intensity, start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0004, start + s.dur);
+        osc.connect(gain);
+        gain.connect(out);
+        osc.start(start);
+        osc.stop(start + s.dur + 0.02);
+        lastOsc = osc;
+      }
+    } else {
+      const notes = choice.emitter.speciesHint === 'parakeet' ? 3 : 4;
+      const baseFreq =
+        choice.emitter.speciesHint === 'parakeet'
+          ? 2450 + Math.random() * 550
+          : 1920 + Math.random() * 620;
+      const vol = 0.019 * intensity;
+      for (let i = 0; i < notes; i++) {
+        const start = t + i * (0.09 + Math.random() * 0.045);
+        const dur = 0.065 + Math.random() * 0.04;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const f0 = baseFreq * (1 + (Math.random() - 0.5) * 0.14);
+        osc.frequency.setValueAtTime(f0, start);
+        osc.frequency.exponentialRampToValueAtTime(
+          f0 * (i % 2 === 0 ? 1.28 : 0.84),
+          start + dur * 0.72,
+        );
+        gain.gain.setValueAtTime(0.0005, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0004, start + dur);
+        osc.connect(gain);
+        gain.connect(out);
+        osc.start(start);
+        osc.stop(start + dur + 0.02);
+        lastOsc = osc;
+      }
+    }
+
+    if (lastOsc) {
+      lastOsc.onended = cleanup;
+    } else {
+      cleanup();
+    }
+  }
+
+  private triggerLocalizedPondCricket(
+    ctx: AudioContext,
+    choice: SpatialEmitterPanGain,
+    cricketState: LumbiniCricketSpatialState,
+  ): void {
+    const t = ctx.currentTime;
+    const bus: AudioNode = this.lumbiniCricketBus ?? ctx.destination;
+    const { out, cleanup } = this.createLocalizedOut(ctx, bus, choice);
+
+    this.lastLumbiniCricketEmitterId = choice.emitter.id;
+    this.lumbiniCricketEventCount++;
+
+    const pulses = 4 + Math.floor(Math.random() * 3);
+    const carrierHz = 4150 + Math.random() * 480;
+    const peakGain = 0.014 * (0.42 + cricketState.cricketActivity * 0.75);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(carrierHz, t);
+    bp.Q.value = 3.2;
+    bp.connect(out);
+
+    let lastOsc: OscillatorNode | null = null;
+    for (let i = 0; i < pulses; i++) {
+      const start = t + i * 0.044;
+      const dur = 0.026;
+      const osc = ctx.createOscillator();
+      const harm = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      harm.type = 'triangle';
+      osc.frequency.setValueAtTime(carrierHz + (i % 2) * 35, start);
+      harm.frequency.setValueAtTime(carrierHz * 2.0, start);
+      gain.gain.setValueAtTime(0.0004, start);
+      gain.gain.linearRampToValueAtTime(peakGain, start + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0003, start + dur);
+      osc.connect(gain);
+      harm.connect(gain);
+      gain.connect(bp);
+      osc.start(start);
+      harm.start(start);
+      osc.stop(start + dur + 0.01);
+      harm.stop(start + dur + 0.01);
+      lastOsc = osc;
+    }
+
+    if (lastOsc) {
+      lastOsc.onended = () => {
+        try {
+          bp.disconnect();
+        } catch {
+          // ignore
+        }
+        cleanup();
+      };
+    } else {
+      cleanup();
+    }
+  }
+
   public getLumbiniSpatialStatus(): LumbiniSpatialStatus {
     const st = this.lumbiniSpatialState;
     return {
@@ -715,9 +892,32 @@ class SoundEngine {
     };
   }
 
+  public getForestBirdStatus(): ForestBirdSpatialStatus {
+    const st = this.forestBirdState;
+    return {
+      inForest: Boolean(st?.inForest),
+      activeEmitterCount: st ? st.activeEmitters.length : 0,
+      nearestEmitterId: st?.nearestEmitter?.emitter.id ?? null,
+      lastEmitterId: this.lastForestBirdEmitterId,
+      eventCount: this.forestBirdEventCount,
+    };
+  }
+
+  public getLumbiniCricketStatus(): LumbiniCricketSpatialStatus {
+    const st = this.lumbiniCricketState;
+    return {
+      inZone: Boolean(st?.inZone),
+      cricketActivity: st?.cricketActivity ?? 0,
+      activeEmitterCount: st ? st.activeEmitters.length : 0,
+      nearestEmitterId: st?.nearestEmitter?.emitter.id ?? null,
+      lastEmitterId: this.lastLumbiniCricketEmitterId,
+      eventCount: this.lumbiniCricketEventCount,
+    };
+  }
+
   /**
    * Continuously updates spatial Himalayan wind, wind-rustling foliage, prayer-flag flutter,
-   * canal/stream murmur, nature harmonic pad, birdsong, Lumbini spatial audio emitters, and chimes/bowls.
+   * canal/stream murmur, nature harmonic pad, localized forest birdsong, Lumbini spatial birds & pond crickets, and chimes/bowls.
    */
   public updateAmbience(
     mix: SpatialAmbienceMix,
@@ -725,6 +925,7 @@ class SoundEngine {
     lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto',
     weather: WeatherKind = 'clear',
     listener?: SpatialListenerPose,
+    timeHour = 10,
   ): void {
     this.currentZone = mix.activeZone;
     this.lumbiniSpatialState = listener
@@ -735,6 +936,33 @@ class SoundEngine {
           listener.forwardX,
           listener.forwardZ,
           mix.windLevel,
+          lumbiniPreset,
+          weather,
+        )
+      : null;
+
+    this.forestBirdState =
+      listener && mix.activeZone !== 'peace-garden'
+        ? computeForestBirdSpatialAudioState(
+            listener.x,
+            listener.y,
+            listener.z,
+            listener.forwardX,
+            listener.forwardZ,
+            mix.windLevel,
+            weather,
+            timeHour,
+          )
+        : null;
+
+    this.lumbiniCricketState = listener
+      ? computeLumbiniCricketSpatialState(
+          listener.x,
+          listener.y,
+          listener.z,
+          listener.forwardX,
+          listener.forwardZ,
+          timeHour,
           lumbiniPreset,
           weather,
         )
@@ -754,6 +982,8 @@ class SoundEngine {
     const rustleLevel = Math.max(0, Math.min(1, mix.rustleLevel ?? forestLevel * mix.windLevel));
     const lumbiniProfile = computeLumbiniAudioProfile(mix, lumbiniPreset, weather);
     const lumbiniSpatial = this.lumbiniSpatialState;
+    const forestSpatial = this.forestBirdState;
+    const cricketSpatial = this.lumbiniCricketState;
 
     if (this.windGain && this.windHowlGain && this.windFilterLow && this.windFilterHowl) {
       const baseVol = Math.pow(mix.windLevel, 1.25) * 0.068;
@@ -784,6 +1014,20 @@ class SoundEngine {
         ? Math.max(0.18, Math.min(1.2, 0.45 + lumbiniSpatial.leafRustleActivity * 0.75))
         : 0.0;
       this.lumbiniRustleBus.gain.setTargetAtTime(targetRustleBus, t, 0.3);
+    }
+
+    if (this.forestBirdBus) {
+      const targetForestBus = forestSpatial?.inForest
+        ? Math.max(0.22, Math.min(1.2, 0.5 + forestSpatial.birdActivity * 0.7))
+        : 0.0;
+      this.forestBirdBus.gain.setTargetAtTime(targetForestBus, t, 0.3);
+    }
+
+    if (this.lumbiniCricketBus) {
+      const targetCricketBus = cricketSpatial?.inZone
+        ? Math.max(0.08, Math.min(1.15, 0.25 + cricketSpatial.cricketActivity * 0.9))
+        : 0.0;
+      this.lumbiniCricketBus.gain.setTargetAtTime(targetCricketBus, t, 0.35);
     }
 
     if (this.flagFlutterGain && this.flagFlutterFilter) {
@@ -825,6 +1069,12 @@ class SoundEngine {
     }
 
     const useLumbiniLocalizedBirds = Boolean(lumbiniSpatial?.inZone && mix.activeZone === 'peace-garden');
+    const useForestLocalizedBirds = Boolean(
+      !useLumbiniLocalizedBirds &&
+        forestSpatial?.inForest &&
+        forestSpatial.birdActivity > 0.14 &&
+        forestSpatial.activeEmitters.length > 0,
+    );
 
     if (
       lumbiniSpatial?.inZone &&
@@ -841,6 +1091,29 @@ class SoundEngine {
         lumbiniSpatial.birdIntervalMaxSec - lumbiniSpatial.birdIntervalMinSec,
       );
       this.nextLumbiniBirdAtSec = t + lumbiniSpatial.birdIntervalMinSec + Math.random() * span;
+    }
+
+    if (useForestLocalizedBirds && forestSpatial && t >= this.nextForestBirdAtSec) {
+      const picked = this.pickWeightedEmitter(forestSpatial.activeEmitters);
+      if (picked) {
+        this.triggerLocalizedForestBird(ctx, picked, forestSpatial);
+      }
+      const span = Math.max(0.4, forestSpatial.intervalMaxSec - forestSpatial.intervalMinSec);
+      this.nextForestBirdAtSec = t + forestSpatial.intervalMinSec + Math.random() * span;
+    }
+
+    if (
+      cricketSpatial?.inZone &&
+      cricketSpatial.cricketActivity > 0.12 &&
+      cricketSpatial.activeEmitters.length > 0 &&
+      t >= this.nextLumbiniCricketAtSec
+    ) {
+      const picked = this.pickWeightedEmitter(cricketSpatial.activeEmitters);
+      if (picked) {
+        this.triggerLocalizedPondCricket(ctx, picked, cricketSpatial);
+      }
+      const span = Math.max(0.35, cricketSpatial.intervalMaxSec - cricketSpatial.intervalMinSec);
+      this.nextLumbiniCricketAtSec = t + cricketSpatial.intervalMinSec + Math.random() * span;
     }
 
     if (
@@ -861,7 +1134,7 @@ class SoundEngine {
     }
 
     const effectiveBirdActivity = Math.max(mix.birdLevel, forestLevel * 0.85);
-    if (!useLumbiniLocalizedBirds && effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
+    if (!useLumbiniLocalizedBirds && !useForestLocalizedBirds && effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
       if (mix.activeZone === 'temple-courtyard' && Math.random() < 0.58) {
         this.triggerDoveCoo(ctx, mix.birdLevel);
       } else {
@@ -1268,6 +1541,25 @@ class SoundEngine {
     };
   }
 
+  public playPrayerWheelSpin(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(340, t);
+    osc.frequency.exponentialRampToValueAtTime(480, t + 0.18);
+    gain.gain.setValueAtTime(0.002, t);
+    gain.gain.linearRampToValueAtTime(0.032, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.36);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.38);
+    this.playTone(920, 0.05, 'sine', 0.018);
+  }
+
   public playClick(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
@@ -1394,8 +1686,12 @@ class SoundEngine {
     }
     this.lumbiniBirdBus = null;
     this.lumbiniRustleBus = null;
+    this.forestBirdBus = null;
+    this.lumbiniCricketBus = null;
     this.leafRustleBuffer = null;
     this.lumbiniSpatialState = null;
+    this.forestBirdState = null;
+    this.lumbiniCricketState = null;
     this.pendingLeafBurstEmitter = null;
     this.lastApproachCueLandmarkId = null;
     this.lastApproachCueMotifName = null;

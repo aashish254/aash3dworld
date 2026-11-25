@@ -4104,3 +4104,703 @@ export function findFirstUnexploredLandmarkApproach(
   return best;
 }
 
+export type GraphicsQualityPreset = 'high' | 'medium' | 'low';
+
+export interface GraphicsQualityConfig {
+  preset: GraphicsQualityPreset;
+  label: string;
+  grassRatio: number;
+  shadowMapSize: 2048 | 1024 | 512;
+  maxPixelRatio: number;
+}
+
+export function getGraphicsQualityConfig(preset: GraphicsQualityPreset): GraphicsQualityConfig {
+  switch (preset) {
+    case 'low':
+      return {
+        preset: 'low',
+        label: 'Low',
+        grassRatio: 0.25,
+        shadowMapSize: 512,
+        maxPixelRatio: 1,
+      };
+    case 'medium':
+      return {
+        preset: 'medium',
+        label: 'Medium',
+        grassRatio: 0.55,
+        shadowMapSize: 1024,
+        maxPixelRatio: 1.5,
+      };
+    case 'high':
+    default:
+      return {
+        preset: 'high',
+        label: 'High',
+        grassRatio: 1.0,
+        shadowMapSize: 2048,
+        maxPixelRatio: 2,
+      };
+  }
+}
+
+export type CameraViewMode = 'third-person' | 'first-person';
+
+/**
+ * Localized 3D bird emitters anchored in non-Lumbini forest woodlands, mountain tree pockets,
+ * and riverbank groves so positional bird chirping triggers dynamically in every forest area.
+ */
+export const WORLD_FOREST_BIRD_EMITTERS: LumbiniSpatialEmitterSpec[] = [
+  {
+    id: 'forest-pumdikot-west',
+    kind: 'bird-canopy',
+    label: 'Pumdikot Ridge Pine Canopy',
+    x: -116.0,
+    y: 9.2,
+    z: -78.0,
+    refDistance: 7.5,
+    maxDistance: 56,
+    baseWeight: 0.96,
+    speciesHint: 'bulbul',
+  },
+  {
+    id: 'forest-pumdikot-east',
+    kind: 'bird-canopy',
+    label: 'Pumdikot Cedar Woodland',
+    x: -97.0,
+    y: 8.6,
+    z: -68.0,
+    refDistance: 7.5,
+    maxDistance: 56,
+    baseWeight: 0.92,
+    speciesHint: 'parakeet',
+  },
+  {
+    id: 'forest-pashupati-north',
+    kind: 'bird-canopy',
+    label: 'Mrigasthali Woodland Canopy',
+    x: -44.0,
+    y: 6.4,
+    z: -30.0,
+    refDistance: 6.5,
+    maxDistance: 50,
+    baseWeight: 1.0,
+    speciesHint: 'bulbul',
+  },
+  {
+    id: 'forest-pashupati-west',
+    kind: 'bird-dove',
+    label: 'Pashupati Riverbank Grove',
+    x: -56.0,
+    y: 5.8,
+    z: -16.0,
+    refDistance: 6.5,
+    maxDistance: 48,
+    baseWeight: 0.9,
+    speciesHint: 'dove',
+  },
+  {
+    id: 'forest-boudha-grove',
+    kind: 'bird-canopy',
+    label: 'Boudhanath Pine & Sakura Grove',
+    x: -110.0,
+    y: 6.2,
+    z: 4.0,
+    refDistance: 6.8,
+    maxDistance: 52,
+    baseWeight: 0.95,
+    speciesHint: 'parakeet',
+  },
+  {
+    id: 'forest-bagmati-willows',
+    kind: 'bird-pond',
+    label: 'Bagmati Willow & Birch Woods',
+    x: 20.0,
+    y: 5.0,
+    z: 42.0,
+    refDistance: 6.5,
+    maxDistance: 46,
+    baseWeight: 0.94,
+    speciesHint: 'bulbul',
+  },
+  {
+    id: 'forest-glacial-pines',
+    kind: 'bird-canopy',
+    label: 'Glacial Lake Pine Ridge',
+    x: -158.0,
+    y: 7.2,
+    z: -116.0,
+    refDistance: 7.0,
+    maxDistance: 52,
+    baseWeight: 0.85,
+    speciesHint: 'bulbul',
+  },
+  {
+    id: 'forest-vellore-banyan',
+    kind: 'bird-canopy',
+    label: 'Vellore Courtyard Palms & Banyans',
+    x: 56.0,
+    y: 5.6,
+    z: -74.0,
+    refDistance: 6.5,
+    maxDistance: 48,
+    baseWeight: 0.84,
+    speciesHint: 'parakeet',
+  },
+];
+
+export interface ForestBirdSpatialAudioState {
+  inForest: boolean;
+  forestFactor: number;
+  birdActivity: number;
+  intervalMinSec: number;
+  intervalMaxSec: number;
+  activeEmitters: SpatialEmitterPanGain[];
+  nearestEmitter: SpatialEmitterPanGain | null;
+}
+
+/**
+ * Computes active localized forest-bird emitters and chirp cadence across all non-Lumbini
+ * woodland areas based on 3D listener pose, tree proximity, time of day, and weather.
+ */
+export function computeForestBirdSpatialAudioState(
+  listenerX: number,
+  listenerY: number,
+  listenerZ: number,
+  forwardX: number,
+  forwardZ: number,
+  windLevel: number,
+  weather: WeatherKind = 'clear',
+  timeHour = 10,
+): ForestBirdSpatialAudioState {
+  const forest = computeForestProximity(listenerX, listenerZ);
+  const hour = ((timeHour % 24) + 24) % 24;
+  const daylightBirdBoost =
+    hour >= 5.2 && hour <= 19.4
+      ? hour < 8.5 || hour > 16.8
+        ? 1.0
+        : 0.86
+      : 0.22;
+  const weatherScale =
+    weather === 'rain' ? 0.16 : weather === 'snow' ? 0.25 : weather === 'foggy' ? 0.7 : weather === 'mist' ? 0.86 : 1.0;
+
+  const activeEmitters: SpatialEmitterPanGain[] = [];
+  for (let i = 0; i < WORLD_FOREST_BIRD_EMITTERS.length; i++) {
+    const ev = computeSpatialEmitterPanGain(
+      listenerX,
+      listenerY,
+      listenerZ,
+      forwardX,
+      forwardZ,
+      WORLD_FOREST_BIRD_EMITTERS[i],
+    );
+    if (ev.distanceGain > 0.015) {
+      activeEmitters.push(ev);
+    }
+  }
+  activeEmitters.sort((a, b) => b.weight - a.weight);
+
+  const nearestEmitter = activeEmitters[0] ?? null;
+  const localCanopy = Math.max(forest.forestProximity, forest.birdForestBoost, nearestEmitter ? nearestEmitter.distanceGain * 0.92 : 0);
+  const inForest = localCanopy > 0.12 && activeEmitters.length > 0;
+
+  if (!inForest) {
+    return {
+      inForest: false,
+      forestFactor: localCanopy,
+      birdActivity: 0,
+      intervalMinSec: 5.5,
+      intervalMaxSec: 10.0,
+      activeEmitters: [],
+      nearestEmitter: null,
+    };
+  }
+
+  const windCalmScale = 1 - Math.max(0, Math.min(1, windLevel)) * 0.18;
+  const birdActivity = Math.max(
+    0,
+    Math.min(1, localCanopy * daylightBirdBoost * weatherScale * windCalmScale),
+  );
+
+  return {
+    inForest: true,
+    forestFactor: localCanopy,
+    birdActivity,
+    intervalMinSec: 1.45 / Math.max(0.4, weatherScale * daylightBirdBoost),
+    intervalMaxSec: 3.65 / Math.max(0.4, weatherScale * daylightBirdBoost),
+    activeEmitters,
+    nearestEmitter,
+  };
+}
+
+/**
+ * Localized pond-bank cricket stridulation emitters flanking Lumbini Pushkarini Pond,
+ * the Surrounding Sacred Pond lotus banks, and Peace Canal reed beds.
+ */
+export const LUMBINI_POND_CRICKET_EMITTERS: LumbiniSpatialEmitterSpec[] = [
+  {
+    id: 'lumbini-cricket-pushkarini-west',
+    kind: 'bird-pond',
+    label: 'Pushkarini West Brick Reed Bank',
+    x: -211.5,
+    y: 0.45,
+    z: 112.5,
+    refDistance: 5.5,
+    maxDistance: 44,
+    baseWeight: 1.0,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-pushkarini-east',
+    kind: 'bird-pond',
+    label: 'Pushkarini East Reed Bank',
+    x: -188.5,
+    y: 0.45,
+    z: 112.5,
+    refDistance: 5.5,
+    maxDistance: 44,
+    baseWeight: 0.96,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-pushkarini-south',
+    kind: 'bird-pond',
+    label: 'Pushkarini South Lotus Steps',
+    x: -200.0,
+    y: 0.45,
+    z: 120.0,
+    refDistance: 5.5,
+    maxDistance: 44,
+    baseWeight: 0.96,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-moat-south',
+    kind: 'bird-pond',
+    label: 'Sacred Pond South Reed Shore',
+    x: -222.0,
+    y: 0.4,
+    z: 156.5,
+    refDistance: 6.5,
+    maxDistance: 52,
+    baseWeight: 0.92,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-moat-west',
+    kind: 'bird-pond',
+    label: 'Sacred Pond West Lotus Shore',
+    x: -259.5,
+    y: 0.4,
+    z: 108.0,
+    refDistance: 6.5,
+    maxDistance: 50,
+    baseWeight: 0.88,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-moat-east',
+    kind: 'bird-pond',
+    label: 'Sacred Pond East Lotus Shore',
+    x: -160.5,
+    y: 0.4,
+    z: 96.0,
+    refDistance: 6.5,
+    maxDistance: 50,
+    baseWeight: 0.86,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-cricket-canal',
+    kind: 'bird-pond',
+    label: 'Peace Canal Tall Grass Bank',
+    x: -265.5,
+    y: 0.35,
+    z: 100.0,
+    refDistance: 6.5,
+    maxDistance: 48,
+    baseWeight: 0.85,
+    speciesHint: 'garden-hedge',
+  },
+];
+
+export interface LumbiniCricketSpatialState {
+  inZone: boolean;
+  cricketActivity: number;
+  intervalMinSec: number;
+  intervalMaxSec: number;
+  activeEmitters: SpatialEmitterPanGain[];
+  nearestEmitter: SpatialEmitterPanGain | null;
+}
+
+/**
+ * Evaluates spatial cricket presence around Lumbini's ponds and canal.
+ * Crickets peak during twilight, dusk, and night vigils, with a quiet localized shoreline hum near water by day.
+ */
+export function computeLumbiniCricketSpatialState(
+  listenerX: number,
+  listenerY: number,
+  listenerZ: number,
+  forwardX: number,
+  forwardZ: number,
+  timeHour = 20,
+  preset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  weather: WeatherKind = 'clear',
+): LumbiniCricketSpatialState {
+  const hour = ((timeHour % 24) + 24) % 24;
+  let diurnalFactor = 0.24;
+  if (preset === 'moonlight-vigil' || hour >= 19.2 || hour < 5.0) {
+    diurnalFactor = 1.0;
+  } else if (preset === 'butter-lamp-dusk' || (hour >= 17.0 && hour < 19.2)) {
+    diurnalFactor = 0.84;
+  } else if (preset === 'lotus-dawn' || (hour >= 5.0 && hour < 7.0)) {
+    diurnalFactor = 0.56;
+  }
+
+  const weatherScale =
+    weather === 'rain' ? 0.14 : weather === 'snow' ? 0.12 : weather === 'foggy' ? 0.72 : weather === 'mist' ? 0.88 : 1.0;
+
+  const activeEmitters: SpatialEmitterPanGain[] = [];
+  for (let i = 0; i < LUMBINI_POND_CRICKET_EMITTERS.length; i++) {
+    const ev = computeSpatialEmitterPanGain(
+      listenerX,
+      listenerY,
+      listenerZ,
+      forwardX,
+      forwardZ,
+      LUMBINI_POND_CRICKET_EMITTERS[i],
+    );
+    if (ev.distanceGain > 0.025) {
+      activeEmitters.push(ev);
+    }
+  }
+  activeEmitters.sort((a, b) => b.weight - a.weight);
+
+  const nearestEmitter = activeEmitters[0] ?? null;
+  if (!nearestEmitter) {
+    return {
+      inZone: false,
+      cricketActivity: 0,
+      intervalMinSec: 5.0,
+      intervalMaxSec: 9.0,
+      activeEmitters: [],
+      nearestEmitter: null,
+    };
+  }
+
+  const cricketActivity = Math.max(
+    0,
+    Math.min(1, nearestEmitter.distanceGain * diurnalFactor * weatherScale),
+  );
+  const paceBoost = 0.55 + cricketActivity * 0.85;
+
+  return {
+    inZone: true,
+    cricketActivity,
+    intervalMinSec: 1.05 / paceBoost,
+    intervalMaxSec: 2.35 / paceBoost,
+    activeEmitters,
+    nearestEmitter,
+  };
+}
+
+export type WaterRippleBody =
+  | 'surrounding'
+  | 'pushkarini'
+  | 'peace-canal'
+  | 'bagmati-river'
+  | 'glacial-lake'
+  | 'ganga-sagar';
+
+export interface WaterEdgeRippleOrigin {
+  x: number;
+  z: number;
+  waterBody: WaterRippleBody;
+  strength: number;
+  trailZone: string;
+}
+
+/**
+ * Generalized water-edge ripple detector spanning Lumbini Pushkarini Pond, Surrounding Sacred Pond,
+ * Maitri Peace Canal, Bagmati River shores, Glacial Lake shoreline, and Janaki Ganga Sagar ghat.
+ */
+export function findWaterEdgeRippleOrigin(
+  playerX: number,
+  playerZ: number,
+  strideIndex = 0,
+): WaterEdgeRippleOrigin | null {
+  const lumbiniTrail = findLumbiniTrailPondRippleOrigin(playerX, playerZ, strideIndex);
+  if (lumbiniTrail) {
+    return {
+      x: lumbiniTrail.x,
+      z: lumbiniTrail.z,
+      waterBody: lumbiniTrail.pond,
+      strength: lumbiniTrail.strength,
+      trailZone: lumbiniTrail.trailZone,
+    };
+  }
+
+  const sway = Math.sin(strideIndex * 1.73) * 0.45;
+
+  // Maitri Peace Canal banks & Peace Bridge
+  const pc = LUMBINI_PEACE_CANAL;
+  if (
+    playerZ >= pc.minZ - 2.0 &&
+    playerZ <= pc.maxZ + 2.0 &&
+    playerX >= pc.minX - 6.0 &&
+    playerX <= pc.maxX + 6.0
+  ) {
+    const onBridge = Math.abs(playerZ - pc.bridgeCenterZ) <= pc.bridgeHalfWidth + 0.6;
+    if (onBridge) {
+      const side = strideIndex % 2 === 0 ? 1 : -1;
+      const rx = Math.max(pc.minX + 1.1, Math.min(pc.maxX - 1.1, playerX + sway));
+      const rz = pc.bridgeCenterZ + side * 3.1;
+      return { x: rx, z: rz, waterBody: 'peace-canal', strength: 0.72, trailZone: 'peace-canal-bridge' };
+    }
+    if (playerX < pc.minX) {
+      return {
+        x: pc.minX + 1.0,
+        z: Math.max(pc.minZ + 1.2, Math.min(pc.maxZ - 1.2, playerZ + sway)),
+        waterBody: 'peace-canal',
+        strength: 0.68,
+        trailZone: 'peace-canal-west-bank',
+      };
+    }
+    if (playerX > pc.maxX) {
+      return {
+        x: pc.maxX - 1.0,
+        z: Math.max(pc.minZ + 1.2, Math.min(pc.maxZ - 1.2, playerZ + sway)),
+        waterBody: 'peace-canal',
+        strength: 0.68,
+        trailZone: 'peace-canal-east-bank',
+      };
+    }
+  }
+
+  // Glacial Lake circular alpine shore
+  const dxLake = playerX - GLACIAL_LAKE.x;
+  const dzLake = playerZ - GLACIAL_LAKE.z;
+  const distLake = Math.hypot(dxLake, dzLake);
+  if (distLake >= GLACIAL_LAKE.waterRadius - 1.2 && distLake <= GLACIAL_LAKE.waterRadius + 3.8 && distLake > 0.1) {
+    const ux = dxLake / distLake;
+    const uz = dzLake / distLake;
+    const r = GLACIAL_LAKE.waterRadius - 1.15;
+    return {
+      x: GLACIAL_LAKE.x + ux * r,
+      z: GLACIAL_LAKE.z + uz * r,
+      waterBody: 'glacial-lake',
+      strength: 0.74,
+      trailZone: 'glacial-lake-shore',
+    };
+  }
+
+  // Janaki Mandir Ganga Sagar Ghat Pond (world center approx (-136.5, 108.0))
+  const gsMinX = -143.1;
+  const gsMaxX = -129.9;
+  const gsMinZ = 99.6;
+  const gsMaxZ = 116.4;
+  if (
+    playerX >= gsMinX - 3.6 &&
+    playerX <= gsMaxX + 3.6 &&
+    playerZ >= gsMinZ - 3.6 &&
+    playerZ <= gsMaxZ + 3.6 &&
+    !(playerX > gsMinX + 0.6 && playerX < gsMaxX - 0.6 && playerZ > gsMinZ + 0.6 && playerZ < gsMaxZ - 0.6)
+  ) {
+    const rx = Math.max(gsMinX + 0.9, Math.min(gsMaxX - 0.9, playerX + sway * 0.5));
+    const rz = Math.max(gsMinZ + 0.9, Math.min(gsMaxZ - 0.9, playerZ + sway * 0.5));
+    return { x: rx, z: rz, waterBody: 'ganga-sagar', strength: 0.70, trailZone: 'ganga-sagar-ghat' };
+  }
+
+  // Bagmati River shores (outside stone bridge decks, z within river extent)
+  if (playerZ >= -220 && playerZ <= 240) {
+    const riverX = getRiverCenterX(playerZ);
+    const offset = playerX - riverX;
+    const absOffset = Math.abs(offset);
+    if (absOffset >= 5.2 && absOffset <= 9.6) {
+      const sign = offset >= 0 ? 1 : -1;
+      return {
+        x: riverX + sign * 4.5,
+        z: playerZ + sway * 0.5,
+        waterBody: 'bagmati-river',
+        strength: 0.70,
+        trailZone: sign > 0 ? 'bagmati-east-bank' : 'bagmati-west-bank',
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Steps damped angular velocity & angle for interactive Tibetan/Buddhist Mani prayer wheels.
+ */
+export function stepPrayerWheelSpin(
+  angle: number,
+  velocity: number,
+  dt: number,
+  impulse = 0,
+): { angle: number; velocity: number; active: boolean } {
+  const clampedDt = Math.max(0, Math.min(0.1, dt));
+  const boosted = Math.min(28, velocity + Math.max(0, impulse));
+  const nextAngle = angle + boosted * clampedDt;
+  const damping = Math.exp(-0.72 * clampedDt);
+  const idleDrift = 0.22;
+  const nextVel = idleDrift + (boosted - idleDrift) * damping;
+  return {
+    angle: nextAngle,
+    velocity: nextVel < 0.24 ? idleDrift : nextVel,
+    active: nextVel > 0.65,
+  };
+}
+
+export type ContextualWorldActionKind =
+  | 'inspect-marker-stone'
+  | 'inspect-nativity-relief'
+  | 'spin-prayer-wheel'
+  | 'ring-temple-bell'
+  | 'toss-pebble'
+  | 'sit-meditate'
+  | 'landmark';
+
+export interface ContextualWorldAction {
+  kind: ContextualWorldActionKind;
+  label: string;
+  targetX: number;
+  targetZ: number;
+  index?: number;
+  landmark?: (typeof LANDMARKS)[number];
+}
+
+/**
+ * Determines the highest-priority [E] contextual world interaction around the player:
+ * Maya Devi Marker Stone / Nativity Bas-Relief inside the temple, nearby Prayer Wheel,
+ * Temple Bell, Pushkarini/Sacred Pond Pebble Toss, Bodhi Chautara Meditation, or nearest Landmark.
+ */
+export function computeContextualWorldAction(
+  playerX: number,
+  playerZ: number,
+  nearestLandmark: (typeof LANDMARKS)[number] | null,
+  prayerWheelSpots: ReadonlyArray<{ x: number; z: number }>,
+  bellSpots: ReadonlyArray<{ x: number; z: number }>,
+  pebbleSpots: ReadonlyArray<{ x: number; z: number; pondX: number; pondZ: number; label: string }>,
+  meditationSpots: ReadonlyArray<{ x: number; z: number; lookX: number; lookZ: number; label: string }>,
+): ContextualWorldAction | null {
+  // 1. Inside Maya Devi Sanctuary boardwalk -> prioritize Marker Stone & Nativity Bas-Relief
+  const inMayaDeviBoardwalk =
+    playerX >= -227.5 && playerX <= -192.5 && playerZ >= 62.5 && playerZ <= 85.4;
+  if (inMayaDeviBoardwalk) {
+    const dMarker = Math.hypot(playerX - (-210.0), playerZ - 74.0);
+    const dNativity = Math.hypot(playerX - (-210.0), playerZ - 70.2);
+    if (playerZ <= 69.2 && dNativity <= 8.5) {
+      return {
+        kind: 'inspect-nativity-relief',
+        label: 'Inspect Nativity Bas-Relief',
+        targetX: -210.0,
+        targetZ: 70.2,
+      };
+    }
+    if (dMarker <= 14.5) {
+      return {
+        kind: 'inspect-marker-stone',
+        label: 'Inspect Sacred Marker Stone',
+        targetX: -210.0,
+        targetZ: 74.0,
+      };
+    }
+  }
+
+  // 2. Nearest Mani Prayer Wheel within reach
+  let bestWheelIdx = -1;
+  let bestWheelDist = 3.2;
+  for (let i = 0; i < prayerWheelSpots.length; i++) {
+    const d = Math.hypot(playerX - prayerWheelSpots[i].x, playerZ - prayerWheelSpots[i].z);
+    if (d < bestWheelDist) {
+      bestWheelDist = d;
+      bestWheelIdx = i;
+    }
+  }
+  if (bestWheelIdx >= 0) {
+    return {
+      kind: 'spin-prayer-wheel',
+      label: 'Spin Mani Prayer Wheel',
+      targetX: prayerWheelSpots[bestWheelIdx].x,
+      targetZ: prayerWheelSpots[bestWheelIdx].z,
+      index: bestWheelIdx,
+    };
+  }
+
+  // 3. Nearest Temple Bell within reach
+  let bestBellIdx = -1;
+  let bestBellDist = 3.6;
+  for (let i = 0; i < bellSpots.length; i++) {
+    const d = Math.hypot(playerX - bellSpots[i].x, playerZ - bellSpots[i].z);
+    if (d < bestBellDist) {
+      bestBellDist = d;
+      bestBellIdx = i;
+    }
+  }
+  if (bestBellIdx >= 0) {
+    return {
+      kind: 'ring-temple-bell',
+      label: 'Ring Bronze Temple Bell',
+      targetX: bellSpots[bestBellIdx].x,
+      targetZ: bellSpots[bestBellIdx].z,
+      index: bestBellIdx,
+    };
+  }
+
+  // 4. Nearest Pebble Skimming / Toss Pile beside Pond Overlook
+  let bestPebbleIdx = -1;
+  let bestPebbleDist = 3.5;
+  for (let i = 0; i < pebbleSpots.length; i++) {
+    const d = Math.hypot(playerX - pebbleSpots[i].x, playerZ - pebbleSpots[i].z);
+    if (d < bestPebbleDist) {
+      bestPebbleDist = d;
+      bestPebbleIdx = i;
+    }
+  }
+  if (bestPebbleIdx >= 0) {
+    const spot = pebbleSpots[bestPebbleIdx];
+    return {
+      kind: 'toss-pebble',
+      label: `Toss Pebble (${spot.label})`,
+      targetX: spot.pondX,
+      targetZ: spot.pondZ,
+      index: bestPebbleIdx,
+    };
+  }
+
+  // 5. Nearest Chautara / Meditation Bench
+  let bestMedIdx = -1;
+  let bestMedDist = 4.2;
+  for (let i = 0; i < meditationSpots.length; i++) {
+    const d = Math.hypot(playerX - meditationSpots[i].x, playerZ - meditationSpots[i].z);
+    if (d < bestMedDist) {
+      bestMedDist = d;
+      bestMedIdx = i;
+    }
+  }
+  if (bestMedIdx >= 0) {
+    const med = meditationSpots[bestMedIdx];
+    return {
+      kind: 'sit-meditate',
+      label: `Sit & Meditate (${med.label})`,
+      targetX: med.lookX,
+      targetZ: med.lookZ,
+      index: bestMedIdx,
+    };
+  }
+
+  // 6. Standard Landmark Inspection
+  if (nearestLandmark) {
+    return {
+      kind: 'landmark',
+      label: `Inspect ${nearestLandmark.title}`,
+      targetX: nearestLandmark.position.x,
+      targetZ: nearestLandmark.position.z,
+      landmark: nearestLandmark,
+    };
+  }
+
+  return null;
+}

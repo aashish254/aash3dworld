@@ -8,10 +8,12 @@ import {
   Volume2,
   VolumeX,
   WifiOff,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { LandmarkData } from '../data/portfolioData';
 import { LiveWeatherInfo } from '../services/weatherService';
-import { TimeLightingState, WeatherKind } from '../world/worldLogic';
+import { ContextualWorldAction, TimeLightingState, WeatherKind } from '../world/worldLogic';
 
 interface WorldHudProps {
   zoneName: string;
@@ -36,6 +38,11 @@ interface WorldHudProps {
   onOpenContact: () => void;
   onPause: () => void;
   onInspectNearest: (landmark: LandmarkData) => void;
+  contextualAction: ContextualWorldAction | null;
+  isMeditating: boolean;
+  onTriggerAction: () => void;
+  activeHighlight: { title: string; subtitle: string; description: string } | null;
+  onCloseHighlight: () => void;
   onJoystickMove: (x: number, y: number) => void;
   onJump: () => void;
 }
@@ -71,6 +78,11 @@ export const WorldHud: React.FC<WorldHudProps> = ({
   onOpenContact,
   onPause,
   onInspectNearest,
+  contextualAction,
+  isMeditating,
+  onTriggerAction,
+  activeHighlight,
+  onCloseHighlight,
   onJoystickMove,
   onJump,
 }) => {
@@ -255,7 +267,58 @@ export const WorldHud: React.FC<WorldHudProps> = ({
           </div>
         )}
 
-        {nearestLandmark && !placementMode && !hasOpenLandmark && (
+        {activeHighlight && (
+          <div
+            data-testid="maya-devi-highlight-card"
+            className="pointer-events-auto max-w-md w-[90vw] rounded-xl border border-amber-400/55 px-4 py-3 text-left shadow-2xl"
+            style={{ backgroundColor: 'rgba(13, 20, 34, 0.96)' }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{activeHighlight.subtitle}</span>
+                </div>
+                <h2 className="mt-0.5 text-sm sm:text-base font-bold text-[#eae5da]">
+                  {activeHighlight.title}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={onCloseHighlight}
+                aria-label="Close artifact details"
+                className="p-1 rounded-md text-slate-300 hover:text-amber-300 hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs sm:text-sm text-slate-300 leading-relaxed">
+              {activeHighlight.description}
+            </p>
+          </div>
+        )}
+
+        {(isMeditating || (contextualAction && !placementMode && !hasOpenLandmark && !activeHighlight)) && (
+          <button
+            type="button"
+            data-testid="contextual-action-prompt"
+            onClick={() => {
+              if (contextualAction?.kind === 'landmark' && contextualAction.landmark) {
+                onInspectNearest(contextualAction.landmark);
+              } else {
+                onTriggerAction();
+              }
+            }}
+            className="hidden sm:inline-flex pointer-events-auto px-4 py-2 rounded-lg border border-amber-400/70 text-[#eae5da] hover:bg-amber-500 hover:text-slate-950 text-xs sm:text-sm font-semibold transition-colors cursor-pointer shadow-lg whitespace-nowrap max-w-[90vw] truncate"
+            style={{ backgroundColor: 'rgba(13, 20, 34, 0.94)' }}
+          >
+            {isMeditating
+              ? 'Press E or Move · Leave Meditation'
+              : `Press E or Click · ${contextualAction?.label ?? ''}`}
+          </button>
+        )}
+
+        {!contextualAction && nearestLandmark && !placementMode && !hasOpenLandmark && !isMeditating && !activeHighlight && (
           <button
             type="button"
             onClick={() => onInspectNearest(nearestLandmark)}
@@ -300,13 +363,27 @@ export const WorldHud: React.FC<WorldHudProps> = ({
 
         {/* Touch Action Buttons (>= 44px tap targets) */}
         <div className="pointer-events-auto flex items-center gap-2">
-          {nearestLandmark && !hasOpenLandmark && (
+          {(isMeditating || (contextualAction && !hasOpenLandmark) || (nearestLandmark && !hasOpenLandmark)) && (
             <button
               type="button"
-              onClick={() => onInspectNearest(nearestLandmark)}
+              onClick={() => {
+                if (isMeditating || (contextualAction && contextualAction.kind !== 'landmark')) {
+                  onTriggerAction();
+                } else if (nearestLandmark) {
+                  onInspectNearest(nearestLandmark);
+                }
+              }}
               className="min-w-[48px] h-11 px-3.5 rounded-xl bg-amber-500 text-slate-950 font-semibold text-xs shadow-lg active:bg-amber-600"
             >
-              Inspect
+              {isMeditating
+                ? 'Stand'
+                : contextualAction?.kind === 'toss-pebble'
+                  ? 'Toss'
+                  : contextualAction?.kind === 'spin-prayer-wheel'
+                    ? 'Spin'
+                    : contextualAction?.kind === 'sit-meditate'
+                      ? 'Meditate'
+                      : 'Inspect'}
             </button>
           )}
           <button
