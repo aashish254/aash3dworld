@@ -1,10 +1,33 @@
 import {
   type FootstepSurfaceKind,
   type LumbiniAmbiencePreset,
+  type LumbiniSpatialAudioState,
   type SpatialAmbienceMix,
+  type SpatialEmitterPanGain,
   type WeatherKind,
   computeLumbiniAudioProfile,
+  computeLumbiniSpatialAudioState,
 } from './worldLogic';
+
+export interface SpatialListenerPose {
+  x: number;
+  y: number;
+  z: number;
+  forwardX: number;
+  forwardY: number;
+  forwardZ: number;
+}
+
+export interface LumbiniSpatialStatus {
+  inZone: boolean;
+  activeEmitterCount: number;
+  nearestBirdEmitterId: string | null;
+  nearestRustleEmitterId: string | null;
+  lastBirdEmitterId: string | null;
+  lastRustleEmitterId: string | null;
+  birdEventCount: number;
+  rustleEventCount: number;
+}
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -28,6 +51,9 @@ class SoundEngine {
   private flagFlutterLfo: OscillatorNode | null = null;
   private streamGain: GainNode | null = null;
   private birdBusGain: GainNode | null = null;
+  private lumbiniBirdBus: GainNode | null = null;
+  private lumbiniRustleBus: GainNode | null = null;
+  private leafRustleBuffer: AudioBuffer | null = null;
   private ambientPadGain: GainNode | null = null;
   private ambientPadOsc1: OscillatorNode | null = null;
   private ambientPadOsc2: OscillatorNode | null = null;
@@ -37,7 +63,15 @@ class SoundEngine {
   private nextBirdAtSec = 0;
   private nextChimeAtSec = 0;
   private nextBowlAtSec = 0;
+  private nextLumbiniBirdAtSec = 0;
+  private nextLumbiniRustleAtSec = 0;
   private currentZone: SpatialAmbienceMix['activeZone'] = 'open-valley';
+  private lumbiniSpatialState: LumbiniSpatialAudioState | null = null;
+  private lastLumbiniBirdEmitterId: string | null = null;
+  private lastLumbiniRustleEmitterId: string | null = null;
+  private lumbiniBirdEventCount = 0;
+  private lumbiniRustleEventCount = 0;
+  private pendingLeafBurstEmitter: { id: string; x: number; y: number; z: number } | null = null;
 
   public isEnabled(): boolean {
     return this.enabled;
@@ -52,9 +86,12 @@ class SoundEngine {
         this.nextBirdAtSec = ctx.currentTime + 0.35;
         this.nextChimeAtSec = ctx.currentTime + 0.55;
         this.nextBowlAtSec = ctx.currentTime + 1.4;
+        this.nextLumbiniBirdAtSec = ctx.currentTime + 0.25;
+        this.nextLumbiniRustleAtSec = ctx.currentTime + 0.45;
       }
       this.playTone(528, 0.14, 'sine', 0.07);
     } else if (this.ctx) {
+      this.pendingLeafBurstEmitter = null;
       const t = this.ctx.currentTime;
       for (const gNode of [
         this.windGain,
@@ -63,6 +100,8 @@ class SoundEngine {
         this.flagFlutterGain,
         this.streamGain,
         this.birdBusGain,
+        this.lumbiniBirdBus,
+        this.lumbiniRustleBus,
         this.ambientPadGain,
       ]) {
         if (gNode) {
@@ -220,6 +259,17 @@ class SoundEngine {
     birdBusGain.gain.value = 0.5;
     birdBusGain.connect(ctx.destination);
 
+    // Dedicated Lumbini 3D spatialized buses (birds & localized wind-rustled leaves)
+    const lumbiniBirdBus = ctx.createGain();
+    lumbiniBirdBus.gain.value = 0.85;
+    lumbiniBirdBus.connect(ctx.destination);
+
+    const lumbiniRustleBus = ctx.createGain();
+    lumbiniRustleBus.gain.value = 0.78;
+    lumbiniRustleBus.connect(ctx.destination);
+
+    this.leafRustleBuffer = this.createPinkNoiseBuffer(ctx, 2.4);
+
     // Gentle breeze swell LFO modulating filter cutoff
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
@@ -303,32 +353,394 @@ class SoundEngine {
     this.flagFlutterLfo = flagFlutterLfo;
     this.streamGain = streamGain;
     this.birdBusGain = birdBusGain;
+    this.lumbiniBirdBus = lumbiniBirdBus;
+    this.lumbiniRustleBus = lumbiniRustleBus;
     this.ambientPadGain = padGain;
     this.ambientPadOsc1 = padOsc1;
     this.ambientPadOsc2 = padOsc2;
     this.ambientPadLfo = padLfo;
   }
 
+  private syncListenerPose(ctx: AudioContext, listener: SpatialListenerPose): void {
+    const lst = ctx.listener as AudioListener & {
+      setPosition?: (x: number, y: number, z: number) => void;
+      setOrientation?: (
+        fx: number,
+        fy: number,
+        fz: number,
+        ux: number,
+        uy: number,
+        uz: number,
+      ) => void;
+    };
+    if (!lst) return;
+    const t = ctx.currentTime;
+    const fLen = Math.hypot(listener.forwardX, listener.forwardY, listener.forwardZ) || 1;
+    const fx = listener.forwardX / fLen;
+    const fy = listener.forwardY / fLen;
+    const fz = listener.forwardZ / fLen;
+
+    if (
+      'positionX' in lst &&
+      lst.positionX &&
+      typeof lst.positionX.setTargetAtTime === 'function'
+    ) {
+      lst.positionX.setTargetAtTime(listener.x, t, 0.05);
+      lst.positionY.setTargetAtTime(listener.y, t, 0.05);
+      lst.positionZ.setTargetAtTime(listener.z, t, 0.05);
+      lst.forwardX.setTargetAtTime(fx, t, 0.05);
+      lst.forwardY.setTargetAtTime(fy, t, 0.05);
+      lst.forwardZ.setTargetAtTime(fz, t, 0.05);
+      lst.upX.setTargetAtTime(0, t, 0.05);
+      lst.upY.setTargetAtTime(1, t, 0.05);
+      lst.upZ.setTargetAtTime(0, t, 0.05);
+    } else if (typeof lst.setPosition === 'function' && typeof lst.setOrientation === 'function') {
+      lst.setPosition(listener.x, listener.y, listener.z);
+      lst.setOrientation(fx, fy, fz, 0, 1, 0);
+    }
+  }
+
+  private createLocalizedOut(
+    ctx: AudioContext,
+    bus: AudioNode,
+    target: SpatialEmitterPanGain,
+  ): { out: AudioNode; cleanup: () => void } {
+    if (typeof ctx.createPanner === 'function') {
+      const panner = ctx.createPanner() as PannerNode & {
+        setPosition?: (x: number, y: number, z: number) => void;
+      };
+      panner.panningModel = 'HRTF';
+      panner.distanceModel = 'inverse';
+      panner.refDistance = target.emitter.refDistance;
+      panner.maxDistance = target.emitter.maxDistance;
+      panner.rolloffFactor = 1.25;
+      panner.coneInnerAngle = 360;
+      panner.coneOuterAngle = 360;
+      panner.coneOuterGain = 1;
+      const t = ctx.currentTime;
+      if (
+        'positionX' in panner &&
+        panner.positionX &&
+        typeof panner.positionX.setValueAtTime === 'function'
+      ) {
+        panner.positionX.setValueAtTime(target.emitter.x, t);
+        panner.positionY.setValueAtTime(target.emitter.y, t);
+        panner.positionZ.setValueAtTime(target.emitter.z, t);
+      } else if (typeof panner.setPosition === 'function') {
+        panner.setPosition(target.emitter.x, target.emitter.y, target.emitter.z);
+      }
+      panner.connect(bus);
+      return {
+        out: panner,
+        cleanup: () => {
+          try {
+            panner.disconnect();
+          } catch {
+            // ignore disconnect errors on disposed context
+          }
+        },
+      };
+    }
+
+    if (typeof ctx.createStereoPanner === 'function') {
+      const stereo = ctx.createStereoPanner();
+      const distGain = ctx.createGain();
+      stereo.pan.value = target.pan;
+      distGain.gain.value = target.distanceGain;
+      stereo.connect(distGain);
+      distGain.connect(bus);
+      return {
+        out: stereo,
+        cleanup: () => {
+          try {
+            stereo.disconnect();
+            distGain.disconnect();
+          } catch {
+            // ignore disconnect errors
+          }
+        },
+      };
+    }
+
+    return { out: bus, cleanup: () => undefined };
+  }
+
+  private pickWeightedEmitter(list: SpatialEmitterPanGain[]): SpatialEmitterPanGain | null {
+    if (list.length === 0) return null;
+    const pool = list.slice(0, Math.min(5, list.length));
+    let total = 0;
+    for (let i = 0; i < pool.length; i++) {
+      total += Math.max(0.01, pool[i].weight);
+    }
+    let roll = Math.random() * total;
+    for (let i = 0; i < pool.length; i++) {
+      roll -= Math.max(0.01, pool[i].weight);
+      if (roll <= 0) return pool[i];
+    }
+    return pool[0];
+  }
+
+  private triggerLocalizedLumbiniBird(
+    ctx: AudioContext,
+    choice: SpatialEmitterPanGain,
+    spatial: LumbiniSpatialAudioState,
+  ): void {
+    const t = ctx.currentTime;
+    const bus: AudioNode = this.lumbiniBirdBus ?? this.birdBusGain ?? ctx.destination;
+    const { out, cleanup } = this.createLocalizedOut(ctx, bus, choice);
+
+    this.lastLumbiniBirdEmitterId = choice.emitter.id;
+    this.lumbiniBirdEventCount++;
+
+    const intensity = 0.65 + spatial.birdActivity * 0.55;
+    let lastStopSec = t + 0.3;
+    let lastOsc: OscillatorNode | null = null;
+
+    if (choice.emitter.speciesHint === 'dove') {
+      const syllables = [
+        { offset: 0, dur: 0.21, fStart: 368 + Math.random() * 24, fEnd: 325 },
+        { offset: 0.26, dur: 0.16, fStart: 388 + Math.random() * 18, fEnd: 424 },
+        { offset: 0.46, dur: 0.34, fStart: 402, fEnd: 312 },
+      ];
+      const vol = 0.022 * intensity;
+      for (const s of syllables) {
+        const start = t + s.offset;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(s.fStart, start);
+        osc.frequency.exponentialRampToValueAtTime(s.fEnd, start + s.dur);
+        gain.gain.setValueAtTime(0.0005, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0005, start + s.dur);
+        osc.connect(gain);
+        gain.connect(out);
+        osc.start(start);
+        osc.stop(start + s.dur + 0.02);
+        lastOsc = osc;
+        lastStopSec = Math.max(lastStopSec, start + s.dur + 0.02);
+      }
+    } else if (choice.emitter.speciesHint === 'parakeet') {
+      // Energetic Sacred Bodhi canopy rose-ringed parakeet calls
+      const calls = 2 + Math.floor(Math.random() * 3);
+      const baseFreq = 2500 + Math.random() * 680;
+      const vol = 0.018 * intensity;
+      for (let i = 0; i < calls; i++) {
+        const start = t + i * (0.11 + Math.random() * 0.055);
+        const dur = 0.075 + Math.random() * 0.04;
+        const osc = ctx.createOscillator();
+        const overtone = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        overtone.type = 'triangle';
+        const f0 = baseFreq * (1 + (Math.random() - 0.5) * 0.16);
+        osc.frequency.setValueAtTime(f0, start);
+        osc.frequency.exponentialRampToValueAtTime(f0 * 1.32, start + dur * 0.42);
+        osc.frequency.exponentialRampToValueAtTime(f0 * 0.88, start + dur);
+        overtone.frequency.setValueAtTime(f0 * 2.02, start);
+        overtone.frequency.exponentialRampToValueAtTime(f0 * 2.45, start + dur * 0.45);
+
+        gain.gain.setValueAtTime(0.0005, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0004, start + dur);
+        osc.connect(gain);
+        overtone.connect(gain);
+        gain.connect(out);
+        osc.start(start);
+        overtone.start(start);
+        osc.stop(start + dur + 0.02);
+        overtone.stop(start + dur + 0.02);
+        lastOsc = osc;
+        lastStopSec = Math.max(lastStopSec, start + dur + 0.02);
+      }
+    } else {
+      // Melodic Himalayan bulbul phrase near Pushkarini pond & Thai grove
+      const notes = 3 + Math.floor(Math.random() * 3);
+      const baseFreq = 1880 + Math.random() * 580;
+      const vol = 0.02 * intensity;
+      for (let i = 0; i < notes; i++) {
+        const start = t + i * (0.095 + Math.random() * 0.05);
+        const dur = 0.065 + Math.random() * 0.045;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const direction = i % 2 === 0 ? 1.24 : 0.82;
+        const f0 = baseFreq * (1 + (i - 1) * 0.08 + (Math.random() - 0.5) * 0.1);
+        osc.frequency.setValueAtTime(f0, start);
+        osc.frequency.exponentialRampToValueAtTime(f0 * direction, start + dur * 0.72);
+
+        gain.gain.setValueAtTime(0.0005, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.014);
+        gain.gain.exponentialRampToValueAtTime(0.0004, start + dur);
+        osc.connect(gain);
+        gain.connect(out);
+        osc.start(start);
+        osc.stop(start + dur + 0.02);
+        lastOsc = osc;
+        lastStopSec = Math.max(lastStopSec, start + dur + 0.02);
+      }
+    }
+
+    if (lastOsc) {
+      lastOsc.onended = cleanup;
+    } else if (lastStopSec > t) {
+      cleanup();
+    }
+  }
+
+  private triggerLocalizedLeafRustle(
+    ctx: AudioContext,
+    choice: SpatialEmitterPanGain,
+    windLevel: number,
+    spatial: LumbiniSpatialAudioState,
+  ): void {
+    const t = ctx.currentTime;
+    const bus: AudioNode = this.lumbiniRustleBus ?? ctx.destination;
+    const { out, cleanup } = this.createLocalizedOut(ctx, bus, choice);
+
+    this.lastLumbiniRustleEmitterId = choice.emitter.id;
+    this.lumbiniRustleEventCount++;
+
+    if (choice.emitter.speciesHint === 'pipal-tree') {
+      this.pendingLeafBurstEmitter = {
+        id: choice.emitter.id,
+        x: choice.emitter.x,
+        y: choice.emitter.y,
+        z: choice.emitter.z,
+      };
+    }
+
+    if (!this.leafRustleBuffer) {
+      this.leafRustleBuffer = this.createPinkNoiseBuffer(ctx, 2.4);
+    }
+
+    const isPipalTree = choice.emitter.speciesHint === 'pipal-tree';
+    const dur = isPipalTree ? 1.35 + Math.random() * 0.75 : 0.75 + Math.random() * 0.55;
+    const src = ctx.createBufferSource();
+    src.buffer = this.leafRustleBuffer;
+    src.loop = true;
+
+    const bpLow = ctx.createBiquadFilter();
+    bpLow.type = 'bandpass';
+    bpLow.frequency.setValueAtTime(
+      (isPipalTree ? 1280 : 1850) + Math.random() * 340,
+      t,
+    );
+    bpLow.Q.value = isPipalTree ? 1.35 : 1.75;
+
+    const bpHigh = ctx.createBiquadFilter();
+    bpHigh.type = 'bandpass';
+    bpHigh.frequency.setValueAtTime(
+      (isPipalTree ? 2750 : 3550) + Math.random() * 480,
+      t,
+    );
+    bpHigh.Q.value = 1.9;
+
+    const flutterLfo = ctx.createOscillator();
+    flutterLfo.type = 'sine';
+    flutterLfo.frequency.value = isPipalTree ? 5.2 + Math.random() * 2.1 : 6.8 + Math.random() * 2.4;
+    const flutterDepth = ctx.createGain();
+    const peakGain =
+      (isPipalTree ? 0.048 : 0.036) *
+      (0.55 + windLevel * 0.45) *
+      (0.6 + spatial.leafRustleActivity * 0.5);
+    flutterDepth.gain.value = peakGain * 0.24;
+
+    const envGain = ctx.createGain();
+    envGain.gain.setValueAtTime(0.0005, t);
+    envGain.gain.linearRampToValueAtTime(peakGain, t + dur * 0.34);
+    envGain.gain.setTargetAtTime(0.0005, t + dur * 0.58, dur * 0.24);
+
+    flutterLfo.connect(flutterDepth);
+    flutterDepth.connect(envGain.gain);
+
+    src.connect(bpLow);
+    src.connect(bpHigh);
+    bpLow.connect(envGain);
+    bpHigh.connect(envGain);
+    envGain.connect(out);
+
+    const startOffset = Math.random() * Math.max(0.1, this.leafRustleBuffer.duration - 0.5);
+    src.start(t, startOffset);
+    flutterLfo.start(t);
+    src.stop(t + dur + 0.12);
+    flutterLfo.stop(t + dur + 0.12);
+    src.onended = () => {
+      try {
+        src.disconnect();
+        bpLow.disconnect();
+        bpHigh.disconnect();
+        envGain.disconnect();
+        flutterLfo.disconnect();
+        flutterDepth.disconnect();
+      } catch {
+        // ignore
+      }
+      cleanup();
+    };
+  }
+
+  public consumeTriggeredLeafBurst(): { id: string; x: number; y: number; z: number } | null {
+    const out = this.pendingLeafBurstEmitter;
+    this.pendingLeafBurstEmitter = null;
+    return out;
+  }
+
+  public getLumbiniSpatialStatus(): LumbiniSpatialStatus {
+    const st = this.lumbiniSpatialState;
+    return {
+      inZone: Boolean(st?.inZone),
+      activeEmitterCount: st
+        ? st.activeBirdEmitters.length + st.activeRustleEmitters.length
+        : 0,
+      nearestBirdEmitterId: st?.nearestBirdEmitter?.emitter.id ?? null,
+      nearestRustleEmitterId: st?.nearestRustleEmitter?.emitter.id ?? null,
+      lastBirdEmitterId: this.lastLumbiniBirdEmitterId,
+      lastRustleEmitterId: this.lastLumbiniRustleEmitterId,
+      birdEventCount: this.lumbiniBirdEventCount,
+      rustleEventCount: this.lumbiniRustleEventCount,
+    };
+  }
+
   /**
    * Continuously updates spatial Himalayan wind, wind-rustling foliage, prayer-flag flutter,
-   * canal/stream murmur, nature harmonic pad, birdsong, and Lumbini chimes/singing bowls.
+   * canal/stream murmur, nature harmonic pad, birdsong, Lumbini spatial audio emitters, and chimes/bowls.
    */
   public updateAmbience(
     mix: SpatialAmbienceMix,
     _dt: number,
     lumbiniPreset: LumbiniAmbiencePreset = 'sanctuary-auto',
     weather: WeatherKind = 'clear',
+    listener?: SpatialListenerPose,
   ): void {
     this.currentZone = mix.activeZone;
+    this.lumbiniSpatialState = listener
+      ? computeLumbiniSpatialAudioState(
+          listener.x,
+          listener.y,
+          listener.z,
+          listener.forwardX,
+          listener.forwardZ,
+          mix.windLevel,
+          lumbiniPreset,
+          weather,
+        )
+      : null;
+
     if (!this.enabled) return;
     const ctx = this.ensureContext();
     if (!ctx) return;
 
     this.ensureWindGraph(ctx);
+    if (listener) {
+      this.syncListenerPose(ctx, listener);
+    }
+
     const t = ctx.currentTime;
     const forestLevel = Math.max(0, Math.min(1, mix.forestLevel ?? 0));
     const rustleLevel = Math.max(0, Math.min(1, mix.rustleLevel ?? forestLevel * mix.windLevel));
     const lumbiniProfile = computeLumbiniAudioProfile(mix, lumbiniPreset, weather);
+    const lumbiniSpatial = this.lumbiniSpatialState;
 
     if (this.windGain && this.windHowlGain && this.windFilterLow && this.windFilterHowl) {
       const baseVol = Math.pow(mix.windLevel, 1.25) * 0.068;
@@ -340,10 +752,25 @@ class SoundEngine {
     }
 
     if (this.rustleGain && this.rustleFilter1 && this.rustleFilter2) {
-      const rustleVol = Math.pow(rustleLevel, 1.15) * 0.056;
+      const spatialDuck = lumbiniSpatial?.inZone ? 0.34 : 1.0;
+      const rustleVol = Math.pow(rustleLevel, 1.15) * 0.056 * spatialDuck;
       this.rustleGain.gain.setTargetAtTime(rustleVol, t, 0.35);
       this.rustleFilter1.frequency.setTargetAtTime(1400 + rustleLevel * 620, t, 0.45);
       this.rustleFilter2.frequency.setTargetAtTime(2650 + rustleLevel * 850, t, 0.45);
+    }
+
+    if (this.lumbiniBirdBus) {
+      const targetBirdBus = lumbiniSpatial?.inZone
+        ? Math.max(0.2, Math.min(1.25, 0.55 + lumbiniSpatial.birdActivity * 0.7))
+        : 0.0;
+      this.lumbiniBirdBus.gain.setTargetAtTime(targetBirdBus, t, 0.3);
+    }
+
+    if (this.lumbiniRustleBus) {
+      const targetRustleBus = lumbiniSpatial?.inZone
+        ? Math.max(0.18, Math.min(1.2, 0.45 + lumbiniSpatial.leafRustleActivity * 0.75))
+        : 0.0;
+      this.lumbiniRustleBus.gain.setTargetAtTime(targetRustleBus, t, 0.3);
     }
 
     if (this.flagFlutterGain && this.flagFlutterFilter) {
@@ -384,12 +811,45 @@ class SoundEngine {
       }
     }
 
+    const useLumbiniLocalizedBirds = Boolean(lumbiniSpatial?.inZone && mix.activeZone === 'peace-garden');
+
+    if (
+      lumbiniSpatial?.inZone &&
+      lumbiniSpatial.birdActivity > 0.14 &&
+      lumbiniSpatial.activeBirdEmitters.length > 0 &&
+      t >= this.nextLumbiniBirdAtSec
+    ) {
+      const picked = this.pickWeightedEmitter(lumbiniSpatial.activeBirdEmitters);
+      if (picked) {
+        this.triggerLocalizedLumbiniBird(ctx, picked, lumbiniSpatial);
+      }
+      const span = Math.max(
+        0.4,
+        lumbiniSpatial.birdIntervalMaxSec - lumbiniSpatial.birdIntervalMinSec,
+      );
+      this.nextLumbiniBirdAtSec = t + lumbiniSpatial.birdIntervalMinSec + Math.random() * span;
+    }
+
+    if (
+      lumbiniSpatial?.inZone &&
+      lumbiniSpatial.leafRustleActivity > 0.14 &&
+      lumbiniSpatial.activeRustleEmitters.length > 0 &&
+      t >= this.nextLumbiniRustleAtSec
+    ) {
+      const picked = this.pickWeightedEmitter(lumbiniSpatial.activeRustleEmitters);
+      if (picked) {
+        this.triggerLocalizedLeafRustle(ctx, picked, mix.windLevel, lumbiniSpatial);
+      }
+      const span = Math.max(
+        0.5,
+        lumbiniSpatial.rustleIntervalMaxSec - lumbiniSpatial.rustleIntervalMinSec,
+      );
+      this.nextLumbiniRustleAtSec = t + lumbiniSpatial.rustleIntervalMinSec + Math.random() * span;
+    }
+
     const effectiveBirdActivity = Math.max(mix.birdLevel, forestLevel * 0.85);
-    if (effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
-      if (
-        (mix.activeZone === 'temple-courtyard' || mix.activeZone === 'peace-garden') &&
-        Math.random() < 0.58
-      ) {
+    if (!useLumbiniLocalizedBirds && effectiveBirdActivity > 0.16 && t >= this.nextBirdAtSec) {
+      if (mix.activeZone === 'temple-courtyard' && Math.random() < 0.58) {
         this.triggerDoveCoo(ctx, mix.birdLevel);
       } else {
         this.triggerSongbirdChirp(ctx, mix.birdLevel, forestLevel);
@@ -810,6 +1270,11 @@ class SoundEngine {
       this.ctx.close().catch(() => undefined);
       this.ctx = null;
     }
+    this.lumbiniBirdBus = null;
+    this.lumbiniRustleBus = null;
+    this.leafRustleBuffer = null;
+    this.lumbiniSpatialState = null;
+    this.pendingLeafBurstEmitter = null;
     this.windStarted = false;
   }
 }

@@ -21,7 +21,10 @@ import {
   getWorldBoulderSpots,
   getWorldTreeSpots,
   groundHeightAt,
+  isInLumbiniSurroundingPond,
+  isOnLumbiniBridgeAbutmentPier,
   isOnLumbiniCanalBridge,
+  isOnLumbiniSacredBridge,
 } from './worldLogic';
 import { applyRealisticWaterShader } from './waterShader';
 
@@ -496,6 +499,17 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const underPushkariniBasin = lx >= -3.2 && lx <= 23.2 && lz >= 7.5 && lz <= 25.5;
     const underMayaPit = Math.abs(lx) <= 17.5 && lz >= -33.5 && lz <= -10.5;
     const underLumbiniPlaza = lx >= -44.8 && lx <= 44.8 && lz >= -44.8 && lz <= 52.8;
+    const inSurroundingPond = isInLumbiniSurroundingPond(x, z);
+    const onSacredBridge = isOnLumbiniSacredBridge(x, z);
+    const onBridgePier = isOnLumbiniBridgeAbutmentPier(x, z);
+    const underLumbiniOuterPromenade =
+      !inSurroundingPond &&
+      !onSacredBridge &&
+      !onBridgePier &&
+      x >= -261.5 &&
+      x <= -159.0 &&
+      z >= 40.0 &&
+      z <= 160.2;
     const underPeaceCanal =
       !isOnLumbiniCanalBridge(x, z) &&
       x >= LUMBINI_PEACE_CANAL.minX - 0.8 &&
@@ -513,6 +527,12 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       x > -325 && x < 115 && z > -118 && z < 185 ? minDistanceToRoads(x, z, roadSamples) : 99;
     if (underPeaceCanal) {
       y = -1.15;
+    } else if (inSurroundingPond) {
+      y = -0.90;
+    } else if (onBridgePier) {
+      y = 0.34;
+    } else if (onSacredBridge) {
+      y = 0.15;
     } else if (underPushkariniBasin) {
       y = -0.82;
     } else if (underGangaSagarBasin) {
@@ -521,7 +541,14 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       y = -0.35;
     } else if (underPlinth) {
       y = 0.08;
-    } else if (underChowk || underCompoundWalk || underBridgeWalk || underLumbiniPlaza || underWestPeaceWalk) {
+    } else if (
+      underChowk ||
+      underCompoundWalk ||
+      underBridgeWalk ||
+      underLumbiniPlaza ||
+      underLumbiniOuterPromenade ||
+      underWestPeaceWalk
+    ) {
       y = 0.14;
     } else if (roadDist < 2.25) {
       // Depress roadbed sub-grade cleanly beneath the level stone road deck so grass triangles never pierce the pavers
@@ -535,7 +562,9 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 345, 430);
 
     const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
-    if (distRiver < 8.4 || distLake < GLACIAL_LAKE.basinRadius) {
+    if (inSurroundingPond) {
+      _color.setRGB(0.16, 0.24, 0.24);
+    } else if (distRiver < 8.4 || distLake < GLACIAL_LAKE.basinRadius) {
       const shoreT =
         distLake < GLACIAL_LAKE.basinRadius
           ? THREE.MathUtils.smoothstep(distLake, GLACIAL_LAKE.waterRadius * 0.65, GLACIAL_LAKE.basinRadius)
@@ -818,7 +847,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     if (px > -152 && px < -50 && pz > 54.5 && pz < 153) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    if (px > -260 && px < -160 && pz > 46 && pz < 152) {
+    if (px > -263 && px < -157 && pz > 39 && pz < 161) {
       return { excluded: true, roadD: 99, distRiver };
     }
     if (
@@ -1481,7 +1510,7 @@ export function createCurbedRoads(
       const srx = p.x + dirX * outerW;
       const srz = p.z + dirZ * outerW;
 
-      const deckY =
+      let deckY =
         Math.max(
           groundHeightAt(p.x, p.z),
           groundHeightAt(lx, lz),
@@ -1490,6 +1519,11 @@ export function createCurbedRoads(
           sampleTerrainMeshHeight(terrainMesh, lx, lz),
           sampleTerrainMeshHeight(terrainMesh, rxp, rzp),
         ) + 0.028;
+      if (isInLumbiniSurroundingPond(p.x, p.z) || isOnLumbiniSacredBridge(p.x, p.z)) {
+        deckY = -0.55;
+      } else if (p.x >= -261.2 && p.x <= -159.2 && p.z >= 40.2 && p.z <= 159.8) {
+        deckY = Math.min(deckY, 0.20);
+      }
       const skirtY = deckY - 0.26;
 
       positions.push(
@@ -1543,7 +1577,7 @@ export function createCurbedRoads(
         const inChowk =
           baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
         const inLumbini =
-          baseX > -255.0 && baseX < -165.0 && baseZ > 51.0 && baseZ < 149.0;
+          baseX > -261.5 && baseX < -159.0 && baseZ > 40.2 && baseZ < 160.2;
         if (inChowk || inLumbini || rm.deckY <= -0.1) {
           prevRingStart = -1;
           continue;
@@ -1663,7 +1697,9 @@ export function createCurbedRoads(
   );
 
   lanternCoords.forEach(([lx, lz], idx) => {
-    const ly = sampleTerrainMeshHeight(terrainMesh, lx, lz);
+    const ly = isOnLumbiniBridgeAbutmentPier(lx, lz)
+      ? 0.34
+      : sampleTerrainMeshHeight(terrainMesh, lx, lz);
     const post = new THREE.Group();
     post.position.set(lx, ly, lz);
     post.userData.snapCategory = 'lantern';
@@ -2922,7 +2958,7 @@ export function createLumbiniPeaceParkland(
     goldMat,
   );
   harmikaCap.position.y = 5.56;
-  const gajur = createDetailedGajurSpire(goldMat, 2.35, 0.44);
+  const gajur = createDetailedGajurSpire(goldMat, bronzeMat, 2.35, 0.44);
   gajur.position.y = 5.95;
 
   // East-facing Buddha Blessing Niche overlooking the Peace Canal & Maya Devi Temple
@@ -2991,30 +3027,31 @@ export function createLumbiniPeaceParkland(
     [6.6, 6.6],
     [-6.6, 6.6],
   ];
-  poleCoords.forEach(([px, pz], idx) => {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 5.4, 8), stupaPoleMat);
-    pole.position.set(px, 3.05, pz);
-    pole.castShadow = true;
-    const mastTip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), goldMat);
-    mastTip.position.set(px, 5.8, pz);
-    stupaGroup.add(pole, mastTip);
-
-    const poleBanner = createWavingPoleBanner(2.15, 0.68, idx * 1.15);
-    poleBanner.position.set(px + 0.06, 4.95, pz);
-    poleBanner.rotation.y = Math.atan2(-px, -pz);
-    poleBanner.userData.nonCollidable = true;
-    poleBanner.userData.noSpin = true;
-    stupaGroup.add(poleBanner);
+  poleCoords.forEach(([px, pz]) => {
+    const poleBanner = createWavingPoleBanner({
+      height: 5.4,
+      bannerWidth: 2.15,
+      bannerHeight: 0.68,
+      baseYaw: Math.atan2(-px, -pz),
+      poleMaterial: stupaPoleMat,
+      finialMaterial: goldMat,
+    });
+    poleBanner.group.position.set(px, 0.35, pz);
+    poleBanner.group.userData.nonCollidable = true;
+    poleBanner.group.userData.noSpin = true;
+    stupaGroup.add(poleBanner.group);
 
     const garland = createWavingPrayerFlagGarland(
       new THREE.Vector3(px, 5.45, pz),
       new THREE.Vector3(0, 5.65, 0),
-      8,
-      0.28,
-      0.34,
-      0.24,
+      {
+        flagCount: 8,
+        flagWidth: 0.28,
+        flagHeight: 0.34,
+        sag: 0.24,
+      },
     );
-    stupaGroup.add(garland);
+    stupaGroup.add(garland.group);
   });
 
   group.add(stupaGroup);

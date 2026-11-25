@@ -14,6 +14,7 @@ import {
   buildPeaceLantern,
   buildPushkariniPond,
   buildSacredBodhiChautara,
+  buildSacredGardenSurroundingPond,
   buildThaiMarbleSanctuary,
   buildToranaGate,
 } from './lumbiniShrines';
@@ -40,7 +41,10 @@ const _e = new THREE.Euler();
  * - Myanmar Golden Pagoda & Royal Thai Marble Pavilion sheltering Great Alms-Bowl Dhyana Buddha
  * - Sacred Bodhi Tree Chautara, Eternal Peace Flame, Excavated Brick Ruins, Red-Brick Paths & Trimmed Hedges
  */
-export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBuildResult {
+export function createLumbiniBuddha(
+  textures: ProceduralTextureSet,
+  isSoftwareGl = false,
+): LandmarkBuildResult {
   const group = new THREE.Group();
   const beaconLights: THREE.PointLight[] = [];
   const animatedNodes: THREE.Object3D[] = [];
@@ -256,6 +260,8 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     group.add(walk);
   };
   addBrickWalk(-8.5, 8.5, 28.0, 52.0); // Grand South Axial Forecourt (around Baby Buddha)
+  addBrickWalk(-8.5, -3.2, 6.0, 28.0); // Continuous Pushkarini West Overlook Causeway -> Temple Forecourt
+  addBrickWalk(-5.8, 5.8, -10.0, 2.0); // Expanded Maya Devi South Temple Forecourt
   addBrickWalk(-44.0, 44.0, 2.0, 6.0); // Grand East-West Cross Promenade between West & East Gates
   addBrickWalk(-3.4, 3.4, -2.5, 2.0); // Axial Temple Ramp Approach Spur
   addBrickWalk(-22.4, -19.2, -42.5, 30.8); // West Brick Garden Walk
@@ -265,24 +271,198 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
   addBrickWalk(-3.4, 3.4, -44.0, -42.5); // North Torana Gate Threshold Spur
   addBrickWalk(-27.0, -22.4, -22.8, -19.2); // Ashoka Pillar Viewing Spur
   addBrickWalk(-20.4, 20.4, -36.8, -34.2); // Maya Devi North Circumambulation Walk
+  // Monument Shrine Spur Trails connecting every pavilion cleanly to the main network
+  addBrickWalk(-27.5, -8.5, 37.2, 40.8); // Myanmar Golden Pagoda spur
+  addBrickWalk(-19.2, -8.5, 28.8, 32.2); // Peace Bell Pavilion spur
+  addBrickWalk(-25.6, -22.4, 14.8, 18.2); // Sacred Bodhi Chautara spur
+  addBrickWalk(27.2, 32.4, 22.4, 25.6); // Eternal Peace Flame spur
+  addBrickWalk(27.2, 30.0, -23.8, -20.2); // Royal Thai Sanctuary spur
 
-  // Smooth sloped Chunar sandstone gate threshold aprons connecting brick walks (y=+0.10) to road decks (y=+0.022)
-  const addGateApron = (cx: number, cz: number, w: number, rotY: number) => {
+  // Outer Sacred Garden Pond Moat, Ghat Banks, 4 Arched Causeway Bridges & Outer Promenades
+  const surroundingPond = buildSacredGardenSurroundingPond(
+    terracottaPaverMat,
+    brickMat,
+    chunarStoneMat,
+    giltGoldMat,
+    warmBronzeMat,
+    isSoftwareGl,
+  );
+  group.add(surroundingPond);
+
+  // Smooth outer Chunar sandstone transition aprons connecting Outer Promenades (ly=+0.09) down to roads (ly=+0.025)
+  const addOuterRoadApron = (cx: number, cz: number, w: number, rotY: number) => {
     const apron = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, 1.55), chunarStoneMat);
-    apron.position.set(cx, 0.0, cz);
+    apron.position.set(cx, -0.01, cz);
     apron.rotation.y = rotY;
-    apron.rotation.x = rotY === 0 ? 0.05 : rotY === Math.PI ? -0.05 : 0;
+    apron.rotation.x = rotY === 0 ? 0.048 : rotY === Math.PI ? -0.048 : 0;
     if (Math.abs(Math.abs(rotY) - Math.PI * 0.5) < 0.1) {
-      apron.rotation.z = rotY > 0 ? -0.05 : 0.05;
+      apron.rotation.z = rotY > 0 ? -0.048 : 0.048;
     }
     apron.receiveShadow = true;
     apron.userData.nonCollidable = true;
     group.add(apron);
   };
-  addGateApron(0, 52.65, 6.8, 0);
-  addGateApron(0, -44.65, 6.8, Math.PI);
-  addGateApron(44.65, 4.0, 4.4, Math.PI * 0.5);
-  addGateApron(-44.65, 4.0, 4.4, -Math.PI * 0.5);
+  addOuterRoadApron(0, 64.25, 6.8, 0);
+  addOuterRoadApron(0, -56.25, 6.8, Math.PI);
+  addOuterRoadApron(51.25, 4.0, 5.2, Math.PI * 0.5);
+  addOuterRoadApron(-51.65, 4.0, 5.2, -Math.PI * 0.5);
+
+  // Detailed Chunar Sandstone Curbs, Transverse Perspective Ribs & Lotus/Dharmachakra Trail Medallions
+  const curbTransforms: Array<[number, number, number, number]> = [
+    // South Forecourt & Overlook curbs
+    [-8.55, 40.0, 0.22, 24.0],
+    [8.55, 40.0, 0.22, 24.0],
+    [-8.55, 17.0, 0.22, 22.0],
+    [-3.25, 17.0, 0.22, 22.0],
+    [-5.85, -4.0, 0.22, 12.0],
+    [5.85, -4.0, 0.22, 12.0],
+    // East-West Cross Promenade curbs
+    [-26.2, 1.95, 35.6, 0.22],
+    [26.2, 1.95, 35.6, 0.22],
+    [-26.2, 6.05, 35.6, 0.22],
+    [25.0, 6.05, 38.0, 0.22],
+    // Transverse axial perspective ribs every 4m amplifying depth toward Maya Devi Temple
+    ...[62.0, 50.0, 46.0, 34.0, 30.0].map((rz): [number, number, number, number] => [0, rz, 6.4, 0.28]),
+    ...[8.0, 12.0, 16.0, 20.0, 24.0].map((rz): [number, number, number, number] => [-5.85, rz, 5.1, 0.26]),
+    ...[0.0, -4.0, -8.0].map((rz): [number, number, number, number] => [0, rz, 7.6, 0.28]),
+    ...[-34, -26, -18, -10, 10, 18, 26, 34, 41].map((rx): [number, number, number, number] => [rx, 4.0, 0.26, 3.8]),
+    ...[-42, -30, -18, -8, 8, 18, 30, 42].map((rx): [number, number, number, number] => [rx, 61.9, 0.28, 3.1]),
+  ];
+  const unitStripGeo = new THREE.BoxGeometry(1, 0.04, 1);
+  const curbInst = new THREE.InstancedMesh(unitStripGeo, chunarStoneMat, curbTransforms.length);
+  curbInst.receiveShadow = true;
+  curbInst.userData.nonCollidable = true;
+  curbTransforms.forEach(([cx, cz, sx, sz], idx) => {
+    _v3.set(cx, 0.095, cz);
+    _q.identity();
+    _s.set(sx, 1, sz);
+    _m4.compose(_v3, _q, _s);
+    curbInst.setMatrixAt(idx, _m4);
+  });
+  curbInst.instanceMatrix.needsUpdate = true;
+  curbInst.computeBoundingSphere();
+  group.add(curbInst);
+
+  // Inlaid carved Chunar sandstone + bronze Lotus / Dharmachakra trail medallions along main axis
+  const medRingGeo = new THREE.RingGeometry(0.62, 0.86, 24);
+  medRingGeo.rotateX(-Math.PI / 2);
+  const medCoreGeo = new THREE.CircleGeometry(0.42, 16);
+  medCoreGeo.rotateX(-Math.PI / 2);
+  for (const [mx, mz] of [
+    [0, 61.9],
+    [0, 49.0],
+    [0, 31.0],
+    [0, 4.0],
+    [0, -1.0],
+  ] as Array<[number, number]>) {
+    const outerRing = new THREE.Mesh(medRingGeo, chunarStoneMat);
+    outerRing.position.set(mx, 0.104, mz);
+    outerRing.receiveShadow = true;
+    outerRing.userData.nonCollidable = true;
+    const innerDisc = new THREE.Mesh(medCoreGeo, warmBronzeMat);
+    innerDisc.position.set(mx, 0.105, mz);
+    innerDisc.receiveShadow = true;
+    innerDisc.userData.nonCollidable = true;
+    group.add(outerRing, innerDisc);
+  }
+
+  // Pushkarini West Overlook Balustrade guarding the reflective pond edge (ldx = -3.15, ldz 7.7..25.3)
+  const overlookRail = new THREE.Group();
+  for (let i = 0; i <= 8; i++) {
+    const pz = 7.8 + (i / 8) * 17.4;
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.72, 0.18), chunarStoneMat);
+    post.position.set(-3.15, 0.46, pz);
+    post.castShadow = true;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), giltGoldMat);
+    cap.position.set(-3.15, 0.86, pz);
+    overlookRail.add(post, cap);
+  }
+  const overlookHandrail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 17.55), chunarStoneMat);
+  overlookHandrail.position.set(-3.15, 0.78, 16.5);
+  overlookHandrail.castShadow = true;
+  overlookRail.add(overlookHandrail);
+  group.add(overlookRail);
+
+  // Brass-capped Chunar sandstone trail bollards flanking South Approach & Outer Promenade (InstancedMesh)
+  const bollardCoords: Array<[number, number]> = [
+    [-6.4, 48.5], [6.4, 48.5],
+    [-6.4, 45.5], [6.4, 45.5],
+    [-6.4, 42.5], [6.4, 42.5],
+    [-6.4, 35.5], [6.4, 35.5],
+    [-6.4, 32.5], [6.4, 32.5],
+    [-9.5, 60.55], [9.5, 60.55],
+    [-19.5, 60.55], [19.5, 60.55],
+    [-29.5, 60.55], [29.5, 60.55],
+    [-39.5, 60.55], [39.5, 60.55],
+  ];
+  const bollardPostGeo = new THREE.CylinderGeometry(0.085, 0.11, 0.68, 10);
+  const bollardCapGeo = new THREE.SphereGeometry(0.095, 10, 8);
+  const bollardPosts = new THREE.InstancedMesh(bollardPostGeo, chunarStoneMat, bollardCoords.length);
+  const bollardCaps = new THREE.InstancedMesh(bollardCapGeo, giltGoldMat, bollardCoords.length);
+  bollardPosts.castShadow = true;
+  bollardPosts.userData.nonCollidable = true;
+  bollardCaps.userData.nonCollidable = true;
+  bollardCoords.forEach(([bx, bz], idx) => {
+    _v3.set(bx, 0.42, bz);
+    _q.identity();
+    _s.setScalar(1);
+    _m4.compose(_v3, _q, _s);
+    bollardPosts.setMatrixAt(idx, _m4);
+    _v3.set(bx, 0.78, bz);
+    _m4.compose(_v3, _q, _s);
+    bollardCaps.setMatrixAt(idx, _m4);
+  });
+  bollardPosts.instanceMatrix.needsUpdate = true;
+  bollardCaps.instanceMatrix.needsUpdate = true;
+  bollardPosts.computeBoundingSphere();
+  bollardCaps.computeBoundingSphere();
+  group.add(bollardPosts, bollardCaps);
+
+  // Carved Chunar sandstone pilgrim meditation benches along paths & overlooks
+  const addPilgrimBench = (bx: number, bz: number, rotY: number) => {
+    const bg = new THREE.Group();
+    bg.position.set(bx, 0.10, bz);
+    bg.rotation.y = rotY;
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.12, 0.56), chunarStoneMat);
+    seat.position.y = 0.42;
+    seat.castShadow = true;
+    seat.receiveShadow = true;
+    for (const lx of [-0.72, 0.72]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.48), brickMat);
+      leg.position.set(lx, 0.19, 0);
+      leg.castShadow = true;
+      bg.add(leg);
+    }
+    bg.add(seat);
+    group.add(bg);
+  };
+  addPilgrimBench(-7.6, 44.5, Math.PI * 0.5);
+  addPilgrimBench(7.6, 44.5, -Math.PI * 0.5);
+  addPilgrimBench(-7.6, 11.8, Math.PI * 0.5);
+  addPilgrimBench(-7.6, 22.2, Math.PI * 0.5);
+  addPilgrimBench(-14.5, 1.3, 0);
+  addPilgrimBench(14.5, 1.3, 0);
+  addPilgrimBench(-15.5, 62.5, 0);
+  addPilgrimBench(15.5, 62.5, 0);
+
+  // Exterior Pilgrim Welcome Milepost Steles flanking South Bridge Entry (+-5.2, 64.2)
+  for (const sx of [-5.2, 5.2]) {
+    const stele = new THREE.Group();
+    stele.position.set(sx, 0.08, 64.2);
+    const sPed = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.34, 0.76), brickMat);
+    sPed.position.y = 0.17;
+    sPed.castShadow = true;
+    const sSlab = new THREE.Mesh(new THREE.BoxGeometry(0.76, 1.48, 0.32), chunarStoneMat);
+    sSlab.position.y = 1.08;
+    sSlab.castShadow = true;
+    const sCap = new THREE.Mesh(new THREE.ConeGeometry(0.58, 0.42, 4), terracottaCapMat);
+    sCap.rotation.y = Math.PI / 4;
+    sCap.position.y = 2.02;
+    const sFin = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), giltGoldMat);
+    sFin.position.y = 2.30;
+    stele.add(sPed, sSlab, sCap, sFin);
+    group.add(stele);
+  }
 
   // Trimmed Vibrant Green Hedges bordering red-brick garden paths (InstancedMesh)
   const hedgeCoords: Array<[number, number, number, number]> = [
@@ -391,6 +571,7 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     brickMat,
     chunarStoneMat,
     textures.waterNormal,
+    isSoftwareGl,
   );
   pushkarini.position.set(10.0, 0.10, 16.5);
   group.add(pushkarini);
@@ -484,8 +665,8 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     [-32.5, -32.0, 4.2, 1.15, 3.4],
     [33.5, -6.5, 3.4, 0.96, 2.8],
     [34.5, -0.5, 3.6, 1.02, 3.0],
-    [-11.5, 13.5, 3.0, 0.92, 2.8],
-    [-11.5, 20.5, 2.8, 0.88, 2.6],
+    [-13.0, 13.5, 3.0, 0.92, 2.8],
+    [-13.0, 20.5, 2.8, 0.88, 2.6],
     [-34.5, 26.5, 3.4, 0.98, 3.0],
     [35.0, 13.5, 3.2, 0.94, 2.8],
     [-14.5, -38.5, 3.4, 0.98, 2.8],
@@ -556,7 +737,7 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     group.add(rack);
   }
 
-  // Peace Garden Stone Lanterns along axial red-brick walks
+  // Peace Garden Stone Lanterns along axial red-brick walks, Pushkarini Overlook & Outer Sacred Bridges
   for (const [lx, lz] of [
     [-7.4, 48.5], [7.4, 48.5],
     [-7.4, 33.0], [7.4, 33.0],
@@ -564,13 +745,16 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     [-18.0, 0.8], [22.8, 0.8],
     [-20.8, -36.5], [25.7, -36.5],
     [23.2, 28.5], [-8.5, 28.5],
+    [-8.2, 17.0], [-8.2, 7.2],
+    [-5.2, 62.6], [5.2, 62.6],
+    [-5.2, -54.6], [5.2, -54.6],
   ] as Array<[number, number]>) {
     const lantern = buildPeaceLantern(chunarStoneMat, warmBronzeMat, flameGlowMat);
     lantern.position.set(lx, 0.10, lz);
     group.add(lantern);
   }
 
-  // Waving 5-color Buddhist Lungta garlands along South Forecourt & East/West Sacred Garden promenades
+  // Waving 5-color Buddhist Lungta garlands along South Forecourt, Overlook & Outer Sacred Bridge Archways
   const sanctuaryGarlandSpecs: Array<[THREE.Vector3, THREE.Vector3, number, boolean]> = [
     [new THREE.Vector3(-7.4, 3.35, 48.5), new THREE.Vector3(-7.4, 3.35, 33.0), 12, true],
     [new THREE.Vector3(7.4, 3.35, 48.5), new THREE.Vector3(7.4, 3.35, 33.0), 12, true],
@@ -578,6 +762,9 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
     [new THREE.Vector3(27.2, 3.45, 1.4), new THREE.Vector3(42.5, 3.45, 1.4), 11, true],
     [new THREE.Vector3(-30.5, 3.3, -24.5), new THREE.Vector3(-23.5, 3.3, -24.5), 7, true],
     [new THREE.Vector3(-14.6, 3.1, 28.6), new THREE.Vector3(-11.4, 3.1, 28.6), 5, true],
+    [new THREE.Vector3(-5.2, 3.85, 62.6), new THREE.Vector3(5.2, 3.85, 62.6), 11, true],
+    [new THREE.Vector3(-5.2, 3.85, -54.6), new THREE.Vector3(5.2, 3.85, -54.6), 11, true],
+    [new THREE.Vector3(-8.2, 3.35, 17.0), new THREE.Vector3(-8.2, 3.35, 7.2), 9, true],
   ];
   for (const [startPt, endPt, count, poles] of sanctuaryGarlandSpecs) {
     const garland = createWavingPrayerFlagGarland(startPt, endPt, {
@@ -650,10 +837,15 @@ export function createLumbiniBuddha(textures: ProceduralTextureSet): LandmarkBui
   group.add(shilalekh);
 
   group.userData.templeBells = templeBells;
+  group.userData.lotusCount =
+    (typeof pushkarini.userData.lotusCount === 'number' ? pushkarini.userData.lotusCount : 0) +
+    (typeof surroundingPond.userData.lotusCount === 'number'
+      ? surroundingPond.userData.lotusCount
+      : 0);
 
-  // Hit target encompassing entire 88m x 96m Lumbini Sacred Garden
+  // Hit target encompassing entire Lumbini Sacred Garden & surrounding Pond Promenades
   const hitMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(88.0, 16.5, 96.0),
+    new THREE.BoxGeometry(108.0, 16.5, 122.0),
     new THREE.MeshBasicMaterial({ visible: false }),
   );
   hitMesh.position.set(0, 8.2, 4.0);

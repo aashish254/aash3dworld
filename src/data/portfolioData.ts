@@ -128,7 +128,7 @@ export const LANDMARKS: LandmarkData[] = [
     category: 'heritage',
     zoneName: 'Lumbini Sacred Garden',
     position: { x: -210, z: 96 },
-    approachOffset: { x: 0, z: 56.5 },
+    approachOffset: { x: 0, z: 62.5 },
     interactRadius: 72,
     accentColor: '#10b981',
     summary:

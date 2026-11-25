@@ -4,6 +4,8 @@ import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
   LUMBINI_PEACE_CANAL,
+  LUMBINI_PUSHKARINI_POND,
+  LUMBINI_SACRED_POND,
   ROAD_LANTERN_COORDS,
   SPAWN_POSITION,
   WORLD_RADIUS,
@@ -17,12 +19,19 @@ import {
   computeTimeLightingState,
   decodeWaypointsFromHash,
   encodeWaypointsToHash,
+  findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
+  generateLumbiniPondLotusPlacements,
   getFootstepSurfaceKind,
   getLandmarkApproachPoint,
   getRiverCenterX,
+  getSurfaceHeightAt,
   groundHeightAt,
+  isInLumbiniPushkariniPond,
+  isInLumbiniSurroundingPond,
+  isOnLumbiniBridgeAbutmentPier,
   isOnLumbiniCanalBridge,
+  isOnLumbiniSacredBridge,
   isWalkablePosition,
   mapWmoToWeather,
   sampleBirdFlightState,
@@ -875,26 +884,54 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
   const lx = -210;
   const lz = 96;
 
-  // Walkable ceremonial gates, red-brick promenades, Maya Devi South Dharmachakra ramp & interior timber boardwalk
-  assert.equal(isWalkablePosition(lx, lz + 56.5), true, 'Lumbini South approach must be walkable');
+  // Walkable ceremonial gates, red-brick promenades, 4 arched Sacred Pond bridges, Pushkarini overlook, Maya Devi South ramp & interior boardwalk
+  assert.equal(isWalkablePosition(lx, lz + 62.0), true, 'Lumbini South outer pilgrim promenade must be walkable');
+  assert.equal(isWalkablePosition(lx, lz + 56.5), true, 'Lumbini South Sacred Bridge approach must be walkable');
   assert.equal(isWalkablePosition(lx, lz + 51.8), true, 'South Torana Gate opening must be walkable');
   assert.equal(isWalkablePosition(lx, lz - 43.8), true, 'North Torana Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx, lz - 48.3), true, 'North Sacred Bridge must be walkable');
   assert.equal(isWalkablePosition(lx - 44.0, lz + 4.0), true, 'West Cross Gate opening must be walkable');
+  assert.equal(isWalkablePosition(lx - 47.3, lz + 4.0), true, 'West Sacred Bridge must be walkable');
   assert.equal(isWalkablePosition(lx + 44.0, lz + 4.0), true, 'East Cross Gate opening toward Janaki corridor must be walkable');
+  assert.equal(isWalkablePosition(lx + 47.3, lz + 4.0), true, 'East Sacred Bridge must be walkable');
   assert.equal(isWalkablePosition(lx, lz + 4.0), true, 'Main East-West red brick promenade must be walkable');
+  assert.equal(isWalkablePosition(lx - 5.5, lz + 16.0), true, 'Pushkarini West Overlook Causeway must be walkable');
   assert.equal(isWalkablePosition(lx, lz - 6.0), true, 'Maya Devi Temple South Dharmachakra ramp must be walkable');
   assert.equal(isWalkablePosition(lx, lz - 10.5), true, 'Maya Devi Temple doorway threshold must be walkable');
   assert.equal(isWalkablePosition(lx - 13.0, lz - 22.0), true, 'Maya Devi Temple interior West boardwalk must be walkable');
   assert.equal(isWalkablePosition(lx, lz - 30.5), true, 'Maya Devi Temple interior North boardwalk must be walkable');
 
-  // Swept walk from South cross-promenade straight up the Dharmachakra ramp into the Maya Devi boardwalk
+  // Swept walk from South Outer Promenade across South Sacred Bridge -> South Torana -> Pushkarini Overlook -> Maya Devi boardwalk
+  let trailX = lx;
+  let trailZ = lz + 62.0;
+  for (let s = 0; s < 14; s++) {
+    trailZ = clampToWalkable(trailX, trailZ, trailX, trailZ - 0.95).z;
+  }
+  assert.ok(trailZ <= lz + 49.5, `Expected walk across South Sacred Bridge through Torana, got ldz=${trailZ - lz}`);
+
+  // Continuous axial walk from Baby Buddha flank along Pushkarini Overlook up the Maya Devi ramp
+  trailX = lx - 5.5;
+  trailZ = lz + 32.0;
+  for (let s = 0; s < 32; s++) {
+    const next = clampToWalkable(trailX, trailZ, trailX, trailZ - 0.95);
+    trailX = next.x;
+    trailZ = next.z;
+  }
+  assert.ok(trailZ <= lz + 3.5, `Expected continuous Pushkarini Overlook walk up to Cross Promenade, got ldz=${trailZ - lz}`);
+
   let rampZ = lz + 4.0;
   for (let s = 0; s < 20; s++) {
     rampZ = clampToWalkable(lx, rampZ, lx, rampZ - 0.95).z;
   }
   assert.ok(rampZ <= lz - 11.5, `Expected straight walk up Maya Devi ramp to enter interior boardwalk, got ldz=${rampZ - lz}`);
 
-  // Solid walls, sunken pit, statues, Ashoka Pillar, Pushkarini Pond & Sacred Garden shrines block walking
+  // Solid walls, sunken pit, statues, Ashoka Pillar, Pushkarini Pond, Surrounding Pond & bridge parapets block walking
+  assert.equal(isInLumbiniSurroundingPond(lx - 18.0, lz + 56.0), true);
+  assert.equal(isWalkablePosition(lx - 18.0, lz + 56.0), false, 'Surrounding South Sacred Pond channel must block walking');
+  assert.equal(isWalkablePosition(lx + 47.3, lz - 16.0), false, 'Surrounding East Sacred Pond channel must block walking');
+  assert.equal(isWalkablePosition(lx - 47.3, lz - 16.0), false, 'Surrounding West Sacred Pond channel must block walking');
+  assert.equal(isWalkablePosition(lx - 18.0, lz - 48.0), false, 'Surrounding North Sacred Pond channel must block walking');
+  assert.equal(isWalkablePosition(lx - 3.2, lz + 56.3), false, 'South Sacred Bridge side parapet must block walking');
   assert.equal(isWalkablePosition(lx, lz - 22.0), false, 'Maya Devi sunken Mauryan ruins pit / Marker Stone must block walking');
   assert.equal(isWalkablePosition(lx + 10.0, lz - 10.2), false, 'Maya Devi South white-brick wall must block walking');
   assert.equal(isWalkablePosition(lx, lz + 39.0), false, 'Golden Baby Buddha Lotus Monument must block walking');
@@ -905,12 +942,18 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
   assert.equal(isWalkablePosition(lx - 29.0, lz + 16.5), false, 'Sacred Bodhi Tree Chautara must block walking');
   assert.equal(isWalkablePosition(lx + 35.0, lz + 24.0), false, 'Eternal Peace Flame must block walking');
 
-  // Terrain, surface heights & footstep acoustics align cleanly
+  // Terrain, arched bridge deck, surface heights & footstep acoustics align cleanly
   assert.ok(groundHeightAt(lx + 10.0, lz + 16.5) < -0.7, 'Pushkarini Pond basin must be carved deeply below zero');
+  assert.ok(groundHeightAt(lx - 18.0, lz + 56.0) < -0.6, 'Surrounding Sacred Pond basin must be carved deeply below water level');
+  assert.equal(isOnLumbiniSacredBridge(lx, lz + 56.3), true);
+  assert.ok(getSurfaceHeightAt(lx, lz + 56.3) > 0.55, 'South Sacred Bridge arch rises cleanly over pond');
+  assert.ok(Math.abs(getSurfaceHeightAt(lx - 5.5, lz + 16.0) - 0.35) < 0.02, 'Pushkarini Overlook path sits at 0.35m');
   assert.ok(Math.abs(groundHeightAt(lx, lz + 4.0) - 0.25) < 0.02, 'Lumbini garden ground must sit level at 0.25m');
   assert.ok(groundHeightAt(lx, lz - 6.0) > 0.45 && groundHeightAt(lx, lz - 6.0) < 1.15, 'Maya Devi South ramp climbs smoothly');
   assert.ok(Math.abs(groundHeightAt(lx - 13.0, lz - 22.0) - 1.25) < 0.02, 'Maya Devi interior boardwalk sits at 1.25m');
   assert.ok(Math.abs(groundHeightAt(lx, lz - 22.0) + 0.10) < 0.02, 'Maya Devi sunken Mauryan pit sits at -0.10m');
+  assert.equal(getFootstepSurfaceKind(lx, lz + 56.3), 'stone');
+  assert.equal(getFootstepSurfaceKind(lx - 5.5, lz + 16.0), 'stone');
   assert.equal(getFootstepSurfaceKind(lx, lz + 4.0), 'stone');
   assert.equal(getFootstepSurfaceKind(lx, lz - 6.0), 'stone');
   assert.equal(getFootstepSurfaceKind(lx - 13.0, lz - 22.0), 'wood');
@@ -930,6 +973,7 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
 
   const terrainMesh = createDioramaTerrain(mockTextures);
   assert.ok(sampleTerrainMeshHeight(terrainMesh, lx + 10.0, lz + 16.5) <= -0.55, 'Pushkarini terrain mesh depressed cleanly');
+  assert.ok(sampleTerrainMeshHeight(terrainMesh, lx - 18.0, lz + 56.0) <= -0.55, 'Surrounding Sacred Pond terrain mesh depressed cleanly');
   assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz - 22.0) <= -0.20, 'Maya Devi pit terrain mesh depressed cleanly');
   assert.ok(sampleTerrainMeshHeight(terrainMesh, lx, lz + 29.0) <= 0.16, 'Garden plaza terrain depressed below brick pavers');
 
@@ -946,15 +990,15 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
       im.getMatrixAt(i, mat);
       mat.decompose(pos, quat, scl);
       assert.equal(
-        pos.x > -260 && pos.x < -160 && pos.z > 46 && pos.z < 152,
+        pos.x > -263 && pos.x < -157 && pos.z > 39 && pos.z < 161,
         false,
-        `Wild flora spawned inside 88m x 96m Lumbini Sacred Garden at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
+        `Wild flora spawned inside Lumbini Sacred Garden & outer promenades at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
       );
     }
   }
 
-  // Headless build sanity for 88m x 96m Lumbini Sacred Garden complex
-  const built = createLumbiniBuddha(mockTextures);
+  // Headless build sanity for Lumbini Sacred Garden complex + Surrounding Pond
+  const built = createLumbiniBuddha(mockTextures, true);
   assert.ok(built.beaconLights.length >= 2);
   assert.ok(built.animatedNodes.length >= 4);
   const bells = built.group.userData.templeBells as import('three').Group[];
@@ -962,16 +1006,25 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
   const bb = new THREE.Box3().setFromObject(built.group);
   const size = new THREE.Vector3();
   bb.getSize(size);
-  assert.ok(size.x >= 86 && size.z >= 94 && size.y >= 15.0, `Expected 88m x 96m Lumbini dimensions, got ${size.toArray()}`);
+  assert.ok(size.x >= 100 && size.z >= 115 && size.y >= 15.0, `Expected Lumbini + surrounding pond dimensions, got ${size.toArray()}`);
+
+  let reflectivePondCount = 0;
+  built.group.traverse((o) => {
+    if (o.userData?.isReflectiveWater === true) {
+      reflectivePondCount++;
+      assert.equal(o.userData.nonCollidable, true);
+    }
+  });
+  assert.ok(reflectivePondCount >= 2, `Expected >= 2 real-time planar reflective water surfaces, got ${reflectivePondCount}`);
 
   // Maya Devi corner flags and Sacred Garden garlands use GPU waving cloth & never spin
   let wavingGarlands = 0;
   let wavingPoleBanners = 0;
   built.group.traverse((o) => {
-    if (o.userData?.prayerFlagMode === 'garland') {
+    if (o.userData?.prayerFlagMode === 'drape') {
       wavingGarlands++;
       assert.equal(o.userData.nonCollidable, true);
-    } else if (o.userData?.prayerFlagMode === 'pole-banner') {
+    } else if (o.userData?.prayerFlagMode === 'pole') {
       wavingPoleBanners++;
       assert.equal(o.userData.nonCollidable, true);
       assert.equal(o.userData.noSpin, true);
@@ -1078,6 +1131,356 @@ test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace St
   });
   assert.ok(stupaFlags >= 8, 'Expected waving Lungta flags around Western Shanti Peace Stupa');
 });
+
+test('Lumbini spatial ambient audio localizes bird chirps and rustling leaves with HRTF panning and distance attenuation', async () => {
+  const {
+    LUMBINI_SPATIAL_AUDIO_EMITTERS,
+    computeLumbiniSpatialAudioState,
+    computeSpatialEmitterPanGain,
+  } = await import('./worldLogic');
+
+  const birdEmitters = LUMBINI_SPATIAL_AUDIO_EMITTERS.filter((e) => e.kind !== 'leaf-rustle');
+  const leafEmitters = LUMBINI_SPATIAL_AUDIO_EMITTERS.filter((e) => e.kind === 'leaf-rustle');
+  assert.ok(birdEmitters.length >= 6, 'Expected multiple localized Lumbini bird emitters');
+  assert.ok(leafEmitters.length >= 8, 'Expected Sacred Bodhi & garden hedge leaf-rustle emitters');
+
+  for (const em of LUMBINI_SPATIAL_AUDIO_EMITTERS) {
+    assert.ok(em.x >= -320 && em.x <= -150 && em.z >= 40 && em.z <= 170, `${em.id} sits inside Lumbini Sacred Garden`);
+    assert.ok(em.refDistance > 0 && em.maxDistance > em.refDistance);
+  }
+
+  const bodhiBirds = LUMBINI_SPATIAL_AUDIO_EMITTERS.find((e) => e.id === 'lumbini-bodhi-birds')!;
+  const pushkariniBirds = LUMBINI_SPATIAL_AUDIO_EMITTERS.find((e) => e.id === 'lumbini-pushkarini-birds')!;
+
+  // Looking north (-Z) from central boardwalk: Bodhi tree (-239) is on LEFT, Pushkarini (-199.5) is on RIGHT
+  const bodhiFacingNorth = computeSpatialEmitterPanGain(-210, 1.8, 112.5, 0, -1, bodhiBirds);
+  const pondFacingNorth = computeSpatialEmitterPanGain(-210, 1.8, 112.5, 0, -1, pushkariniBirds);
+  assert.ok(bodhiFacingNorth.pan < -0.9, `Expected Bodhi emitter on left pan, got ${bodhiFacingNorth.pan}`);
+  assert.ok(pondFacingNorth.pan > 0.9, `Expected Pushkarini emitter on right pan, got ${pondFacingNorth.pan}`);
+  assert.ok(pondFacingNorth.distanceGain > bodhiFacingNorth.distanceGain, 'Closer Pushkarini emitter should be louder than Bodhi');
+
+  // Rotating camera 180 degrees (+Z) flips stereo left/right cleanly
+  const bodhiFacingSouth = computeSpatialEmitterPanGain(-210, 1.8, 112.5, 0, 1, bodhiBirds);
+  assert.ok(bodhiFacingSouth.pan > 0.9, `Expected Bodhi emitter pan to flip right when facing south, got ${bodhiFacingSouth.pan}`);
+
+  // Cutoff beyond maxDistance returns zero gain
+  const farCutoff = computeSpatialEmitterPanGain(0, 1.8, 0, 0, -1, bodhiBirds);
+  assert.equal(farCutoff.distanceGain, 0);
+  assert.equal(farCutoff.weight, 0);
+
+  // Near Sacred Bodhi Chautara -> Bodhi birds and Pipal leaves rank highest
+  const nearBodhi = computeLumbiniSpatialAudioState(-233, 1.8, 112.5, 0, -1, 0.45, 'bodhi-zen', 'clear');
+  assert.equal(nearBodhi.inZone, true);
+  assert.equal(nearBodhi.nearestBirdEmitter?.emitter.id, 'lumbini-bodhi-birds');
+  assert.equal(nearBodhi.nearestRustleEmitter?.emitter.id, 'lumbini-bodhi-leaves');
+
+  // Near Pushkarini Pond ghat -> Pushkarini songbirds rank highest
+  const nearPond = computeLumbiniSpatialAudioState(-199.5, 1.8, 118.0, 0, -1, 0.35, 'lotus-dawn', 'clear');
+  assert.equal(nearPond.inZone, true);
+  assert.equal(nearPond.nearestBirdEmitter?.emitter.id, 'lumbini-pushkarini-birds');
+
+  // Dawn chorus boosts bird activity & tightens cadence over moonlight vigil; rain dampens birds while breeze boosts leaf rustle
+  const vigil = computeLumbiniSpatialAudioState(-199.5, 1.8, 118.0, 0, -1, 0.35, 'moonlight-vigil', 'clear');
+  const rainy = computeLumbiniSpatialAudioState(-233, 1.8, 112.5, 0, -1, 0.85, 'bodhi-zen', 'rain');
+  assert.ok(nearPond.birdActivity > vigil.birdActivity);
+  assert.ok(nearPond.birdIntervalMaxSec < vigil.birdIntervalMinSec);
+  assert.ok(rainy.birdActivity < nearBodhi.birdActivity * 0.45);
+  assert.ok(rainy.leafRustleActivity > vigil.leafRustleActivity);
+
+  // Outside Lumbini Sacred Garden at spawn -> spatial Lumbini audio is inactive
+  const outside = computeLumbiniSpatialAudioState(0, 1.8, 6, 0, -1, 0.4, 'lotus-dawn', 'clear');
+  assert.equal(outside.inZone, false);
+  assert.equal(outside.activeBirdEmitters.length, 0);
+  assert.equal(outside.activeRustleEmitters.length, 0);
+
+  // SoundEngine integration with a mock AudioContext verifies HRTF PannerNode localization and event scheduling
+  const prevWindow = (globalThis as { window?: unknown }).window;
+  const createdPanners: Array<{
+    panningModel: string;
+    distanceModel: string;
+    refDistance: number;
+    maxDistance: number;
+    positionX: { value: number };
+    positionY: { value: number };
+    positionZ: { value: number };
+  }> = [];
+  let listenerPose = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 0 };
+
+  const makeParam = (init = 0) => ({
+    value: init,
+    setValueAtTime(v: number) {
+      this.value = v;
+    },
+    linearRampToValueAtTime(v: number) {
+      this.value = v;
+    },
+    exponentialRampToValueAtTime(v: number) {
+      this.value = v;
+    },
+    setTargetAtTime(v: number) {
+      this.value = v;
+    },
+    cancelScheduledValues() {},
+  });
+
+  let mockTime = 0;
+  class MockAudioContext {
+    public sampleRate = 44100;
+    public state = 'running';
+    public destination = { connect() {} };
+    public listener = {
+      positionX: { setTargetAtTime: (v: number) => { listenerPose.x = v; } },
+      positionY: { setTargetAtTime: (v: number) => { listenerPose.y = v; } },
+      positionZ: { setTargetAtTime: (v: number) => { listenerPose.z = v; } },
+      forwardX: { setTargetAtTime: (v: number) => { listenerPose.fx = v; } },
+      forwardY: { setTargetAtTime: (v: number) => { listenerPose.fy = v; } },
+      forwardZ: { setTargetAtTime: (v: number) => { listenerPose.fz = v; } },
+      upX: { setTargetAtTime() {} },
+      upY: { setTargetAtTime() {} },
+      upZ: { setTargetAtTime() {} },
+    };
+    get currentTime() {
+      return mockTime;
+    }
+    resume() {
+      return Promise.resolve();
+    }
+    close() {
+      return Promise.resolve();
+    }
+    createBuffer(_ch: number, len: number, sr: number) {
+      const arr = new Float32Array(len);
+      return { duration: len / sr, getChannelData: () => arr };
+    }
+    createBufferSource() {
+      return {
+        buffer: null,
+        loop: false,
+        onended: null as null | (() => void),
+        connect() {},
+        disconnect() {},
+        start() {},
+        stop() {},
+      };
+    }
+    createBiquadFilter() {
+      return { type: 'lowpass', frequency: makeParam(400), Q: makeParam(1), connect() {}, disconnect() {} };
+    }
+    createGain() {
+      return { gain: makeParam(1), connect() {}, disconnect() {} };
+    }
+    createOscillator() {
+      return {
+        type: 'sine',
+        frequency: makeParam(440),
+        onended: null as null | (() => void),
+        connect() {},
+        disconnect() {},
+        start() {},
+        stop() {},
+      };
+    }
+    createPanner() {
+      const px = makeParam(0);
+      const py = makeParam(0);
+      const pz = makeParam(0);
+      const node = {
+        panningModel: 'equalpower',
+        distanceModel: 'inverse',
+        refDistance: 1,
+        maxDistance: 10000,
+        rolloffFactor: 1,
+        coneInnerAngle: 360,
+        coneOuterAngle: 360,
+        coneOuterGain: 0,
+        positionX: px,
+        positionY: py,
+        positionZ: pz,
+        connect() {},
+        disconnect() {},
+      };
+      createdPanners.push(node);
+      return node;
+    }
+  }
+
+  try {
+    (globalThis as { window?: unknown }).window = { AudioContext: MockAudioContext };
+    const { soundEngine } = await import('./soundEngine');
+    soundEngine.setEnabled(true);
+
+    const mix = computeSpatialAmbienceMix(-236, 112.5, 0.25);
+    const pose = { x: -236, y: 1.85, z: 112.5, forwardX: -1, forwardY: 0, forwardZ: 0 };
+
+    // Step simulated clock across several intervals inside Sacred Bodhi grove
+    for (let stepIdx = 0; stepIdx < 16; stepIdx++) {
+      mockTime += 1.0;
+      soundEngine.updateAmbience(mix, 0.016, 'bodhi-zen', 'clear', pose);
+    }
+
+    const status = soundEngine.getLumbiniSpatialStatus();
+    assert.equal(status.inZone, true);
+    assert.ok(status.activeEmitterCount >= 4);
+    assert.equal(status.nearestBirdEmitterId, 'lumbini-bodhi-birds');
+    assert.equal(status.nearestRustleEmitterId, 'lumbini-bodhi-leaves');
+    assert.ok(status.birdEventCount >= 1, `Expected localized bird events >= 1, got ${status.birdEventCount}`);
+    assert.ok(status.rustleEventCount >= 1, `Expected localized leaf rustle events >= 1, got ${status.rustleEventCount}`);
+    assert.ok(createdPanners.length >= 2, 'Expected localized HRTF PannerNodes to be instantiated');
+    assert.equal(createdPanners[0].panningModel, 'HRTF');
+    assert.ok(Math.abs(listenerPose.x + 236) < 0.01 && Math.abs(listenerPose.fx + 1) < 0.01);
+
+    soundEngine.setEnabled(false);
+    soundEngine.dispose();
+  } finally {
+    if (prevWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      (globalThis as { window?: unknown }).window = prevWindow;
+    }
+  }
+});
+
+test('Procedural Lumbini lotus placement system populates both reflective ponds cleanly without clipping bridges or banks', async () => {
+  const THREE = await import('three');
+  const { createLumbiniBuddha } = await import('./proceduralModels');
+
+  const placementsA = generateLumbiniPondLotusPlacements();
+  const placementsB = generateLumbiniPondLotusPlacements();
+  assert.deepEqual(placementsA, placementsB, 'Lotus generator must be deterministic');
+
+  const surrounding = placementsA.filter((p) => p.pond === 'surrounding');
+  const pushkarini = placementsA.filter((p) => p.pond === 'pushkarini');
+  assert.ok(surrounding.length >= 100, `Expected >= 100 surrounding pond lotuses, got ${surrounding.length}`);
+  assert.ok(pushkarini.length >= 16, `Expected >= 16 Pushkarini pond lotuses, got ${pushkarini.length}`);
+
+  const stages = new Set(placementsA.map((p) => p.stage));
+  const hues = new Set(placementsA.map((p) => p.hueVariant));
+  assert.equal(stages.size, 4, 'Expected full-bloom, half-bloom, bud, and pad-only lifecycle variety');
+  assert.equal(hues.size, 3, 'Expected sakura-pink, rose-magenta, and ivory-white hue variants');
+
+  for (const lotus of surrounding) {
+    assert.equal(
+      isInLumbiniSurroundingPond(lotus.x, lotus.z),
+      true,
+      `Surrounding lotus (${lotus.x.toFixed(2)}, ${lotus.z.toFixed(2)}) must lie inside surrounding pond water`,
+    );
+    assert.equal(
+      isOnLumbiniSacredBridge(lotus.x, lotus.z),
+      false,
+      'Lotus must never clip a Sacred Causeway Bridge',
+    );
+    assert.equal(
+      isOnLumbiniBridgeAbutmentPier(lotus.x, lotus.z),
+      false,
+      'Lotus must never clip a bridge abutment pier',
+    );
+    assert.ok(Math.abs(lotus.y - LUMBINI_SACRED_POND.waterLevel) < 0.01);
+  }
+
+  for (const lotus of pushkarini) {
+    assert.equal(
+      isInLumbiniPushkariniPond(lotus.x, lotus.z),
+      true,
+      `Pushkarini lotus (${lotus.x.toFixed(2)}, ${lotus.z.toFixed(2)}) must lie inside Pushkarini Pond water`,
+    );
+    assert.ok(Math.abs(lotus.y - LUMBINI_PUSHKARINI_POND.waterLevel) < 0.01);
+  }
+
+  // Pairwise non-overlap guarantee inside each pond
+  for (let i = 0; i < placementsA.length; i++) {
+    for (let j = i + 1; j < placementsA.length; j++) {
+      const a = placementsA[i];
+      const b = placementsA[j];
+      if (a.pond !== b.pond) continue;
+      const dist = Math.hypot(a.x - b.x, a.z - b.z);
+      assert.ok(
+        dist >= (a.padRadius + b.padRadius) * 0.9,
+        `Overlapping lotus pads detected at dist=${dist.toFixed(2)}`,
+      );
+    }
+  }
+
+  const tex = new THREE.Texture();
+  const mockTextures = new Proxy(
+    {
+      meadowMap: tex,
+      meadowNormal: tex,
+      meadowRough: tex,
+      createSignTexture: () => tex,
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const built = createLumbiniBuddha(mockTextures, true);
+  assert.equal(built.group.userData.lotusCount, placementsA.length);
+  let instancedLotusMeshCount = 0;
+  built.group.traverse((obj) => {
+    if (obj instanceof THREE.InstancedMesh && obj.userData?.isLotusFlora === true) {
+      instancedLotusMeshCount++;
+      assert.equal(obj.userData.nonCollidable, true);
+    }
+  });
+  assert.ok(
+    instancedLotusMeshCount >= 8,
+    `Expected instanced lotus meshes across both ponds, got ${instancedLotusMeshCount}`,
+  );
+});
+
+test('Pilgrim trail walking and rain trigger shader-based pond ripples inside reflective Lumbini ponds', async () => {
+  const {
+    REFLECTIVE_WATER_ENV_UNIFORMS,
+    WATER_INTERACTION_UNIFORMS,
+    WATER_RIPPLE_COUNT,
+    createReflectivePondSurface,
+    triggerWaterRipple,
+  } = await import('./waterShader');
+  const THREE = await import('three');
+
+  // Distant spawn / non-Lumbini paths must not emit Lumbini pond ripples
+  assert.equal(findLumbiniTrailPondRippleOrigin(SPAWN_POSITION.x, SPAWN_POSITION.z, 1), null);
+  assert.equal(findLumbiniTrailPondRippleOrigin(-92, 128, 2), null);
+
+  // Walking along surrounding pilgrim trails, bridges, inner paths, and Pushkarini overlook emits valid pond ripple origins
+  const surroundingTrailSpots: Array<[number, number, string]> = [
+    [-228.0, 157.8, 'south-outer-trail'],
+    [-192.0, 42.1, 'north-outer-trail'],
+    [-260.6, 125.0, 'west-outer-trail'],
+    [-159.6, 75.0, 'east-outer-trail'],
+    [-210.0, 152.3, 'south-bridge'],
+    [-252.5, 130.0, 'west-inner-trail'],
+  ];
+  for (const [px, pz, label] of surroundingTrailSpots) {
+    const res = findLumbiniTrailPondRippleOrigin(px, pz, 3);
+    assert.ok(res, `Expected ripple origin from ${label} at (${px}, ${pz})`);
+    assert.equal(res.pond, 'surrounding');
+    assert.equal(
+      isInLumbiniSurroundingPond(res.x, res.z),
+      true,
+      `Ripple origin (${res.x.toFixed(2)}, ${res.z.toFixed(2)}) for ${label} must fall inside Surrounding Pond`,
+    );
+  }
+
+  const pushkariniTrail = findLumbiniTrailPondRippleOrigin(-215.5, 112.5, 4);
+  assert.ok(pushkariniTrail);
+  assert.equal(pushkariniTrail.pond, 'pushkarini');
+  assert.equal(isInLumbiniPushkariniPond(pushkariniTrail.x, pushkariniTrail.z), true);
+
+  // Verify pond shader material shares live rain uniform and expanded 12-slot interactive ripple buffer
+  assert.equal(WATER_RIPPLE_COUNT, 12);
+  const reflector = createReflectivePondSurface(new THREE.PlaneGeometry(10, 10), { isSoftwareGl: true });
+  const mat = reflector.material as import('three').ShaderMaterial;
+  assert.equal(mat.uniforms.uRainIntensity, REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity);
+  assert.equal(mat.uniforms.uWaterRipples, WATER_INTERACTION_UNIFORMS.uWaterRipples);
+  assert.ok(mat.fragmentShader.includes('evalRainRingLayer'));
+
+  triggerWaterRipple(pushkariniTrail.x, pushkariniTrail.z, 12.5, pushkariniTrail.strength);
+  const recorded = WATER_INTERACTION_UNIFORMS.uWaterRipples.value.some(
+    (slot) => Math.abs(slot.x - pushkariniTrail.x) < 0.01 && Math.abs(slot.y - pushkariniTrail.z) < 0.01 && slot.z === 12.5,
+  );
+  assert.equal(recorded, true, 'triggerWaterRipple must populate shared shader ripple slot');
+});
+
 
 
 

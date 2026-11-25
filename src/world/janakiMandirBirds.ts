@@ -836,18 +836,36 @@ export function createAmbientWorldBirds(): {
       flapFreq: 27,
       track: { centerX: -92.0, centerZ: 64.0, radiusX: 15.0, radiusZ: 6.2, baseY: groundHeightAt(-92, 64) + 7.2, bobAmp: 0.55, angularSpeed: -0.22, phase: 2.1 },
     },
-    // Lumbini Peace Garden (-8, 120)
+    // Lumbini Sacred Garden (-210, 96): Pushkarini Pond, Maya Devi & Peace Canal flight loops
     {
       species: 'white_dove',
-      scale: 1.22,
-      flapFreq: 23,
-      track: { centerX: -8, centerZ: 120, radiusX: 11.2, radiusZ: 9.8, baseY: groundHeightAt(-8, 120) + 6.8, bobAmp: 0.7, angularSpeed: 0.21, phase: 0.9 },
+      scale: 1.24,
+      flapFreq: 22,
+      track: { centerX: -210.0, centerZ: 112.5, radiusX: 16.5, radiusZ: 13.5, baseY: groundHeightAt(-210, 112.5) + 7.2, bobAmp: 0.72, angularSpeed: 0.2, phase: 0.9, figureEight: 0.16 },
     },
     {
       species: 'ringneck_dove',
       scale: 1.18,
       flapFreq: 24,
-      track: { centerX: -8, centerZ: 120, radiusX: 10.4, radiusZ: 10.6, baseY: groundHeightAt(-8, 120) + 7.6, bobAmp: 0.65, angularSpeed: 0.21, phase: 1.9 },
+      track: { centerX: -210.0, centerZ: 112.5, radiusX: 14.5, radiusZ: 15.0, baseY: groundHeightAt(-210, 112.5) + 8.1, bobAmp: 0.65, angularSpeed: 0.2, phase: 2.1 },
+    },
+    {
+      species: 'parakeet_green',
+      scale: 1.16,
+      flapFreq: 28,
+      track: { centerX: -239.0, centerZ: 112.5, radiusX: 10.5, radiusZ: 9.8, baseY: groundHeightAt(-239, 112.5) + 6.8, bobAmp: 0.6, angularSpeed: -0.25, phase: 0.4 },
+    },
+    {
+      species: 'himalayan_bulbul',
+      scale: 1.14,
+      flapFreq: 29,
+      track: { centerX: -199.5, centerZ: 112.5, radiusX: 9.2, radiusZ: 8.6, baseY: groundHeightAt(-199.5, 112.5) + 4.8, bobAmp: 0.52, angularSpeed: 0.27, phase: 3.1 },
+    },
+    {
+      species: 'white_dove',
+      scale: 1.22,
+      flapFreq: 22,
+      track: { centerX: -272.0, centerZ: 100.0, radiusX: 11.8, radiusZ: 16.2, baseY: groundHeightAt(-272, 100) + 6.4, bobAmp: 0.68, angularSpeed: -0.19, phase: 1.5 },
     },
     // Pashupatinath courtyard (-48, -24)
     {
@@ -998,6 +1016,25 @@ export function createAmbientWorldBirds(): {
       yaw: idx * 1.4,
       flapFreq: 18,
       phase: idx * 1.3,
+    });
+  });
+
+  // Lumbini Sacred Garden perched birds anchored at Sacred Bodhi Chautara, Torana & Thai Sanctuary grove
+  const lumbiniPerches: Array<[number, number, number, BirdSpeciesKind]> = [
+    [-239.0 + 1.25, groundHeightAt(-239.0, 112.5) + 6.2, 112.5 - 0.65, 'parakeet_green'],
+    [-239.0 - 1.1, groundHeightAt(-239.0, 112.5) + 5.7, 112.5 + 0.85, 'himalayan_bulbul'],
+    [-210.0 + 1.45, groundHeightAt(-210.0, 147.8) + 5.85, 147.8, 'white_dove'],
+    [-210.0 - 1.45, groundHeightAt(-210.0, 74.0) + 7.05, 74.0, 'ringneck_dove'],
+    [-175.5, groundHeightAt(-175.5, 74.0) + 5.05, 74.0 + 0.4, 'himalayan_bulbul'],
+  ];
+  lumbiniPerches.forEach(([bx, by, bz, sp], idx) => {
+    spawnBird(sp, 1.18, 'perched', {
+      x: bx,
+      y: by,
+      z: bz,
+      yaw: idx * 1.25,
+      flapFreq: 19,
+      phase: 2.1 + idx * 1.15,
     });
   });
 

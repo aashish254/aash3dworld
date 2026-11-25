@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   createDetailedBrassSukundaDiyo,
   createDetailedGajurSpire,
@@ -6,8 +7,14 @@ import {
   createSacredFlameGroup,
 } from './janakiMandirCraft';
 import { BuddhaMaterials, createMonumentalSeatedBuddha } from './lumbiniBuddhaSculpt';
-import { applyRealisticWaterShader } from './waterShader';
+import { REFLECTIVE_WATER_ENV_UNIFORMS, createReflectivePondSurface } from './waterShader';
 import { createWavingPrayerFlagGarland } from './prayerFlags';
+import {
+  LUMBINI_PUSHKARINI_POND,
+  LUMBINI_SACRED_POND,
+  LotusFlowerPlacement,
+  generateLumbiniPondLotusPlacements,
+} from './worldLogic';
 
 const _m4 = new THREE.Matrix4();
 const _v3 = new THREE.Vector3();
@@ -15,6 +22,408 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _e = new THREE.Euler();
 const _colorTmp = new THREE.Color();
+
+function applyLotusFloatWaveShader(mat: THREE.MeshStandardMaterial, amplitude = 0.011): void {
+  mat.customProgramCacheKey = () => `lumbini-lotus-float-${amplitude.toFixed(3)}`;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWaterTime = REFLECTIVE_WATER_ENV_UNIFORMS.uWaterTime;
+    shader.uniforms.uRainIntensity = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uWaterTime;
+         uniform float uRainIntensity;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vec4 instOrigin = vec4(0.0, 0.0, 0.0, 1.0);
+         #ifdef USE_INSTANCING
+           instOrigin = instanceMatrix * instOrigin;
+         #endif
+         vec3 wPos = (modelMatrix * instOrigin).xyz;
+         float wt = uWaterTime * 1.15;
+         float phase = wPos.x * 0.85 + wPos.z * 0.72;
+         float bob = sin(wt + phase) * ${amplitude.toFixed(4)}
+                   + cos(wt * 1.65 - wPos.z * 1.1) * ${(amplitude * 0.42).toFixed(4)};
+         float rainJiggle = clamp(uRainIntensity, 0.0, 1.0)
+                          * sin(uWaterTime * 11.5 + wPos.x * 7.3 + wPos.z * 5.9)
+                          * 0.0045;
+         transformed.y += bob + rainJiggle;
+         transformed.x += sin(wt * 0.92 + phase) * ${(amplitude * 0.55).toFixed(4)};`,
+      );
+  };
+}
+
+function createCuppedLotusPadGeometry(): THREE.BufferGeometry {
+  const segs = 20;
+  const rings = 3;
+  const gapHalf = 0.17;
+  const startAng = gapHalf;
+  const sweep = Math.PI * 2 - gapHalf * 2;
+
+  const positions: number[] = [0, 0.002, 0];
+  const uvs: number[] = [0.5, 0.5];
+  const indices: number[] = [];
+
+  for (let r = 1; r <= rings; r++) {
+    const radialT = r / rings;
+    // Slight concave cup with subtle upturned leaf rim
+    const y = r === 1 ? -0.004 : r === 2 ? 0.004 : 0.019;
+    for (let s = 0; s <= segs; s++) {
+      const ang = startAng + (s / segs) * sweep;
+      const wave = r === rings ? Math.sin(ang * 5.0) * 0.005 : 0;
+      const rad = radialT * (r === rings ? 1.0 + Math.sin(ang * 7.0) * 0.035 : 1.0);
+      positions.push(Math.cos(ang) * rad, y + wave, Math.sin(ang) * rad);
+      uvs.push(0.5 + Math.cos(ang) * radialT * 0.5, 0.5 + Math.sin(ang) * radialT * 0.5);
+    }
+  }
+
+  const ringStride = segs + 1;
+  // Inner triangle fan
+  for (let s = 0; s < segs; s++) {
+    indices.push(0, 1 + s + 1, 1 + s);
+  }
+  // Outer rings
+  for (let r = 1; r < rings; r++) {
+    const baseA = 1 + (r - 1) * ringStride;
+    const baseB = 1 + r * ringStride;
+    for (let s = 0; s < segs; s++) {
+      const a0 = baseA + s;
+      const a1 = baseA + s + 1;
+      const b0 = baseB + s;
+      const b1 = baseB + s + 1;
+      indices.push(a0, a1, b1, a0, b1, b0);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createSingleCuppedPetalGeometry(
+  length: number,
+  width: number,
+  cupDepth: number,
+  tiltAngle: number,
+  baseRadius: number,
+  azimuthAngle: number,
+): THREE.BufferGeometry {
+  const rows = 4;
+  const cols = 2;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  for (let r = 0; r <= rows; r++) {
+    const v = r / rows; // 0 = base, 1 = pointed tip
+    const widthProfile = Math.sin(v * Math.PI * 0.92) * (1.0 - v * 0.25);
+    const halfW = width * 0.5 * Math.max(0.14, widthProfile);
+    const localLen = v * length;
+    const curveBack = Math.pow(v, 1.45) * cupDepth * 1.4;
+
+    for (let c = 0; c <= cols; c++) {
+      const u = c / cols;
+      const xOffset = (u - 0.5) * 2.0 * halfW;
+      const spoonHollow = (1.0 - Math.pow((u - 0.5) * 2.0, 2)) * cupDepth * Math.sin(v * Math.PI);
+      const px = xOffset;
+      const py = localLen;
+      const pz = curveBack - spoonHollow;
+
+      // Tilt petal outward/upward around X, offset radially, and rotate by azimuth
+      const rx = px;
+      const ry = py * Math.cos(tiltAngle) - pz * Math.sin(tiltAngle);
+      const rz = py * Math.sin(tiltAngle) + pz * Math.cos(tiltAngle) + baseRadius;
+
+      const ca = Math.cos(azimuthAngle);
+      const sa = Math.sin(azimuthAngle);
+      positions.push(rx * ca + rz * sa, ry, -rx * sa + rz * ca);
+      uvs.push(u, v);
+    }
+  }
+
+  const stride = cols + 1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i0 = r * stride + c;
+      const i1 = i0 + 1;
+      const i2 = i0 + stride;
+      const i3 = i2 + 1;
+      indices.push(i0, i2, i1, i1, i2, i3);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  const nonIndexed = geo.toNonIndexed();
+  geo.dispose();
+  nonIndexed.computeVertexNormals();
+  return nonIndexed;
+}
+
+function createLotusBloomRingGeometry(mode: 'outer' | 'inner'): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  if (mode === 'outer') {
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+      const az = (i / count) * Math.PI * 2;
+      parts.push(createSingleCuppedPetalGeometry(0.18, 0.105, 0.026, 1.02, 0.036, az));
+    }
+  } else {
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      const az = ((i + 0.5) / count) * Math.PI * 2;
+      parts.push(createSingleCuppedPetalGeometry(0.155, 0.088, 0.028, 0.56, 0.028, az));
+    }
+  }
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((g) => g.dispose());
+  return merged;
+}
+
+function createLotusSeedPodGeometry(): THREE.BufferGeometry {
+  const pod = new THREE.CylinderGeometry(0.044, 0.018, 0.052, 10).toNonIndexed();
+  pod.translate(0, 0.054, 0);
+  const stamenCrown = new THREE.TorusGeometry(0.044, 0.011, 6, 12).toNonIndexed();
+  stamenCrown.rotateX(Math.PI / 2);
+  stamenCrown.translate(0, 0.046, 0);
+  const merged = mergeGeometries([pod, stamenCrown], false);
+  pod.dispose();
+  stamenCrown.dispose();
+  return merged;
+}
+
+function createLotusBudGeometry(): THREE.BufferGeometry {
+  const budPts = [
+    new THREE.Vector2(0.008, 0.0),
+    new THREE.Vector2(0.012, 0.065),
+    new THREE.Vector2(0.048, 0.115),
+    new THREE.Vector2(0.054, 0.165),
+    new THREE.Vector2(0.034, 0.220),
+    new THREE.Vector2(0.0, 0.268),
+  ];
+  return new THREE.LatheGeometry(budPts, 10);
+}
+
+let cachedLotusGeos: {
+  pad: THREE.BufferGeometry;
+  outerBloom: THREE.BufferGeometry;
+  innerBloom: THREE.BufferGeometry;
+  seedPod: THREE.BufferGeometry;
+  bud: THREE.BufferGeometry;
+} | null = null;
+
+function getLotusGeos() {
+  if (!cachedLotusGeos) {
+    cachedLotusGeos = {
+      pad: createCuppedLotusPadGeometry(),
+      outerBloom: createLotusBloomRingGeometry('outer'),
+      innerBloom: createLotusBloomRingGeometry('inner'),
+      seedPod: createLotusSeedPodGeometry(),
+      bud: createLotusBudGeometry(),
+    };
+  }
+  return cachedLotusGeos;
+}
+
+function buildProceduralLotusInstancedGarden(
+  placements: LotusFlowerPlacement[],
+  originX: number,
+  originZ: number,
+  waterLocalY: number,
+): THREE.Group {
+  const floraGroup = new THREE.Group();
+  floraGroup.userData.nonCollidable = true;
+  floraGroup.userData.isLotusFlora = true;
+  if (placements.length === 0) return floraGroup;
+
+  const geos = getLotusGeos();
+
+  const padMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.44,
+    metalness: 0.04,
+    side: THREE.DoubleSide,
+  });
+  applyLotusFloatWaveShader(padMat, 0.008);
+
+  const outerPetalMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.34,
+    metalness: 0.03,
+    side: THREE.DoubleSide,
+  });
+  applyLotusFloatWaveShader(outerPetalMat, 0.010);
+
+  const innerPetalMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.30,
+    metalness: 0.04,
+    side: THREE.DoubleSide,
+  });
+  applyLotusFloatWaveShader(innerPetalMat, 0.011);
+
+  const podMat = new THREE.MeshStandardMaterial({
+    color: 0xf5cb4c,
+    emissive: 0x4b3105,
+    emissiveIntensity: 0.32,
+    roughness: 0.36,
+    metalness: 0.12,
+  });
+  applyLotusFloatWaveShader(podMat, 0.011);
+
+  const budMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.32,
+    metalness: 0.03,
+  });
+  applyLotusFloatWaveShader(budMat, 0.011);
+
+  const outerList: LotusFlowerPlacement[] = [];
+  const innerList: LotusFlowerPlacement[] = [];
+  const podList: LotusFlowerPlacement[] = [];
+  const budList: LotusFlowerPlacement[] = [];
+
+  for (let i = 0; i < placements.length; i++) {
+    const pl = placements[i];
+    if (pl.stage === 'full-bloom') {
+      outerList.push(pl);
+      innerList.push(pl);
+      podList.push(pl);
+    } else if (pl.stage === 'half-bloom') {
+      outerList.push(pl);
+      innerList.push(pl);
+    } else if (pl.stage === 'bud') {
+      budList.push(pl);
+    }
+  }
+
+  // 1. Floating Notched Lily Pads (1 per placement)
+  const padInst = new THREE.InstancedMesh(geos.pad, padMat, placements.length);
+  padInst.receiveShadow = true;
+  padInst.userData.nonCollidable = true;
+  padInst.userData.isLotusFlora = true;
+
+  const padTints = [0x2e6f3a, 0x3b7d42, 0x266235, 0x488848];
+  placements.forEach((pl, idx) => {
+    _v3.set(pl.x - originX, waterLocalY + 0.008, pl.z - originZ);
+    _e.set(pl.padTiltX, pl.rotY, pl.padTiltZ);
+    _q.setFromEuler(_e);
+    _s.set(pl.padRadius, 1.0, pl.padRadius);
+    _m4.compose(_v3, _q, _s);
+    padInst.setMatrixAt(idx, _m4);
+    _colorTmp.setHex(padTints[idx % padTints.length]);
+    padInst.setColorAt(idx, _colorTmp);
+  });
+  padInst.instanceMatrix.needsUpdate = true;
+  if (padInst.instanceColor) padInst.instanceColor.needsUpdate = true;
+  padInst.computeBoundingSphere();
+  floraGroup.add(padInst);
+
+  const resolveHueHex = (variant: LotusFlowerPlacement['hueVariant'], isInner: boolean): number => {
+    if (variant === 'sakura-pink') return isInner ? 0xfdc5d7 : 0xf493b7;
+    if (variant === 'rose-magenta') return isInner ? 0xf79dc2 : 0xe46297;
+    return isInner ? 0xfffaf6 : 0xf7e3ea;
+  };
+
+  // 2. Outer Lotus Petal Rosettes
+  if (outerList.length > 0) {
+    const outerInst = new THREE.InstancedMesh(geos.outerBloom, outerPetalMat, outerList.length);
+    outerInst.castShadow = true;
+    outerInst.receiveShadow = true;
+    outerInst.userData.nonCollidable = true;
+    outerInst.userData.isLotusFlora = true;
+    outerList.forEach((pl, idx) => {
+      const sc = pl.bloomScale * (pl.stage === 'half-bloom' ? 0.84 : 1.05);
+      _v3.set(pl.x - originX, waterLocalY + 0.018, pl.z - originZ);
+      _e.set(pl.padTiltX * 0.5, pl.rotY + 0.4, pl.padTiltZ * 0.5);
+      _q.setFromEuler(_e);
+      _s.set(sc, sc * (pl.stage === 'half-bloom' ? 1.08 : 0.96), sc);
+      _m4.compose(_v3, _q, _s);
+      outerInst.setMatrixAt(idx, _m4);
+      _colorTmp.setHex(resolveHueHex(pl.hueVariant, false));
+      outerInst.setColorAt(idx, _colorTmp);
+    });
+    outerInst.instanceMatrix.needsUpdate = true;
+    if (outerInst.instanceColor) outerInst.instanceColor.needsUpdate = true;
+    outerInst.computeBoundingSphere();
+    floraGroup.add(outerInst);
+  }
+
+  // 3. Inner Upright Cupped Petals
+  if (innerList.length > 0) {
+    const innerInst = new THREE.InstancedMesh(geos.innerBloom, innerPetalMat, innerList.length);
+    innerInst.castShadow = true;
+    innerInst.userData.nonCollidable = true;
+    innerInst.userData.isLotusFlora = true;
+    innerList.forEach((pl, idx) => {
+      const sc = pl.bloomScale * (pl.stage === 'half-bloom' ? 0.78 : 1.02);
+      _v3.set(pl.x - originX, waterLocalY + 0.024, pl.z - originZ);
+      _e.set(pl.padTiltX * 0.4, pl.rotY + 0.75, pl.padTiltZ * 0.4);
+      _q.setFromEuler(_e);
+      _s.set(sc, sc * 1.06, sc);
+      _m4.compose(_v3, _q, _s);
+      innerInst.setMatrixAt(idx, _m4);
+      _colorTmp.setHex(resolveHueHex(pl.hueVariant, true));
+      innerInst.setColorAt(idx, _colorTmp);
+    });
+    innerInst.instanceMatrix.needsUpdate = true;
+    if (innerInst.instanceColor) innerInst.instanceColor.needsUpdate = true;
+    innerInst.computeBoundingSphere();
+    floraGroup.add(innerInst);
+  }
+
+  // 4. Golden Seed-Pod Receptacles & Stamens
+  if (podList.length > 0) {
+    const podInst = new THREE.InstancedMesh(geos.seedPod, podMat, podList.length);
+    podInst.userData.nonCollidable = true;
+    podInst.userData.isLotusFlora = true;
+    podList.forEach((pl, idx) => {
+      const sc = pl.bloomScale;
+      _v3.set(pl.x - originX, waterLocalY + 0.020, pl.z - originZ);
+      _q.identity();
+      _s.set(sc, sc, sc);
+      _m4.compose(_v3, _q, _s);
+      podInst.setMatrixAt(idx, _m4);
+    });
+    podInst.instanceMatrix.needsUpdate = true;
+    podInst.computeBoundingSphere();
+    floraGroup.add(podInst);
+  }
+
+  // 5. Pointed Closed Lotus Buds
+  if (budList.length > 0) {
+    const budInst = new THREE.InstancedMesh(geos.bud, budMat, budList.length);
+    budInst.castShadow = true;
+    budInst.userData.nonCollidable = true;
+    budInst.userData.isLotusFlora = true;
+    budList.forEach((pl, idx) => {
+      const sc = pl.bloomScale * 0.95;
+      _v3.set(pl.x - originX, waterLocalY + 0.008, pl.z - originZ);
+      _e.set(pl.padTiltX * 1.6, pl.rotY, pl.padTiltZ * 1.6);
+      _q.setFromEuler(_e);
+      _s.set(sc, sc, sc);
+      _m4.compose(_v3, _q, _s);
+      budInst.setMatrixAt(idx, _m4);
+      _colorTmp.setHex(resolveHueHex(pl.hueVariant, false));
+      budInst.setColorAt(idx, _colorTmp);
+    });
+    budInst.instanceMatrix.needsUpdate = true;
+    if (budInst.instanceColor) budInst.instanceColor.needsUpdate = true;
+    budInst.computeBoundingSphere();
+    floraGroup.add(budInst);
+  }
+
+  floraGroup.userData.lotusCount = placements.length;
+  return floraGroup;
+}
 
 /**
  * Builds the historic Ashoka Pillar of Lumbini (249 BCE) faithfully matching real-life appearance:
@@ -145,7 +554,8 @@ export function buildPushkariniPond(
   terracottaMat: THREE.Material,
   brickMat: THREE.Material,
   chunarMat: THREE.Material,
-  waterNormal: THREE.Texture,
+  _waterNormal: THREE.Texture,
+  isSoftwareGl = false,
 ): THREE.Group {
   const g = new THREE.Group();
 
@@ -197,58 +607,34 @@ export function buildPushkariniPond(
     }
   }
 
-  // Animated mirror-reflective sacred water plane (y = -0.14 in local = +0.21 world, cleanly above floor)
-  const waterTimeUniform = { value: 0 };
-  const waterMat = new THREE.MeshStandardMaterial({
-    normalMap: waterNormal,
-    normalScale: new THREE.Vector2(0.32, 0.32),
-    color: 0x1b4e4c,
-    roughness: 0.04,
-    metalness: 0.36,
-    transparent: true,
-    opacity: 0.90,
+  // Real-time planar mirror-reflective sacred water surface (y = -0.14 in local = +0.21 world)
+  g.userData.waterTimeUniform = REFLECTIVE_WATER_ENV_UNIFORMS.uWaterTime;
+  const waterMesh = createReflectivePondSurface(new THREE.PlaneGeometry(waterW, waterD, 24, 16), {
+    isSoftwareGl,
+    textureSize: isSoftwareGl ? 256 : 512,
+    deepTint: 0x092b2d,
+    shallowTint: 0x206762,
+    reflectivity: 0.88,
+    rippleStrength: 0.020,
+    anchorWorldPos: new THREE.Vector3(-200, 0.21, 112.5),
   });
-  applyRealisticWaterShader(waterMat, waterTimeUniform, {
-    mode: 'pond',
-    maxRadius: 12.5,
-    flowSpeed: 0.95,
-    deepTint: 0x0b2a2b,
-    shallowTint: 0x226863,
-  });
-  g.userData.waterTimeUniform = waterTimeUniform;
-  const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(waterW, waterD, 20, 14), waterMat);
   waterMesh.rotation.x = -Math.PI / 2;
   waterMesh.position.y = -0.14;
   waterMesh.userData.nonCollidable = true;
   g.add(waterMesh);
 
-  // Subtle floating lotus pads & blossoms along edges
-  const padGeo = new THREE.CircleGeometry(0.28, 12, 0.25, Math.PI * 1.8);
-  padGeo.rotateX(-Math.PI / 2);
-  const padMat = new THREE.MeshStandardMaterial({ color: 0x387439, roughness: 0.62 });
-  const petalGeo = new THREE.ConeGeometry(0.07, 0.16, 5);
-  const petalMat = new THREE.MeshStandardMaterial({ color: 0xf49bb7, roughness: 0.45 });
-  for (const [lx, lz] of [
-    [-8.2, -4.2],
-    [-6.6, 4.4],
-    [8.0, -4.0],
-    [8.4, 4.1],
-    [-2.8, -4.8],
-    [3.2, 4.8],
-  ] as Array<[number, number]>) {
-    const pad = new THREE.Mesh(padGeo, padMat);
-    pad.position.set(lx, -0.125, lz);
-    pad.userData.nonCollidable = true;
-    g.add(pad);
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2;
-      const p = new THREE.Mesh(petalGeo, petalMat);
-      p.position.set(lx + Math.cos(a) * 0.07, -0.085, lz + Math.sin(a) * 0.07);
-      p.rotation.set(0.6, -a, 0);
-      p.userData.nonCollidable = true;
-      g.add(p);
-    }
-  }
+  // Procedural floating lotus pads, multi-tier blossoms, buds & golden seed pods
+  const pushkariniLotuses = generateLumbiniPondLotusPlacements().filter(
+    (p) => p.pond === 'pushkarini',
+  );
+  const pushkariniFlora = buildProceduralLotusInstancedGarden(
+    pushkariniLotuses,
+    LUMBINI_PUSHKARINI_POND.centerX,
+    LUMBINI_PUSHKARINI_POND.centerZ,
+    -0.14,
+  );
+  g.add(pushkariniFlora);
+  g.userData.lotusCount = pushkariniLotuses.length;
 
   return g;
 }
@@ -857,3 +1243,341 @@ export function buildPeaceLantern(
   g.add(foot, plinth, shaft, sill, glassCore, roof, kalash);
   return g;
 }
+
+function appendWaterChannelStrip(
+  positions: number[],
+  uvs: number[],
+  indices: number[],
+  x0: number,
+  x1: number,
+  z0: number,
+  z1: number,
+  segX: number,
+  segZ: number,
+): void {
+  // Reflector lies in local XY facing +Z; rotating X by -PI/2 maps (x, y, 0) -> (x, 0, -y)
+  const baseVert = positions.length / 3;
+  const y0 = -z1;
+  const y1 = -z0;
+  for (let iz = 0; iz <= segZ; iz++) {
+    const v = iz / segZ;
+    const vy = THREE.MathUtils.lerp(y0, y1, v);
+    for (let ix = 0; ix <= segX; ix++) {
+      const u = ix / segX;
+      const vx = THREE.MathUtils.lerp(x0, x1, u);
+      positions.push(vx, vy, 0);
+      uvs.push(vx * 0.04, vy * 0.04);
+    }
+  }
+  const stride = segX + 1;
+  for (let iz = 0; iz < segZ; iz++) {
+    for (let ix = 0; ix < segX; ix++) {
+      const a = baseVert + iz * stride + ix;
+      const b = a + 1;
+      const c = a + stride;
+      const d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+}
+
+/**
+ * Builds the continuous reflective Sacred Garden Surrounding Pond moat framing Lumbini's
+ * 88m x 96m inner complex: stepped terracotta & Chunar sandstone ghat retaining banks,
+ * 4 arched pilgrim causeway bridges with carved balustrades, outer brick promenades,
+ * stone abutment piers supporting cardinal lanterns, and sheltered lotus clusters.
+ */
+export function buildSacredGardenSurroundingPond(
+  terracottaMat: THREE.Material,
+  brickMat: THREE.Material,
+  chunarMat: THREE.Material,
+  goldMat: THREE.Material,
+  bronzeMat: THREE.Material,
+  isSoftwareGl = false,
+): THREE.Group {
+  const g = new THREE.Group();
+
+  // Local extents relative to (-210, 0.25, 96)
+  const inMinX = LUMBINI_SACRED_POND.innerMinX - LUMBINI_SACRED_POND.centerX; // -44.6
+  const inMaxX = LUMBINI_SACRED_POND.innerMaxX - LUMBINI_SACRED_POND.centerX; // +44.6
+  const inMinZ = LUMBINI_SACRED_POND.innerMinZ - LUMBINI_SACRED_POND.centerZ; // -44.6
+  const inMaxZ = LUMBINI_SACRED_POND.innerMaxZ - LUMBINI_SACRED_POND.centerZ; // +52.6
+
+  const outMinX = LUMBINI_SACRED_POND.outerMinX - LUMBINI_SACRED_POND.centerX; // -50.0
+  const outMaxX = LUMBINI_SACRED_POND.outerMaxX - LUMBINI_SACRED_POND.centerX; // +50.0
+  const outMinZ = LUMBINI_SACRED_POND.outerMinZ - LUMBINI_SACRED_POND.centerZ; // -52.0
+  const outMaxZ = LUMBINI_SACRED_POND.outerMaxZ - LUMBINI_SACRED_POND.centerZ; // +60.0
+
+  // 1. Dark underwater stone pond bed (ly = -1.03 -> world -0.78m)
+  const bedMat = new THREE.MeshStandardMaterial({ color: 0x132426, roughness: 0.92, metalness: 0.02 });
+  const addBedSlab = (x0: number, x1: number, z0: number, z1: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.14, z1 - z0), bedMat);
+    m.position.set((x0 + x1) * 0.5, -1.03, (z0 + z1) * 0.5);
+    m.receiveShadow = true;
+    m.userData.nonCollidable = true;
+    g.add(m);
+  };
+  addBedSlab(outMinX - 0.4, outMaxX + 0.4, outMinZ - 0.4, inMinZ + 0.4);
+  addBedSlab(outMinX - 0.4, outMaxX + 0.4, inMaxZ - 0.4, outMaxZ + 0.4);
+  addBedSlab(outMinX - 0.4, inMinX + 0.4, inMinZ, inMaxZ);
+  addBedSlab(inMaxX - 0.4, outMaxX + 0.4, inMinZ, inMaxZ);
+
+  // 2. Stepped terracotta & Chunar sandstone ghat retaining ledges (inner island skirt + outer pond walls)
+  const addBankWall = (x0: number, x1: number, z0: number, z1: number, topY: number, botY: number, mat: THREE.Material) => {
+    const sx = x1 - x0;
+    const sz = z1 - z0;
+    if (sx <= 0.05 || sz <= 0.05) return;
+    const h = topY - botY;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, h, sz), mat);
+    m.position.set((x0 + x1) * 0.5, botY + h * 0.5, (z0 + z1) * 0.5);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+  };
+
+  // Inner island ghat skirt (split cleanly around cardinal gates/bridges)
+  // South & North inner banks (skip bridge mouth |ldx| <= 3.4)
+  for (const [z0, z1] of [[inMaxZ - 0.65, inMaxZ + 0.15], [inMinZ - 0.15, inMinZ + 0.65]] as Array<[number, number]>) {
+    addBankWall(inMinX, -3.4, z0, z1, 0.08, -1.02, brickMat);
+    addBankWall(3.4, inMaxX, z0, z1, 0.08, -1.02, brickMat);
+    addBankWall(inMinX, -3.4, z0 - 0.28, z1 + 0.28, -0.28, -1.02, brickMat);
+    addBankWall(3.4, inMaxX, z0 - 0.28, z1 + 0.28, -0.28, -1.02, brickMat);
+  }
+  // West & East inner banks (skip bridge mouth ldz in [1.2, 6.8])
+  for (const [x0, x1] of [[inMinX - 0.15, inMinX + 0.65], [inMaxX - 0.65, inMaxX + 0.15]] as Array<[number, number]>) {
+    addBankWall(x0, x1, inMinZ, 1.2, 0.08, -1.02, brickMat);
+    addBankWall(x0, x1, 6.8, inMaxZ, 0.08, -1.02, brickMat);
+    addBankWall(x0 - 0.28, x1 + 0.28, inMinZ, 1.2, -0.28, -1.02, brickMat);
+    addBankWall(x0 - 0.28, x1 + 0.28, 6.8, inMaxZ, -0.28, -1.02, brickMat);
+  }
+
+  // Outer pond retaining wall + stepped submerged ghat ledge + Chunar sandstone coping
+  for (const [z0, z1] of [[outMaxZ - 0.1, outMaxZ + 0.55], [outMinZ - 0.55, outMinZ + 0.1]] as Array<[number, number]>) {
+    addBankWall(outMinX - 0.55, -3.4, z0, z1, 0.09, -1.02, chunarMat);
+    addBankWall(3.4, outMaxX + 0.55, z0, z1, 0.09, -1.02, chunarMat);
+    const stepZ0 = z0 > 0 ? z0 - 0.6 : z1;
+    const stepZ1 = z0 > 0 ? z0 : z1 + 0.6;
+    addBankWall(outMinX, -3.4, stepZ0, stepZ1, -0.28, -1.02, brickMat);
+    addBankWall(3.4, outMaxX, stepZ0, stepZ1, -0.28, -1.02, brickMat);
+  }
+  for (const [x0, x1] of [[outMinX - 0.55, outMinX + 0.1], [outMaxX - 0.1, outMaxX + 0.55]] as Array<[number, number]>) {
+    addBankWall(x0, x1, outMinZ, 1.2, 0.09, -1.02, chunarMat);
+    addBankWall(x0, x1, 6.8, outMaxZ, 0.09, -1.02, chunarMat);
+    const stepX0 = x0 < 0 ? x1 : x0 - 0.6;
+    const stepX1 = x0 < 0 ? x1 + 0.6 : x0;
+    addBankWall(stepX0, stepX1, outMinZ, 1.2, -0.28, -1.02, brickMat);
+    addBankWall(stepX0, stepX1, 6.8, outMaxZ, -0.28, -1.02, brickMat);
+  }
+
+  // 3. Outer Sacred Pond Pilgrim Promenades (top at ly = +0.09 -> world +0.34m)
+  const addPromenadeWalk = (x0: number, x1: number, z0: number, z1: number) => {
+    const sx = x1 - x0;
+    const sz = z1 - z0;
+    const walk = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.22, sz), terracottaMat);
+    walk.position.set((x0 + x1) * 0.5, -0.02, (z0 + z1) * 0.5);
+    walk.receiveShadow = true;
+    g.add(walk);
+  };
+  addPromenadeWalk(-51.2, 50.7, 60.2, 63.6); // South outer pilgrim trail
+  addPromenadeWalk(-51.2, 50.7, -55.6, -52.2); // North outer pilgrim trail
+  addPromenadeWalk(-51.2, -50.0, -52.2, 60.2); // West outer coping walk
+  addPromenadeWalk(50.0, 50.7, -52.2, 60.2); // East outer coping trim
+
+  // Outer Chunar sandstone curb border rails along South & North outer trails (flush non-blocking)
+  for (const cz of [60.28, 63.52, -52.28, -55.52]) {
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(101.9, 0.16, 0.22), chunarMat);
+    curb.position.set(-0.25, 0.015, cz);
+    curb.receiveShadow = true;
+    curb.userData.nonCollidable = true;
+    g.add(curb);
+  }
+
+  // 4. Single Combined Real-Time Planar Reflector Water Surface across all 4 surrounding pond channels
+  const waterPositions: number[] = [];
+  const waterUvs: number[] = [];
+  const waterIndices: number[] = [];
+  appendWaterChannelStrip(waterPositions, waterUvs, waterIndices, outMinX, outMaxX, outMinZ, inMinZ, 32, 4);
+  appendWaterChannelStrip(waterPositions, waterUvs, waterIndices, outMinX, outMaxX, inMaxZ, outMaxZ, 32, 4);
+  appendWaterChannelStrip(waterPositions, waterUvs, waterIndices, outMinX, inMinX, inMinZ, inMaxZ, 4, 32);
+  appendWaterChannelStrip(waterPositions, waterUvs, waterIndices, inMaxX, outMaxX, inMinZ, inMaxZ, 4, 32);
+
+  const waterGeo = new THREE.BufferGeometry();
+  waterGeo.setAttribute('position', new THREE.Float32BufferAttribute(waterPositions, 3));
+  waterGeo.setAttribute('uv', new THREE.Float32BufferAttribute(waterUvs, 2));
+  waterGeo.setIndex(waterIndices);
+  waterGeo.computeVertexNormals();
+
+  const surroundingWater = createReflectivePondSurface(waterGeo, {
+    isSoftwareGl,
+    textureSize: isSoftwareGl ? 256 : 512,
+    deepTint: 0x08272b,
+    shallowTint: 0x1c5c5a,
+    reflectivity: 0.90,
+    rippleStrength: 0.018,
+    anchorWorldPos: new THREE.Vector3(-210, LUMBINI_SACRED_POND.waterLevel, 96),
+  });
+  surroundingWater.rotation.x = -Math.PI / 2;
+  surroundingWater.position.y = -0.22; // world y = +0.03m
+  surroundingWater.userData.nonCollidable = true;
+  g.add(surroundingWater);
+
+  // 5. Four Arched Pilgrim Causeway Bridges spanning South, North, East & West Pond Channels
+  const buildCausewayBridge = (
+    axis: 'z' | 'x',
+    cx: number,
+    cz: number,
+    spanLen: number,
+    width: number,
+  ) => {
+    const bg = new THREE.Group();
+    bg.position.set(cx, 0, cz);
+    const segs = 10;
+    const segLen = spanLen / segs;
+    const baseDeckY = LUMBINI_SACRED_POND.bridgeBaseY - 0.25; // +0.10 local (+0.35 world)
+    const archLift = LUMBINI_SACRED_POND.bridgeArchLift; // +0.26
+
+    for (let i = 0; i < segs; i++) {
+      const t = (i + 0.5) / segs;
+      const u = (t - 0.5) * spanLen;
+      const lift = Math.sin(t * Math.PI) * archLift;
+      const slope = Math.cos(t * Math.PI) * (Math.PI / spanLen) * archLift;
+      const deckY = baseDeckY + lift;
+
+      const slabW = axis === 'z' ? width - 0.5 : segLen + 0.08;
+      const slabD = axis === 'z' ? segLen + 0.08 : width - 0.5;
+      const deckSlab = new THREE.Mesh(new THREE.BoxGeometry(slabW, 0.26, slabD), terracottaMat);
+      deckSlab.position.set(axis === 'x' ? u : 0, deckY - 0.13, axis === 'z' ? u : 0);
+      if (axis === 'z') deckSlab.rotation.x = -slope;
+      else deckSlab.rotation.z = slope;
+      deckSlab.receiveShadow = true;
+      deckSlab.castShadow = true;
+      bg.add(deckSlab);
+
+      // Chunar sandstone arched side fascia stringers
+      for (const side of [-1, 1]) {
+        const edgeOff = side * (width * 0.5 - 0.18);
+        const trimW = axis === 'z' ? 0.34 : segLen + 0.08;
+        const trimD = axis === 'z' ? segLen + 0.08 : 0.34;
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(trimW, 0.44, trimD), chunarMat);
+        fascia.position.set(axis === 'x' ? u : edgeOff, deckY - 0.14, axis === 'z' ? u : edgeOff);
+        if (axis === 'z') fascia.rotation.x = -slope;
+        else fascia.rotation.z = slope;
+        fascia.castShadow = true;
+        fascia.receiveShadow = true;
+        bg.add(fascia);
+      }
+    }
+
+    // Carved Chunar sandstone parapet balusters, handrails & brass lotus finials
+    const postCount = 5;
+    for (const side of [-1, 1]) {
+      const edgeOff = side * (width * 0.5 - 0.18);
+      for (let p = 0; p < postCount; p++) {
+        const t = p / (postCount - 1);
+        const u = (t - 0.5) * (spanLen - 0.7);
+        const py = baseDeckY + Math.sin(t * Math.PI) * archLift;
+        const isEnd = p === 0 || p === postCount - 1;
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(isEnd ? 0.34 : 0.22, isEnd ? 0.96 : 0.78, isEnd ? 0.34 : 0.22),
+          chunarMat,
+        );
+        post.position.set(axis === 'x' ? u : edgeOff, py + (isEnd ? 0.48 : 0.39), axis === 'z' ? u : edgeOff);
+        post.castShadow = true;
+        bg.add(post);
+
+        const finial = new THREE.Mesh(new THREE.SphereGeometry(isEnd ? 0.11 : 0.075, 10, 8), goldMat);
+        finial.position.set(
+          axis === 'x' ? u : edgeOff,
+          py + (isEnd ? 1.02 : 0.84),
+          axis === 'z' ? u : edgeOff,
+        );
+        bg.add(finial);
+      }
+
+      // Top parapet handrail segments connecting posts
+      for (let s = 0; s < 6; s++) {
+        const t = (s + 0.5) / 6;
+        const u = (t - 0.5) * (spanLen - 0.7);
+        const segL = (spanLen - 0.7) / 6 + 0.06;
+        const py = baseDeckY + Math.sin(t * Math.PI) * archLift + 0.76;
+        const slope = Math.cos(t * Math.PI) * (Math.PI / spanLen) * archLift;
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(axis === 'z' ? 0.16 : segL, 0.10, axis === 'z' ? segL : 0.16),
+          chunarMat,
+        );
+        rail.position.set(axis === 'x' ? u : edgeOff, py, axis === 'z' ? u : edgeOff);
+        if (axis === 'z') rail.rotation.x = -slope;
+        else rail.rotation.z = slope;
+        rail.castShadow = true;
+        bg.add(rail);
+      }
+    }
+
+    // Twin underwater masonry bridge support piers flanking center arch
+    for (const uOff of [-spanLen * 0.26, spanLen * 0.26]) {
+      const pier = new THREE.Mesh(
+        new THREE.BoxGeometry(axis === 'z' ? width - 0.3 : 0.65, 1.15, axis === 'z' ? 0.65 : width - 0.3),
+        brickMat,
+      );
+      pier.position.set(axis === 'x' ? uOff : 0, -0.52, axis === 'z' ? uOff : 0);
+      pier.receiveShadow = true;
+      bg.add(pier);
+    }
+
+    g.add(bg);
+  };
+
+  buildCausewayBridge('z', 0, 56.3, 8.6, 6.8); // South Sacred Bridge (ldz 52.0..60.6)
+  buildCausewayBridge('z', 0, -48.3, 8.6, 6.8); // North Sacred Bridge (ldz -52.6..-44.0)
+  buildCausewayBridge('x', 47.3, 4.0, 6.6, 5.6); // East Sacred Bridge (ldx 44.0..50.6)
+  buildCausewayBridge('x', -47.3, 4.0, 6.6, 5.6); // West Sacred Bridge (ldx -50.6..-44.0)
+
+  // 6. Eight Stone Bridge Abutment Piers emerging from the pond for the 8 cardinal roadside lanterns
+  const pierCoords: Array<[number, number]> = [
+    [3.8, 55.0],
+    [-3.8, 55.0],
+    [3.8, -48.0],
+    [-3.8, -48.0],
+    [47.5, 0.4],
+    [47.5, 7.6],
+    [-50.2, 0.4],
+    [-50.2, 7.6],
+  ];
+  for (const [px, pz] of pierCoords) {
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.18, 1.06, 1.18), brickMat);
+    base.position.set(px, -0.50, pz);
+    base.castShadow = true;
+    base.receiveShadow = true;
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.14, 1.06), chunarMat);
+    cap.position.set(px, 0.02, pz); // top at +0.09 local (+0.34 world)
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    g.add(base, cap);
+  }
+
+  // 7. Procedural Floating Lotus Pads & Blossoms in calm sheltered pond colonies (away from bridges & walls)
+  const surroundingLotuses = generateLumbiniPondLotusPlacements().filter(
+    (p) => p.pond === 'surrounding',
+  );
+  const surroundingFlora = buildProceduralLotusInstancedGarden(
+    surroundingLotuses,
+    LUMBINI_SACRED_POND.centerX,
+    LUMBINI_SACRED_POND.centerZ,
+    -0.22,
+  );
+  g.add(surroundingFlora);
+  g.userData.lotusCount = surroundingLotuses.length;
+
+  // 8. Decorative Bronze Kalash Boundary Lamps at outer South & North Promenade corners
+  for (const [bx, bz] of [[-50.5, 62.9], [50.2, 62.9], [-50.5, -54.9], [50.2, -54.9]] as Array<[number, number]>) {
+    const ped = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.46, 0.56), chunarMat);
+    ped.position.set(bx, 0.32, bz);
+    ped.castShadow = true;
+    const pot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bronzeMat);
+    pot.position.set(bx, 0.68, bz);
+    g.add(ped, pot);
+  }
+
+  return g;
+}
+

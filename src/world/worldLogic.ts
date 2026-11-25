@@ -150,6 +150,38 @@ export const LUMBINI_PEACE_CANAL = {
   stupaPlazaRadius: 9.6,
 };
 
+export const LUMBINI_SACRED_POND = {
+  centerX: -210,
+  centerZ: 96,
+  innerMinX: -254.6,
+  innerMaxX: -165.4,
+  innerMinZ: 51.4,
+  innerMaxZ: 148.6,
+  outerMinX: -260.0,
+  outerMaxX: -160.0,
+  outerMinZ: 44.0,
+  outerMaxZ: 156.0,
+  waterLevel: 0.03,
+  bridgeBaseY: 0.35,
+  bridgeArchLift: 0.26,
+  southBridge: { minX: -213.4, maxX: -206.6, minZ: 148.0, maxZ: 156.6 },
+  northBridge: { minX: -213.4, maxX: -206.6, minZ: 43.4, maxZ: 52.0 },
+  eastBridge: { minX: -166.0, maxX: -159.4, minZ: 97.2, maxZ: 102.8 },
+  westBridge: { minX: -260.6, maxX: -254.0, minZ: 97.2, maxZ: 102.8 },
+  southPromenadeZ: { min: 156.2, max: 159.6 },
+  northPromenadeZ: { min: 40.4, max: 43.8 },
+};
+
+export const LUMBINI_PUSHKARINI_POND = {
+  centerX: -200,
+  centerZ: 112.5,
+  minX: -211.0,
+  maxX: -189.0,
+  minZ: 105.8,
+  maxZ: 119.2,
+  waterLevel: 0.21,
+};
+
 export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[0, 6], [-24, -10], [-48, -24]],
   [[-48, -24], [-78, -10], [-108, 4]],
@@ -278,11 +310,11 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
   { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
   { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
-  // Lumbini Peace Garden outer grounds (-210, 96) & Expanded Peace Canal Parkland
-  { x: -258.0, z: 76.0, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
-  { x: -161.2, z: 76.0, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
-  { x: -258.0, z: 126.0, kind: 'prayer-flags', rotY: 0.6, scale: 1.05 },
-  { x: -198.0, z: 48.0, kind: 'incense-stand', rotY: -0.5, scale: 1.0 },
+  // Lumbini Sacred Garden outer pond promenades (-210, 96) & Expanded Peace Canal Parkland
+  { x: -224.0, z: 157.8, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
+  { x: -196.0, z: 157.8, kind: 'offering-bowl', rotY: -0.25, scale: 1.05 },
+  { x: -224.0, z: 42.2, kind: 'prayer-flags', rotY: 0.4, scale: 1.05 },
+  { x: -196.0, z: 42.2, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
   { x: -285.5, z: 76.0, kind: 'prayer-flags', rotY: 0.15, scale: 1.1 },
   { x: -285.5, z: 124.0, kind: 'prayer-flags', rotY: -0.15, scale: 1.1 },
   { x: -295.0, z: 112.0, kind: 'offering-bowl', rotY: 0.4, scale: 1.05 },
@@ -363,7 +395,7 @@ export function getWorldTreeSpots(): TreeSpot[] {
         return dx > -64 && dx < 46 && dz > -42 && dz < 78;
       }
       if (lm.id === 'lumbini-buddha') {
-        return dx > -51 && dx < 51 && dz > -50 && dz < 58;
+        return dx > -55 && dx < 55 && dz > -58 && dz < 66;
       }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
@@ -463,7 +495,7 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
       lm.id === 'janaki-mandir'
         ? rx - lm.position.x > -64 && rx - lm.position.x < 46 && rz - lm.position.z > -42 && rz - lm.position.z < 75
         : lm.id === 'lumbini-buddha'
-          ? rx - lm.position.x > -51 && rx - lm.position.x < 51 && rz - lm.position.z > -50 && rz - lm.position.z < 58
+          ? rx - lm.position.x > -55 && rx - lm.position.x < 55 && rz - lm.position.z > -58 && rz - lm.position.z < 66
           : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
@@ -506,6 +538,70 @@ export function isOnLumbiniCanalBridge(x: number, z: number): boolean {
   );
 }
 
+export function isOnLumbiniSacredBridge(x: number, z: number): boolean {
+  const { southBridge, northBridge, eastBridge, westBridge } = LUMBINI_SACRED_POND;
+  return (
+    (x >= southBridge.minX && x <= southBridge.maxX && z >= southBridge.minZ && z <= southBridge.maxZ) ||
+    (x >= northBridge.minX && x <= northBridge.maxX && z >= northBridge.minZ && z <= northBridge.maxZ) ||
+    (x >= eastBridge.minX && x <= eastBridge.maxX && z >= eastBridge.minZ && z <= eastBridge.maxZ) ||
+    (x >= westBridge.minX && x <= westBridge.maxX && z >= westBridge.minZ && z <= westBridge.maxZ)
+  );
+}
+
+export function getLumbiniSacredBridgeDeckY(x: number, z: number): number {
+  const { southBridge, northBridge, eastBridge, westBridge, bridgeBaseY, bridgeArchLift } = LUMBINI_SACRED_POND;
+  if (x >= southBridge.minX && x <= southBridge.maxX && z >= southBridge.minZ && z <= southBridge.maxZ) {
+    const t = Math.max(0, Math.min(1, (z - southBridge.minZ) / (southBridge.maxZ - southBridge.minZ)));
+    return bridgeBaseY + Math.sin(t * Math.PI) * bridgeArchLift;
+  }
+  if (x >= northBridge.minX && x <= northBridge.maxX && z >= northBridge.minZ && z <= northBridge.maxZ) {
+    const t = Math.max(0, Math.min(1, (z - northBridge.minZ) / (northBridge.maxZ - northBridge.minZ)));
+    return bridgeBaseY + Math.sin(t * Math.PI) * bridgeArchLift;
+  }
+  if (x >= eastBridge.minX && x <= eastBridge.maxX && z >= eastBridge.minZ && z <= eastBridge.maxZ) {
+    const t = Math.max(0, Math.min(1, (x - eastBridge.minX) / (eastBridge.maxX - eastBridge.minX)));
+    return bridgeBaseY + Math.sin(t * Math.PI) * bridgeArchLift;
+  }
+  if (x >= westBridge.minX && x <= westBridge.maxX && z >= westBridge.minZ && z <= westBridge.maxZ) {
+    const t = Math.max(0, Math.min(1, (x - westBridge.minX) / (westBridge.maxX - westBridge.minX)));
+    return bridgeBaseY + Math.sin(t * Math.PI) * bridgeArchLift;
+  }
+  return bridgeBaseY;
+}
+
+export function isOnLumbiniBridgeAbutmentPier(x: number, z: number): boolean {
+  const piers: Array<[number, number]> = [
+    [-206.2, 151.0],
+    [-213.8, 151.0],
+    [-206.2, 48.0],
+    [-213.8, 48.0],
+    [-162.5, 96.4],
+    [-162.5, 103.6],
+    [-260.2, 96.4],
+    [-260.2, 103.6],
+  ];
+  for (let i = 0; i < piers.length; i++) {
+    if (Math.hypot(x - piers[i][0], z - piers[i][1]) <= 1.05) return true;
+  }
+  return false;
+}
+
+export function isInLumbiniSurroundingPond(x: number, z: number): boolean {
+  if (isOnLumbiniSacredBridge(x, z) || isOnLumbiniBridgeAbutmentPier(x, z)) return false;
+  const p = LUMBINI_SACRED_POND;
+  const inOuter =
+    x >= p.outerMinX && x <= p.outerMaxX && z >= p.outerMinZ && z <= p.outerMaxZ;
+  if (!inOuter) return false;
+  const inInnerIsland =
+    x > p.innerMinX && x < p.innerMaxX && z > p.innerMinZ && z < p.innerMaxZ;
+  return !inInnerIsland;
+}
+
+export function isInLumbiniPushkariniPond(x: number, z: number): boolean {
+  const p = LUMBINI_PUSHKARINI_POND;
+  return x >= p.minX && x <= p.maxX && z >= p.minZ && z <= p.maxZ;
+}
+
 /**
  * Computes terrain elevation at (x, z).
  * Ensures flat plazas around spawn and all 10 landmarks, a monumental plinth & stair ramp at Janaki Mandir,
@@ -525,6 +621,10 @@ export function groundHeightAt(x: number, z: number): number {
       (LUMBINI_PEACE_CANAL.bridgeMaxX - LUMBINI_PEACE_CANAL.bridgeMinX);
     const arch = Math.sin(t * Math.PI) * 0.62;
     return 0.36 + arch;
+  }
+
+  if (isOnLumbiniSacredBridge(x, z)) {
+    return getLumbiniSacredBridgeDeckY(x, z);
   }
 
   // Sweeping open-world Himalayan valley undulation
@@ -604,6 +704,28 @@ export function groundHeightAt(x: number, z: number): number {
       const pondDist = Math.hypot(px, pz);
       const pondCarve = 1 - smoothstep(0, 1.4, pondDist);
       h = lerp(h, -0.82, pondCarve);
+    }
+
+    // Carve surrounding Sacred Garden Reflecting Pond moat around the 88m x 96m garden island
+    if (isInLumbiniSurroundingPond(x, z)) {
+      const p = LUMBINI_SACRED_POND;
+      const distFromInner = Math.max(
+        p.innerMinX - x,
+        x - p.innerMaxX,
+        p.innerMinZ - z,
+        z - p.innerMaxZ,
+      );
+      const distFromOuter = Math.min(
+        x - p.outerMinX,
+        p.outerMaxX - x,
+        z - p.outerMinZ,
+        p.outerMaxZ - z,
+      );
+      const bankDist = Math.max(0, Math.min(distFromInner, distFromOuter));
+      const carve = smoothstep(0, 0.9, bankDist);
+      h = lerp(0.25, -0.90, carve);
+    } else if (isOnLumbiniBridgeAbutmentPier(x, z)) {
+      h = 0.34;
     }
 
     // Maya Devi Temple (center 0, -22.0, 36m x 24m): sloped South ramp, walkable interior boardwalk (1.25m), sunken pit (-0.10m)
@@ -722,6 +844,9 @@ export function getSurfaceHeightAt(x: number, z: number): number {
   if (isOnBridgeDeck(x, z) || isOnLumbiniCanalBridge(x, z)) {
     return base + 0.02;
   }
+  if (isOnLumbiniSacredBridge(x, z)) {
+    return base;
+  }
 
   let surfaceY = base;
 
@@ -737,7 +862,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     }
   }
 
-  // Lumbini 88m x 96m Sacred Garden lawns, red-brick paths, Maya Devi South ramp & interior boardwalk
+  // Lumbini 88m x 96m Sacred Garden lawns, red-brick paths, Maya Devi South ramp, interior boardwalk & outer pond promenade
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbini) {
     const ldx = x - lumbini.position.x;
@@ -753,6 +878,8 @@ export function getSurfaceHeightAt(x: number, z: number): number {
       } else {
         const onBrickWalk =
           (Math.abs(ldx) <= 8.5 && ldz >= 28.0 && ldz <= 52.4) ||
+          (ldx >= -8.5 && ldx <= -3.2 && ldz >= 6.0 && ldz <= 28.0) ||
+          (Math.abs(ldx) <= 5.8 && ldz >= -10.0 && ldz <= 2.0) ||
           (ldz >= 2.0 && ldz <= 6.0) ||
           (Math.abs(ldx) <= 3.4 && ldz >= -2.5 && ldz <= 2.0) ||
           (ldx >= -22.4 && ldx <= -19.2 && ldz >= -42.5 && ldz <= 30.8) ||
@@ -761,8 +888,22 @@ export function getSurfaceHeightAt(x: number, z: number): number {
           (ldx >= -22.4 && ldx <= 27.2 && ldz >= -42.5 && ldz <= -38.5) ||
           (Math.abs(ldx) <= 3.4 && ldz >= -44.4 && ldz <= -42.5) ||
           (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
-          (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2);
+          (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2) ||
+          (ldx >= -27.5 && ldx <= -8.5 && ldz >= 37.2 && ldz <= 40.8) ||
+          (ldx >= -19.2 && ldx <= -8.5 && ldz >= 28.8 && ldz <= 32.2) ||
+          (ldx >= -25.6 && ldx <= -22.4 && ldz >= 14.8 && ldz <= 18.2) ||
+          (ldx >= 27.2 && ldx <= 32.4 && ldz >= 22.4 && ldz <= 25.6) ||
+          (ldx >= 27.2 && ldx <= 30.0 && ldz >= -23.8 && ldz <= -20.2);
         surfaceY = Math.max(surfaceY, onBrickWalk ? 0.35 : 0.28);
+      }
+    } else if (!isInLumbiniSurroundingPond(x, z)) {
+      const onOuterPromenade =
+        (x >= -261.2 && x <= -159.3 && z >= LUMBINI_SACRED_POND.southPromenadeZ.min && z <= LUMBINI_SACRED_POND.southPromenadeZ.max) ||
+        (x >= -261.2 && x <= -159.3 && z >= LUMBINI_SACRED_POND.northPromenadeZ.min && z <= LUMBINI_SACRED_POND.northPromenadeZ.max) ||
+        (x >= -261.2 && x <= -260.0 && z >= LUMBINI_SACRED_POND.northPromenadeZ.max && z <= LUMBINI_SACRED_POND.southPromenadeZ.min) ||
+        (x >= -160.0 && x <= -159.3 && z >= LUMBINI_SACRED_POND.northPromenadeZ.max && z <= LUMBINI_SACRED_POND.southPromenadeZ.min);
+      if (onOuterPromenade) {
+        surfaceY = Math.max(surfaceY, 0.34);
       }
     }
   }
@@ -787,7 +928,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
 
   // Raised level cobblestone road decks outside Janaki Chowk, Lumbini Precinct & Western Peace Plaza
   const inJanakiChowk = x >= -131.0 && x <= -53.5 && z >= 70.0 && z <= 150.2;
-  const inLumbiniPrecinct = x >= -255.0 && x <= -165.0 && z >= 51.0 && z <= 149.0;
+  const inLumbiniPrecinct = x >= -261.0 && x <= -159.2 && z >= 43.2 && z <= 156.8;
   if (!inJanakiChowk && !inLumbiniPrecinct && !onWestStupaPlaza) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
@@ -825,6 +966,17 @@ export function isWalkablePosition(x: number, z: number): boolean {
     // Arched Maitri Peace Bridge balustrade edge rails block side plunge while keeping ±2.25m deck open
     if (Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) >= 2.28) return false;
     return true;
+  }
+  if (isOnLumbiniSacredBridge(x, z)) {
+    const ldx = x - LUMBINI_SACRED_POND.centerX;
+    const ldz = z - LUMBINI_SACRED_POND.centerZ;
+    // Block parapet side balusters while keeping wide central pilgrim bridge decks open
+    if ((ldz > 52.0 || ldz < -44.0) && Math.abs(ldx) >= 3.05) return false;
+    if ((ldx > 44.0 || ldx < -44.0) && Math.abs(ldz - 4.0) >= 2.45) return false;
+    return true;
+  }
+  if (isInLumbiniSurroundingPond(x, z)) {
+    return false;
   }
   if (
     x >= LUMBINI_PEACE_CANAL.minX - 0.65 &&
@@ -935,12 +1087,12 @@ export function isWalkablePosition(x: number, z: number): boolean {
     }
   }
 
-  // Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden collision bounds
+  // Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden + Outer Pilgrim Trail collision bounds
   const lumbiniLm = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
   if (lumbiniLm) {
     const ldx = x - lumbiniLm.position.x;
     const ldz = z - lumbiniLm.position.z;
-    if (ldx >= -45.2 && ldx <= 45.2 && ldz >= -45.2 && ldz <= 53.2) {
+    if (ldx >= -54.0 && ldx <= 54.0 && ldz >= -57.0 && ldz <= 66.0) {
       // 1. Perimeter low brick wall (keep North/South axial gates |ldx| <= 3.4 and West/East gates ldz in [1.5, 6.5] wide open)
       if (Math.abs(ldz - 52.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
       if (Math.abs(ldz + 44.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
@@ -995,8 +1147,8 @@ export function isWalkablePosition(x: number, z: number): boolean {
         [-32.5, -32.0, 4.2, 3.4],
         [33.5, -6.5, 3.4, 2.8],
         [34.5, -0.5, 3.6, 3.0],
-        [-11.5, 13.5, 3.0, 2.8],
-        [-11.5, 20.5, 2.8, 2.6],
+        [-13.0, 13.5, 3.0, 2.8],
+        [-13.0, 20.5, 2.8, 2.6],
         [-34.5, 26.5, 3.4, 3.0],
         [35.0, 13.5, 3.2, 2.8],
         [-14.5, -38.5, 3.4, 2.8],
@@ -1014,9 +1166,28 @@ export function isWalkablePosition(x: number, z: number): boolean {
         [-18.0, 0.8], [22.8, 0.8],
         [-20.8, -36.5], [25.7, -36.5],
         [23.2, 28.5], [-8.5, 28.5],
+        [-8.2, 17.0], [-8.2, 7.2],
+        [-5.2, 62.6], [5.2, 62.6],
+        [-5.2, -54.6], [5.2, -54.6],
       ] as Array<[number, number]>) {
         if (Math.hypot(ldx - plx, ldz - plz) <= 0.55) return false;
       }
+      // Stone pilgrim meditation benches flanking walkways & outer promenade
+      for (const [bx, bz, hw, hd] of [
+        [-7.6, 44.5, 0.55, 1.15],
+        [7.6, 44.5, 0.55, 1.15],
+        [-7.6, 11.8, 0.55, 1.15],
+        [-7.6, 22.2, 0.55, 1.15],
+        [-14.5, 1.3, 1.15, 0.55],
+        [14.5, 1.3, 1.15, 0.55],
+        [-15.5, 62.5, 1.15, 0.55],
+        [15.5, 62.5, 1.15, 0.55],
+      ] as Array<[number, number, number, number]>) {
+        if (Math.abs(ldx - bx) <= hw && Math.abs(ldz - bz) <= hd) return false;
+      }
+      // Exterior pilgrim welcome milepost steles flanking South Bridge approach
+      if (Math.abs(Math.abs(ldx) - 5.2) <= 0.72 && Math.abs(ldz - 64.2) <= 0.52) return false;
+
       for (const [hx, hz, hsx, hsz] of [
         [-22.8, -9.2, 0.68, 17.5],
         [-22.8, -30.6, 0.68, 12.2],
@@ -2461,7 +2632,7 @@ function pointToSegmentDist(
  */
 export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKind {
   if (isOnBridgeDeck(x, z)) return 'wood';
-  if (isOnLumbiniCanalBridge(x, z)) return 'stone';
+  if (isOnLumbiniCanalBridge(x, z) || isOnLumbiniSacredBridge(x, z)) return 'stone';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
 
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
@@ -2480,6 +2651,8 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
       const onBrickOrRamp =
         (Math.abs(ldx) <= 1.95 && ldz > -10.8 && ldz <= -2.0) ||
         (Math.abs(ldx) <= 8.5 && ldz >= 28.0 && ldz <= 52.4) ||
+        (ldx >= -8.5 && ldx <= -3.2 && ldz >= 6.0 && ldz <= 28.0) ||
+        (Math.abs(ldx) <= 5.8 && ldz >= -10.0 && ldz <= 2.0) ||
         (ldz >= 2.0 && ldz <= 6.0) ||
         (Math.abs(ldx) <= 3.4 && ldz >= -2.5 && ldz <= 2.0) ||
         (ldx >= -22.4 && ldx <= -19.2 && ldz >= -42.5 && ldz <= 30.8) ||
@@ -2488,8 +2661,21 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
         (ldx >= -22.4 && ldx <= 27.2 && ldz >= -42.5 && ldz <= -38.5) ||
         (Math.abs(ldx) <= 3.4 && ldz >= -44.4 && ldz <= -42.5) ||
         (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
-        (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2);
+        (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2) ||
+        (ldx >= -27.5 && ldx <= -8.5 && ldz >= 37.2 && ldz <= 40.8) ||
+        (ldx >= -19.2 && ldx <= -8.5 && ldz >= 28.8 && ldz <= 32.2) ||
+        (ldx >= -25.6 && ldx <= -22.4 && ldz >= 14.8 && ldz <= 18.2) ||
+        (ldx >= 27.2 && ldx <= 32.4 && ldz >= 22.4 && ldz <= 25.6) ||
+        (ldx >= 27.2 && ldx <= 30.0 && ldz >= -23.8 && ldz <= -20.2);
       return onBrickOrRamp ? 'stone' : 'grass';
+    }
+    if (!isInLumbiniSurroundingPond(x, z)) {
+      const onOuterPromenade =
+        (x >= -261.2 && x <= -159.3 && z >= LUMBINI_SACRED_POND.southPromenadeZ.min && z <= LUMBINI_SACRED_POND.southPromenadeZ.max) ||
+        (x >= -261.2 && x <= -159.3 && z >= LUMBINI_SACRED_POND.northPromenadeZ.min && z <= LUMBINI_SACRED_POND.northPromenadeZ.max) ||
+        (x >= -261.2 && x <= -260.0 && z >= LUMBINI_SACRED_POND.northPromenadeZ.max && z <= LUMBINI_SACRED_POND.southPromenadeZ.min) ||
+        (x >= -160.0 && x <= -159.3 && z >= LUMBINI_SACRED_POND.northPromenadeZ.max && z <= LUMBINI_SACRED_POND.southPromenadeZ.min);
+      if (onOuterPromenade) return 'stone';
     }
   }
 
@@ -2665,6 +2851,469 @@ export function computeSpatialAmbienceMix(
   };
 }
 
+export type LumbiniSpatialEmitterKind =
+  | 'bird-canopy'
+  | 'bird-dove'
+  | 'bird-pond'
+  | 'leaf-rustle';
+
+export type LumbiniEmitterSpeciesHint =
+  | 'bulbul'
+  | 'parakeet'
+  | 'dove'
+  | 'pipal-tree'
+  | 'garden-hedge';
+
+export interface LumbiniSpatialEmitterSpec {
+  id: string;
+  kind: LumbiniSpatialEmitterKind;
+  label: string;
+  x: number;
+  y: number;
+  z: number;
+  refDistance: number;
+  maxDistance: number;
+  baseWeight: number;
+  speciesHint: LumbiniEmitterSpeciesHint;
+}
+
+/**
+ * Localized 3D ambient sound emitters anchored directly to real Lumbini Sacred Garden
+ * landmarks: Sacred Bodhi (Pipal) Tree Chautara, Pushkarini Pond banks, Maya Devi
+ * clerestory doves, Torana gateways, Royal Thai grove, Peace Canal shoreline, and trimmed garden hedges.
+ */
+export const LUMBINI_SPATIAL_AUDIO_EMITTERS: LumbiniSpatialEmitterSpec[] = [
+  // Sacred Bodhi Tree Canopy & Pipal Foliage (-210 - 29.0, y, 96 + 16.5)
+  {
+    id: 'lumbini-bodhi-birds',
+    kind: 'bird-canopy',
+    label: 'Sacred Bodhi Canopy Birds',
+    x: -239.0,
+    y: 7.2,
+    z: 112.5,
+    refDistance: 6.5,
+    maxDistance: 58,
+    baseWeight: 1.0,
+    speciesHint: 'parakeet',
+  },
+  {
+    id: 'lumbini-bodhi-leaves',
+    kind: 'leaf-rustle',
+    label: 'Sacred Bodhi Pipal Leaves',
+    x: -239.0,
+    y: 5.8,
+    z: 112.5,
+    refDistance: 6.0,
+    maxDistance: 46,
+    baseWeight: 1.0,
+    speciesHint: 'pipal-tree',
+  },
+  // Pushkarini Sacred Pond Ghat Birds (-210 + 10.5, y, 96 + 16.5)
+  {
+    id: 'lumbini-pushkarini-birds',
+    kind: 'bird-pond',
+    label: 'Pushkarini Pond Songbirds',
+    x: -199.5,
+    y: 2.8,
+    z: 112.5,
+    refDistance: 6.5,
+    maxDistance: 54,
+    baseWeight: 0.92,
+    speciesHint: 'bulbul',
+  },
+  // South Torana & Baby Buddha Forecourt Doves (-210, y, 96 + 51.8)
+  {
+    id: 'lumbini-torana-doves',
+    kind: 'bird-dove',
+    label: 'South Torana Temple Doves',
+    x: -210.0,
+    y: 6.2,
+    z: 147.8,
+    refDistance: 6.5,
+    maxDistance: 56,
+    baseWeight: 0.9,
+    speciesHint: 'dove',
+  },
+  // Maya Devi Temple Rooftop & North Lawn Doves (-210, y, 96 - 22.0)
+  {
+    id: 'lumbini-mayadevi-doves',
+    kind: 'bird-dove',
+    label: 'Maya Devi Sanctuary Doves',
+    x: -210.0,
+    y: 7.4,
+    z: 74.0,
+    refDistance: 6.5,
+    maxDistance: 54,
+    baseWeight: 0.88,
+    speciesHint: 'dove',
+  },
+  // Royal Thai Sanctuary East Grove Birds (-210 + 34.5, y, 96 - 22.0)
+  {
+    id: 'lumbini-thai-birds',
+    kind: 'bird-canopy',
+    label: 'Thai Sanctuary Songbirds',
+    x: -175.5,
+    y: 5.2,
+    z: 74.0,
+    refDistance: 6.0,
+    maxDistance: 50,
+    baseWeight: 0.84,
+    speciesHint: 'bulbul',
+  },
+  // South Sacred Bridge & Surrounding Pond Songbirds (-210 - 12, y, 96 + 56)
+  {
+    id: 'lumbini-south-pond-birds',
+    kind: 'bird-pond',
+    label: 'Sacred Pond Bank Birds',
+    x: -222.0,
+    y: 2.6,
+    z: 152.0,
+    refDistance: 6.5,
+    maxDistance: 52,
+    baseWeight: 0.86,
+    speciesHint: 'bulbul',
+  },
+  // Maitri Peace Canal Shoreline Birds (-272, y, 100)
+  {
+    id: 'lumbini-canal-birds',
+    kind: 'bird-pond',
+    label: 'Peace Canal Waterfront Doves',
+    x: -272.0,
+    y: 4.6,
+    z: 100.0,
+    refDistance: 7.5,
+    maxDistance: 64,
+    baseWeight: 0.85,
+    speciesHint: 'dove',
+  },
+  // Trimmed Sacred Garden Hedges & Perimeter Grove Rustle Emitters
+  {
+    id: 'lumbini-sw-forecourt-leaves',
+    kind: 'leaf-rustle',
+    label: 'South-West Forecourt Hedge',
+    x: -218.9,
+    y: 1.0,
+    z: 137.2,
+    refDistance: 4.5,
+    maxDistance: 34,
+    baseWeight: 0.72,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-se-forecourt-leaves',
+    kind: 'leaf-rustle',
+    label: 'South-East Forecourt Hedge',
+    x: -201.1,
+    y: 1.0,
+    z: 137.2,
+    refDistance: 4.5,
+    maxDistance: 34,
+    baseWeight: 0.72,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-south-pond-leaves',
+    kind: 'leaf-rustle',
+    label: 'Pushkarini South-West Hedge',
+    x: -226.4,
+    y: 1.0,
+    z: 127.2,
+    refDistance: 4.5,
+    maxDistance: 34,
+    baseWeight: 0.76,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-se-pond-leaves',
+    kind: 'leaf-rustle',
+    label: 'Pushkarini South-East Hedge',
+    x: -193.6,
+    y: 1.0,
+    z: 127.2,
+    refDistance: 4.5,
+    maxDistance: 34,
+    baseWeight: 0.74,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-nw-ashoka-leaves',
+    kind: 'leaf-rustle',
+    label: 'Ashoka Grove West Hedge',
+    x: -232.8,
+    y: 1.2,
+    z: 76.8,
+    refDistance: 4.8,
+    maxDistance: 36,
+    baseWeight: 0.78,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-ne-thai-leaves',
+    kind: 'leaf-rustle',
+    label: 'Thai Court East Hedge',
+    x: -182.4,
+    y: 1.3,
+    z: 79.2,
+    refDistance: 4.8,
+    maxDistance: 36,
+    baseWeight: 0.76,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-se-flame-leaves',
+    kind: 'leaf-rustle',
+    label: 'Peace Flame East Hedge',
+    x: -182.4,
+    y: 1.2,
+    z: 112.6,
+    refDistance: 4.8,
+    maxDistance: 36,
+    baseWeight: 0.76,
+    speciesHint: 'garden-hedge',
+  },
+  {
+    id: 'lumbini-stupa-leaves',
+    kind: 'leaf-rustle',
+    label: 'Shanti Peace Parkland Trees',
+    x: -296.0,
+    y: 3.0,
+    z: 100.0,
+    refDistance: 6.0,
+    maxDistance: 48,
+    baseWeight: 0.85,
+    speciesHint: 'pipal-tree',
+  },
+];
+
+export interface SpatialEmitterPanGain {
+  emitter: LumbiniSpatialEmitterSpec;
+  distance: number;
+  distanceGain: number;
+  pan: number;
+  weight: number;
+}
+
+export interface LumbiniSpatialAudioState {
+  inZone: boolean;
+  zoneFactor: number;
+  birdActivity: number;
+  leafRustleActivity: number;
+  birdIntervalMinSec: number;
+  birdIntervalMaxSec: number;
+  rustleIntervalMinSec: number;
+  rustleIntervalMaxSec: number;
+  activeBirdEmitters: SpatialEmitterPanGain[];
+  activeRustleEmitters: SpatialEmitterPanGain[];
+  nearestBirdEmitter: SpatialEmitterPanGain | null;
+  nearestRustleEmitter: SpatialEmitterPanGain | null;
+}
+
+/**
+ * Computes 3D distance attenuation and signed stereo pan (-1 left .. +1 right)
+ * relative to a listener's horizontal look forward vector (forwardX, forwardZ).
+ */
+export function computeSpatialEmitterPanGain(
+  listenerX: number,
+  listenerY: number,
+  listenerZ: number,
+  forwardX: number,
+  forwardZ: number,
+  emitter: LumbiniSpatialEmitterSpec,
+): SpatialEmitterPanGain {
+  const dx = emitter.x - listenerX;
+  const dy = emitter.y - listenerY;
+  const dz = emitter.z - listenerZ;
+  const distance = Math.hypot(dx, dy, dz);
+
+  if (distance >= emitter.maxDistance) {
+    return {
+      emitter,
+      distance,
+      distanceGain: 0,
+      pan: 0,
+      weight: 0,
+    };
+  }
+
+  const inv =
+    emitter.refDistance /
+    (emitter.refDistance + Math.max(0, distance - emitter.refDistance) * 0.88);
+  const edgeFade = 1 - smoothstep(emitter.maxDistance * 0.68, emitter.maxDistance, distance);
+  const distanceGain = Math.max(0, Math.min(1, inv * edgeFade));
+
+  const fLen = Math.hypot(forwardX, forwardZ);
+  const fx = fLen > 1e-4 ? forwardX / fLen : 0;
+  const fz = fLen > 1e-4 ? forwardZ / fLen : -1;
+  // Right vector = forward x up(0,1,0) = (-fz, fx)
+  const rightX = -fz;
+  const rightZ = fx;
+
+  const horizDist = Math.hypot(dx, dz);
+  let pan = 0;
+  if (horizDist > 0.1) {
+    pan = Math.max(-1, Math.min(1, (dx / horizDist) * rightX + (dz / horizDist) * rightZ));
+  }
+
+  return {
+    emitter,
+    distance,
+    distanceGain,
+    pan,
+    weight: distanceGain * emitter.baseWeight,
+  };
+}
+
+/**
+ * Evaluates active localized bird-chirp & leaf-rustle emitters, weights, and cadence
+ * inside Lumbini Sacred Garden based on listener 3D pose, ambience preset, weather, and wind.
+ */
+export function computeLumbiniSpatialAudioState(
+  listenerX: number,
+  listenerY: number,
+  listenerZ: number,
+  forwardX: number,
+  forwardZ: number,
+  windLevel: number,
+  preset: LumbiniAmbiencePreset = 'sanctuary-auto',
+  weather: WeatherKind = 'clear',
+): LumbiniSpatialAudioState {
+  const lumbiniFactor = computeLumbiniBlendFactor(listenerX, listenerZ);
+  const dGarden = Math.hypot(listenerX - LUMBINI_SACRED_POND.centerX, listenerZ - LUMBINI_SACRED_POND.centerZ);
+  const precinctFactor = Math.max(lumbiniFactor, 1 - smoothstep(48, 86, dGarden));
+  const inZone = precinctFactor > 0.08;
+
+  if (!inZone) {
+    return {
+      inZone: false,
+      zoneFactor: 0,
+      birdActivity: 0,
+      leafRustleActivity: 0,
+      birdIntervalMinSec: 6.0,
+      birdIntervalMaxSec: 10.0,
+      rustleIntervalMinSec: 6.0,
+      rustleIntervalMaxSec: 11.0,
+      activeBirdEmitters: [],
+      activeRustleEmitters: [],
+      nearestBirdEmitter: null,
+      nearestRustleEmitter: null,
+    };
+  }
+
+  let birdPresetScale = 0.85;
+  let rustlePresetScale = 0.84;
+  let birdMin = 1.65;
+  let birdMax = 3.65;
+  let rustleMin = 2.0;
+  let rustleMax = 4.6;
+
+  switch (preset) {
+    case 'lotus-dawn':
+      birdPresetScale = 1.0;
+      rustlePresetScale = 0.88;
+      birdMin = 1.15;
+      birdMax = 2.65;
+      rustleMin = 2.2;
+      rustleMax = 4.8;
+      break;
+    case 'bodhi-zen':
+      birdPresetScale = 0.92;
+      rustlePresetScale = 0.96;
+      birdMin = 1.45;
+      birdMax = 3.2;
+      rustleMin = 1.75;
+      rustleMax = 4.1;
+      break;
+    case 'butter-lamp-dusk':
+      birdPresetScale = 0.64;
+      rustlePresetScale = 0.82;
+      birdMin = 2.15;
+      birdMax = 4.4;
+      rustleMin = 2.2;
+      rustleMax = 4.9;
+      break;
+    case 'moonlight-vigil':
+      birdPresetScale = 0.24;
+      rustlePresetScale = 0.72;
+      birdMin = 4.2;
+      birdMax = 7.8;
+      rustleMin = 2.6;
+      rustleMax = 5.8;
+      break;
+    case 'sanctuary-auto':
+    default:
+      break;
+  }
+
+  const weatherBirdScale =
+    weather === 'rain' ? 0.18 : weather === 'snow' ? 0.28 : weather === 'foggy' ? 0.68 : weather === 'mist' ? 0.85 : 1.0;
+  const weatherRustleScale =
+    weather === 'rain' ? 1.15 : weather === 'snow' ? 0.75 : weather === 'mist' ? 0.9 : 1.0;
+
+  const clampedWind = Math.max(0, Math.min(1, windLevel));
+  const breezeCadenceScale = Math.max(0.58, 1.15 - clampedWind * 0.45);
+
+  const activeBirdEmitters: SpatialEmitterPanGain[] = [];
+  const activeRustleEmitters: SpatialEmitterPanGain[] = [];
+
+  for (let i = 0; i < LUMBINI_SPATIAL_AUDIO_EMITTERS.length; i++) {
+    const em = LUMBINI_SPATIAL_AUDIO_EMITTERS[i];
+    const evalState = computeSpatialEmitterPanGain(
+      listenerX,
+      listenerY,
+      listenerZ,
+      forwardX,
+      forwardZ,
+      em,
+    );
+    if (evalState.distanceGain <= 0.015) continue;
+    if (em.kind === 'leaf-rustle') {
+      activeRustleEmitters.push(evalState);
+    } else {
+      activeBirdEmitters.push(evalState);
+    }
+  }
+
+  activeBirdEmitters.sort((a, b) => b.weight - a.weight);
+  activeRustleEmitters.sort((a, b) => b.weight - a.weight);
+
+  const nearestBirdEmitter = activeBirdEmitters[0] ?? null;
+  const nearestRustleEmitter = activeRustleEmitters[0] ?? null;
+
+  const birdPeak = nearestBirdEmitter ? Math.min(1, nearestBirdEmitter.distanceGain * 1.12) : 0;
+  const rustlePeak = nearestRustleEmitter ? Math.min(1, nearestRustleEmitter.distanceGain * 1.12) : 0;
+
+  const birdActivity = Math.max(
+    0,
+    Math.min(1, precinctFactor * birdPresetScale * weatherBirdScale * (0.45 + birdPeak * 0.55)),
+  );
+  const leafRustleActivity = Math.max(
+    0,
+    Math.min(
+      1,
+      precinctFactor *
+        rustlePresetScale *
+        weatherRustleScale *
+        (0.45 + clampedWind * 0.55) *
+        (0.42 + rustlePeak * 0.58),
+    ),
+  );
+
+  return {
+    inZone,
+    zoneFactor: precinctFactor,
+    birdActivity,
+    leafRustleActivity,
+    birdIntervalMinSec: birdMin / Math.max(0.45, weatherBirdScale),
+    birdIntervalMaxSec: birdMax / Math.max(0.45, weatherBirdScale),
+    rustleIntervalMinSec: rustleMin * breezeCadenceScale,
+    rustleIntervalMaxSec: rustleMax * breezeCadenceScale,
+    activeBirdEmitters,
+    activeRustleEmitters,
+    nearestBirdEmitter,
+    nearestRustleEmitter,
+  };
+}
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
@@ -2687,4 +3336,331 @@ function lerpHexColor(hexA: string, hexB: string, t: number): string {
   const g = Math.round(lerp(ag, bg, t));
   const bl = Math.round(lerp(ab, bb, t));
   return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
+}
+
+function createMulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export type LotusFlowerStage = 'full-bloom' | 'half-bloom' | 'bud' | 'pad-only';
+export type LotusHueVariant = 'sakura-pink' | 'rose-magenta' | 'ivory-white';
+
+export interface LotusFlowerPlacement {
+  id: number;
+  pond: 'surrounding' | 'pushkarini';
+  x: number;
+  y: number;
+  z: number;
+  padRadius: number;
+  bloomScale: number;
+  rotY: number;
+  padTiltX: number;
+  padTiltZ: number;
+  stage: LotusFlowerStage;
+  hueVariant: LotusHueVariant;
+  phase: number;
+}
+
+function isSafeSurroundingLotusSpot(x: number, z: number, padRadius: number): boolean {
+  const p = LUMBINI_SACRED_POND;
+  const bankMargin = 0.65 + padRadius;
+  const inOuter =
+    x >= p.outerMinX + bankMargin &&
+    x <= p.outerMaxX - bankMargin &&
+    z >= p.outerMinZ + bankMargin &&
+    z <= p.outerMaxZ - bankMargin;
+  if (!inOuter) return false;
+
+  const inInnerCleared =
+    x > p.innerMinX - bankMargin &&
+    x < p.innerMaxX + bankMargin &&
+    z > p.innerMinZ - bankMargin &&
+    z < p.innerMaxZ + bankMargin;
+  if (inInnerCleared) return false;
+
+  // Keep clear of all 4 Sacred Causeway Bridges, underwater piers, and abutment piers
+  if (z >= p.southBridge.minZ - 0.8 && Math.abs(x - p.centerX) <= 4.75 + padRadius) return false;
+  if (z <= p.northBridge.maxZ + 0.8 && Math.abs(x - p.centerX) <= 4.75 + padRadius) return false;
+  if (x >= p.eastBridge.minX - 0.8 && Math.abs(z - 100.0) <= 4.35 + padRadius) return false;
+  if (x <= p.westBridge.maxX + 0.8 && Math.abs(z - 100.0) <= 4.35 + padRadius) return false;
+
+  return isInLumbiniSurroundingPond(x, z);
+}
+
+function isSafePushkariniLotusSpot(x: number, z: number, padRadius: number): boolean {
+  const p = LUMBINI_PUSHKARINI_POND;
+  const margin = 0.72 + padRadius;
+  if (
+    x < p.minX + margin ||
+    x > p.maxX - margin ||
+    z < p.minZ + margin ||
+    z > p.maxZ - margin
+  ) {
+    return false;
+  }
+  const dx = Math.abs(x - p.centerX);
+  const dz = Math.abs(z - p.centerZ);
+  // Keep North/South ritual stairs & center temple reflection lane open
+  if (dx <= 3.2 && dz >= 4.0) return false;
+  if (dx <= 3.6 && dz <= 2.6) return false;
+  return true;
+}
+
+/**
+ * Generates deterministic, botanically clustered procedural lotus flowers & notched lily pads
+ * across both the Lumbini Sacred Garden Surrounding Pond moat and the inner Pushkarini Sacred Pond.
+ */
+export function generateLumbiniPondLotusPlacements(seed = 202604): LotusFlowerPlacement[] {
+  const rand = createMulberry32(seed);
+  const placements: LotusFlowerPlacement[] = [];
+
+  const pickStage = (r: number): LotusFlowerStage => {
+    if (r < 0.39) return 'full-bloom';
+    if (r < 0.64) return 'half-bloom';
+    if (r < 0.82) return 'bud';
+    return 'pad-only';
+  };
+
+  const pickHue = (r: number): LotusHueVariant => {
+    if (r < 0.50) return 'sakura-pink';
+    if (r < 0.78) return 'rose-magenta';
+    return 'ivory-white';
+  };
+
+  const hasOverlap = (
+    pond: 'surrounding' | 'pushkarini',
+    x: number,
+    z: number,
+    padRadius: number,
+  ): boolean => {
+    for (let i = placements.length - 1; i >= 0; i--) {
+      const other = placements[i];
+      if (other.pond !== pond) continue;
+      const minDist = (other.padRadius + padRadius) * 0.96;
+      if (Math.hypot(other.x - x, other.z - z) < minDist) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const expandColony = (
+    pond: 'surrounding' | 'pushkarini',
+    cx: number,
+    cz: number,
+    count: number,
+    spreadX: number,
+    spreadZ: number,
+    waterY: number,
+  ) => {
+    const goldenAngle = 2.399963229728653;
+    const baseAngle = rand() * Math.PI * 2;
+    let attempts = 0;
+    let added = 0;
+    while (added < count && attempts < count * 5) {
+      attempts++;
+      const idx = attempts;
+      const t = Math.sqrt(idx / (count + 1.2));
+      const ang = baseAngle + idx * goldenAngle + (rand() - 0.5) * 0.42;
+      const px = cx + Math.cos(ang) * spreadX * (0.2 + t * 0.85) + (rand() - 0.5) * 0.32;
+      const pz = cz + Math.sin(ang) * spreadZ * (0.2 + t * 0.85) + (rand() - 0.5) * 0.32;
+      const padRadius = 0.25 + rand() * 0.16;
+
+      const valid =
+        pond === 'surrounding'
+          ? isSafeSurroundingLotusSpot(px, pz, padRadius)
+          : isSafePushkariniLotusSpot(px, pz, padRadius);
+      if (!valid || hasOverlap(pond, px, pz, padRadius)) continue;
+
+      const stage = pickStage(rand());
+      placements.push({
+        id: placements.length,
+        pond,
+        x: px,
+        y: waterY,
+        z: pz,
+        padRadius,
+        bloomScale: 0.82 + rand() * 0.46,
+        rotY: rand() * Math.PI * 2,
+        padTiltX: (rand() - 0.5) * 0.05,
+        padTiltZ: (rand() - 0.5) * 0.05,
+        stage,
+        hueVariant: pickHue(rand()),
+        phase: rand() * Math.PI * 2,
+      });
+      added++;
+    }
+  };
+
+  // Surrounding Sacred Pond organic colonies spanning all 4 moat channels & corner bays
+  const surroundingColonies: Array<[number, number, number, number, number]> = [
+    // South channel (West bay: near promenade & South bridge overlook)
+    [-250.5, 152.2, 10, 4.4, 2.2],
+    [-238.5, 152.6, 11, 4.8, 2.2],
+    [-224.0, 152.0, 10, 4.2, 2.1],
+    // South channel (East bay)
+    [-196.0, 152.3, 10, 4.4, 2.2],
+    [-182.0, 152.6, 11, 4.8, 2.2],
+    [-169.0, 152.0, 10, 4.2, 2.1],
+    // North channel (West & East bays)
+    [-250.0, 47.7, 9, 4.2, 2.1],
+    [-235.0, 47.6, 10, 4.6, 2.1],
+    [-221.5, 47.8, 9, 3.8, 2.0],
+    [-197.5, 47.7, 9, 4.0, 2.0],
+    [-182.5, 47.6, 10, 4.6, 2.1],
+    [-168.5, 47.8, 9, 4.0, 2.0],
+    // West channel (South & North arms away from West bridge z=100)
+    [-257.3, 139.0, 8, 1.3, 5.2],
+    [-257.2, 121.0, 8, 1.3, 5.2],
+    [-257.3, 81.0, 8, 1.3, 5.2],
+    [-257.2, 62.5, 8, 1.3, 5.2],
+    // East channel (South & North arms away from East bridge z=100)
+    [-162.7, 139.5, 8, 1.3, 5.2],
+    [-162.8, 121.5, 8, 1.3, 5.2],
+    [-162.7, 81.5, 8, 1.3, 5.2],
+    [-162.8, 62.0, 8, 1.3, 5.2],
+  ];
+  for (const [cx, cz, cnt, sx, sz] of surroundingColonies) {
+    expandColony('surrounding', cx, cz, cnt, sx, sz, LUMBINI_SACRED_POND.waterLevel);
+  }
+
+  // Pushkarini Sacred Pond sheltered corner & side lotus colonies
+  const pushkariniColonies: Array<[number, number, number, number, number]> = [
+    [-207.8, 108.4, 8, 2.2, 1.8],
+    [-207.6, 116.5, 8, 2.2, 1.8],
+    [-192.2, 108.5, 8, 2.2, 1.8],
+    [-192.3, 116.4, 8, 2.2, 1.8],
+  ];
+  for (const [cx, cz, cnt, sx, sz] of pushkariniColonies) {
+    expandColony('pushkarini', cx, cz, cnt, sx, sz, LUMBINI_PUSHKARINI_POND.waterLevel);
+  }
+
+  return placements;
+}
+
+export interface TrailPondRippleOrigin {
+  x: number;
+  z: number;
+  pond: 'surrounding' | 'pushkarini';
+  strength: number;
+  trailZone: string;
+}
+
+/**
+ * Detects when the player walks along the pilgrim trails, promenades, or causeway bridges
+ * flanking the Lumbini Sacred Garden Surrounding Pond or inner Pushkarini Sacred Pond,
+ * returning the water-surface coordinate inside the adjacent reflective pond where a ripple expands.
+ */
+export function findLumbiniTrailPondRippleOrigin(
+  playerX: number,
+  playerZ: number,
+  strideIndex = 0,
+): TrailPondRippleOrigin | null {
+  // Fast spatial AABB cull around the outer Lumbini promenade ring
+  if (playerX < -265.0 || playerX > -155.5 || playerZ < 38.0 || playerZ > 163.5) {
+    return null;
+  }
+
+  const sway = Math.sin(strideIndex * 1.73) * 0.45;
+  const p = LUMBINI_SACRED_POND;
+
+  // 1. Walking on one of the 4 Sacred Causeway Bridges spanning the Surrounding Pond
+  if (isOnLumbiniSacredBridge(playerX, playerZ)) {
+    const side = strideIndex % 2 === 0 ? 1 : -1;
+    if (playerZ >= p.southBridge.minZ - 0.5) {
+      const rx = Math.max(-258.5, Math.min(-161.5, p.centerX + side * (4.4 + (strideIndex % 3) * 0.35)));
+      const rz = Math.max(p.innerMaxZ + 0.95, Math.min(p.outerMaxZ - 0.95, playerZ));
+      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'south-bridge' };
+    }
+    if (playerZ <= p.northBridge.maxZ + 0.5) {
+      const rx = Math.max(-258.5, Math.min(-161.5, p.centerX + side * (4.4 + (strideIndex % 3) * 0.35)));
+      const rz = Math.max(p.outerMinZ + 0.95, Math.min(p.innerMinZ - 0.95, playerZ));
+      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'north-bridge' };
+    }
+    if (playerX >= p.eastBridge.minX - 0.5) {
+      const rx = Math.max(p.innerMaxX + 0.95, Math.min(p.outerMaxX - 0.95, playerX));
+      const rz = Math.max(p.outerMinZ + 1.0, Math.min(p.outerMaxZ - 1.0, 100.0 + side * (3.9 + (strideIndex % 3) * 0.35)));
+      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'east-bridge' };
+    }
+    const rx = Math.max(p.outerMinX + 0.95, Math.min(p.innerMinX - 0.95, playerX));
+    const rz = Math.max(p.outerMinZ + 1.0, Math.min(p.outerMaxZ - 1.0, 100.0 + side * (3.9 + (strideIndex % 3) * 0.35)));
+    return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'west-bridge' };
+  }
+
+  // 2. Outer Surrounding Pond Pilgrim Promenades & bordering approach paths
+  const avoidNSBridgeX = (wx: number): number => {
+    if (Math.abs(wx - p.centerX) < 4.55) {
+      return wx >= p.centerX ? p.centerX + 4.75 : p.centerX - 4.75;
+    }
+    return wx;
+  };
+  const avoidEWBridgeZ = (wz: number): number => {
+    if (Math.abs(wz - 100.0) < 4.15) {
+      return wz >= 100.0 ? 104.35 : 95.65;
+    }
+    return wz;
+  };
+
+  if (playerX >= -262.0 && playerX <= -158.5 && playerZ >= 156.0 && playerZ <= 163.2) {
+    const rx = avoidNSBridgeX(Math.max(p.outerMinX + 1.1, Math.min(p.outerMaxX - 1.1, playerX + sway)));
+    return { x: rx, z: p.outerMaxZ - 1.05, pond: 'surrounding', strength: 0.74, trailZone: 'south-outer-trail' };
+  }
+  if (playerX >= -262.0 && playerX <= -158.5 && playerZ >= 38.4 && playerZ <= 44.2) {
+    const rx = avoidNSBridgeX(Math.max(p.outerMinX + 1.1, Math.min(p.outerMaxX - 1.1, playerX + sway)));
+    return { x: rx, z: p.outerMinZ + 1.05, pond: 'surrounding', strength: 0.74, trailZone: 'north-outer-trail' };
+  }
+  if (playerX >= -264.5 && playerX <= -259.8 && playerZ >= 43.8 && playerZ <= 156.2) {
+    const rz = avoidEWBridgeZ(Math.max(p.outerMinZ + 1.1, Math.min(p.outerMaxZ - 1.1, playerZ + sway)));
+    return { x: p.outerMinX + 1.05, z: rz, pond: 'surrounding', strength: 0.74, trailZone: 'west-outer-trail' };
+  }
+  if (playerX >= -160.2 && playerX <= -155.8 && playerZ >= 43.8 && playerZ <= 156.2) {
+    const rz = avoidEWBridgeZ(Math.max(p.outerMinZ + 1.1, Math.min(p.outerMaxZ - 1.1, playerZ + sway)));
+    return { x: p.outerMaxX - 1.05, z: rz, pond: 'surrounding', strength: 0.74, trailZone: 'east-outer-trail' };
+  }
+
+  // 3. Inner Sacred Garden perimeter pilgrim trails overlooking the moat inside the walls
+  const inInnerIsland =
+    playerX >= p.innerMinX && playerX <= p.innerMaxX && playerZ >= p.innerMinZ && playerZ <= p.innerMaxZ;
+  if (inInnerIsland) {
+    if (playerZ >= p.innerMaxZ - 4.2) {
+      const rx = avoidNSBridgeX(Math.max(p.innerMinX + 1.0, Math.min(p.innerMaxX - 1.0, playerX + sway)));
+      return { x: rx, z: p.innerMaxZ + 1.05, pond: 'surrounding', strength: 0.70, trailZone: 'south-inner-trail' };
+    }
+    if (playerZ <= p.innerMinZ + 4.2) {
+      const rx = avoidNSBridgeX(Math.max(p.innerMinX + 1.0, Math.min(p.innerMaxX - 1.0, playerX + sway)));
+      return { x: rx, z: p.innerMinZ - 1.05, pond: 'surrounding', strength: 0.70, trailZone: 'north-inner-trail' };
+    }
+    if (playerX <= p.innerMinX + 4.2) {
+      const rz = avoidEWBridgeZ(Math.max(p.innerMinZ + 1.0, Math.min(p.innerMaxZ - 1.0, playerZ + sway)));
+      return { x: p.innerMinX - 1.05, z: rz, pond: 'surrounding', strength: 0.70, trailZone: 'west-inner-trail' };
+    }
+    if (playerX >= p.innerMaxX - 4.2) {
+      const rz = avoidEWBridgeZ(Math.max(p.innerMinZ + 1.0, Math.min(p.innerMaxZ - 1.0, playerZ + sway)));
+      return { x: p.innerMaxX + 1.05, z: rz, pond: 'surrounding', strength: 0.70, trailZone: 'east-inner-trail' };
+    }
+  }
+
+  // 4. Inner Pushkarini Sacred Pond Overlook Causeway & South/East/North Brick Walks
+  const pk = LUMBINI_PUSHKARINI_POND;
+  if (
+    !isInLumbiniPushkariniPond(playerX, playerZ) &&
+    playerX >= pk.minX - 7.8 &&
+    playerX <= pk.maxX + 6.5 &&
+    playerZ >= pk.minZ - 6.0 &&
+    playerZ <= pk.maxZ + 7.6
+  ) {
+    const clampedX = Math.max(pk.minX + 0.9, Math.min(pk.maxX - 0.9, playerX + sway * 0.6));
+    const clampedZ = Math.max(pk.minZ + 0.9, Math.min(pk.maxZ - 0.9, playerZ + sway * 0.6));
+    const rx = playerX < pk.minX ? pk.minX + 0.9 : playerX > pk.maxX ? pk.maxX - 0.9 : clampedX;
+    const rz = playerZ < pk.minZ ? pk.minZ + 0.9 : playerZ > pk.maxZ ? pk.maxZ - 0.9 : clampedZ;
+    return { x: rx, z: rz, pond: 'pushkarini', strength: 0.72, trailZone: 'pushkarini-trail' };
+  }
+
+  return null;
 }

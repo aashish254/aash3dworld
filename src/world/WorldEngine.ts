@@ -10,6 +10,7 @@ import {
   FootstepSurfaceKind,
   GLACIAL_LAKE,
   LUMBINI_PEACE_CANAL,
+  LUMBINI_SACRED_POND,
   LumbiniAmbiencePreset,
   OUTER_TEMPLE_ARTIFACT_SPOTS,
   OuterTempleArtifactSpot,
@@ -25,6 +26,7 @@ import {
   computeLumbiniAudioProfile,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
+  findLumbiniTrailPondRippleOrigin,
   findNearestLandmark,
   getFootstepSurfaceKind,
   getMeadowZoneAt,
@@ -33,8 +35,10 @@ import {
   getSurfaceHeightAt,
   getWorldTreeSpots,
   groundHeightAt,
+  isInLumbiniSurroundingPond,
   isOnBridgeDeck,
   isOnLumbiniCanalBridge,
+  isOnLumbiniSacredBridge,
 } from './worldLogic';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
 import {
@@ -56,7 +60,7 @@ import {
   createSculptedHimalayas,
   sampleTerrainMeshHeight,
 } from './mountainAndTerrain';
-import { triggerWaterRipple } from './waterShader';
+import { REFLECTIVE_WATER_ENV_UNIFORMS, triggerWaterRipple } from './waterShader';
 import {
   ExplorerCharacterRig,
   InteractiveProp,
@@ -113,6 +117,7 @@ const _vec3 = new THREE.Vector3();
 const _camTargetPos = new THREE.Vector3();
 const _camLookTarget = new THREE.Vector3();
 const _camRayDir = new THREE.Vector3();
+const _camForward = new THREE.Vector3();
 const _targetColor = new THREE.Color();
 const _pointer = new THREE.Vector2();
 const _deltaQuat = new THREE.Quaternion();
@@ -308,6 +313,10 @@ export class WorldEngine {
   private resizeObserver: ResizeObserver | null = null;
   private justTeleported = false;
   private renderQueued = false;
+  private lumbiniLotusCount = 0;
+  private pondRainIntensity = 0;
+  private pondTrailRippleCount = 0;
+  private lastTrailRippleAt = -10;
 
   constructor(container: HTMLElement, callbacks: WorldEngineCallbacks) {
     this.container = container;
@@ -751,7 +760,7 @@ export class WorldEngine {
           }
           this.scheduleImmediateRender();
         }),
-      'lumbini-buddha': () => createLumbiniBuddha(this.textures),
+      'lumbini-buddha': () => createLumbiniBuddha(this.textures, this.isSoftwareGl),
       'vit-vellore-tower': () => createVitClockTower(this.textures),
       'aniflow-studio': () => createAniFlowStudio(this.textures),
       'agent-infra-monolith': () => createAgentCitadel(this.textures),
@@ -772,6 +781,9 @@ export class WorldEngine {
       this.landmarkHitTargets.push(built.hitMesh);
       this.beaconLights.push(...built.beaconLights);
       this.animatedLandmarkNodes.push(...built.animatedNodes);
+      if (lm.id === 'lumbini-buddha' && typeof built.group.userData.lotusCount === 'number') {
+        this.lumbiniLotusCount = built.group.userData.lotusCount;
+      }
       if (built.cameraOccluders && built.cameraOccluders.length > 0) {
         this.cameraOccluders.push(...built.cameraOccluders);
       }
@@ -1972,6 +1984,18 @@ export class WorldEngine {
         flowZ: 0,
       };
     }
+    if (isOnLumbiniSacredBridge(x, z)) {
+      return { inWater: false, surfaceY: -999, bedY: 0, flowX: 0, flowZ: 0 };
+    }
+    if (isInLumbiniSurroundingPond(x, z)) {
+      return {
+        inWater: true,
+        surfaceY: LUMBINI_SACRED_POND.waterLevel,
+        bedY: groundHeightAt(x, z),
+        flowX: 0,
+        flowZ: 0,
+      };
+    }
     if (isOnLumbiniCanalBridge(x, z)) {
       return { inWater: false, surfaceY: -999, bedY: 0, flowX: 0, flowZ: 0 };
     }
@@ -2614,6 +2638,8 @@ export class WorldEngine {
 
   public setWeather(weather: WeatherKind): void {
     this.weather = weather;
+    this.pondRainIntensity = weather === 'rain' ? 1.0 : weather === 'mist' ? 0.14 : 0.0;
+    REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value = this.pondRainIntensity;
     this.syncLighting((performance.now() - this.startTimeMs) / 1000);
     this.emitHud(true);
     this.scheduleImmediateRender();
@@ -2839,6 +2865,21 @@ export class WorldEngine {
       this.scene.fog.color.set(state.fogColor);
       this.scene.fog.density = state.fogDensity * 0.85;
     }
+    REFLECTIVE_WATER_ENV_UNIFORMS.uWaterTime.value = elapsed;
+    const targetRain = this.weather === 'rain' ? 1.0 : this.weather === 'mist' ? 0.14 : 0.0;
+    if (Math.abs(this.pondRainIntensity - targetRain) < 0.005) {
+      this.pondRainIntensity = targetRain;
+    }
+    REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value = this.pondRainIntensity;
+    REFLECTIVE_WATER_ENV_UNIFORMS.uSkyColor.value
+      .set(state.skyHorizonColor)
+      .lerp(_targetColor.set(state.skyTopColor), 0.35);
+    REFLECTIVE_WATER_ENV_UNIFORMS.uSunDir.value
+      .set(sunOffX, sunOffY, sunOffZ)
+      .normalize();
+    REFLECTIVE_WATER_ENV_UNIFORMS.uSunColor.value.set(state.sunColor);
+    REFLECTIVE_WATER_ENV_UNIFORMS.uFogColor.value.set(state.fogColor);
+    REFLECTIVE_WATER_ENV_UNIFORMS.uFogDensity.value = state.fogDensity * 0.85;
     WORLD_HAZE_UNIFORMS.uHazeColor.value.set(state.fogColor);
     WORLD_HAZE_UNIFORMS.uSunDir.value.set(sunOffX, sunOffY, sunOffZ).normalize();
     WORLD_HAZE_UNIFORMS.uSunColor.value.set(state.sunColor);
@@ -2961,6 +3002,9 @@ export class WorldEngine {
       canvas.dataset.bloomStrength = state.bloomStrength.toFixed(2);
       canvas.dataset.bloomThreshold = state.bloomThreshold.toFixed(2);
       canvas.dataset.postprocessing = this.composer ? 'bloom' : 'direct';
+      canvas.dataset.lotusCount = String(this.lumbiniLotusCount);
+      canvas.dataset.pondRainRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value.toFixed(2);
+      canvas.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
     }
   }
 
@@ -3056,6 +3100,8 @@ export class WorldEngine {
   }
 
   private updateSimulation(dt: number, elapsed: number): void {
+    const targetRainIntensity = this.weather === 'rain' ? 1.0 : this.weather === 'mist' ? 0.14 : 0.0;
+    this.pondRainIntensity += (targetRainIntensity - this.pondRainIntensity) * (1 - Math.exp(-4.0 * dt));
     this.syncLighting(elapsed);
     this.riverController.update(elapsed);
     this.glacialLakeController?.update(elapsed);
@@ -3116,7 +3162,40 @@ export class WorldEngine {
       this.playerPos.z,
       this.playerPos.y,
     );
-    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather);
+    this.camera.getWorldDirection(_camForward);
+    soundEngine.updateAmbience(ambienceMix, dt, this.lumbiniPreset, this.weather, {
+      x: this.playerPos.x,
+      y: this.playerPos.y + 1.6,
+      z: this.playerPos.z,
+      forwardX: _camForward.x,
+      forwardY: _camForward.y,
+      forwardZ: _camForward.z,
+    });
+    const leafBurst = soundEngine.consumeTriggeredLeafBurst();
+    if (
+      leafBurst &&
+      Math.hypot(leafBurst.x - this.playerPos.x, leafBurst.z - this.playerPos.z) < 28
+    ) {
+      for (let k = 0; k < 3; k++) {
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 0.6 + Math.random() * 1.9;
+        this.pushBurstParticle(
+          leafBurst.x + Math.cos(ang) * rad,
+          leafBurst.y - 0.5 + (Math.random() - 0.5) * 0.8,
+          leafBurst.z + Math.sin(ang) * rad,
+          (Math.random() - 0.5) * 0.55,
+          -0.25 - Math.random() * 0.25,
+          (Math.random() - 0.5) * 0.55,
+          0.32 + Math.random() * 0.14,
+          0.62 + Math.random() * 0.14,
+          0.26 + Math.random() * 0.08,
+          24 + Math.random() * 10,
+          1.45 + Math.random() * 0.7,
+          2,
+        );
+      }
+    }
+    const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
     const lumbiniAudio = computeLumbiniAudioProfile(ambienceMix, this.lumbiniPreset, this.weather);
     const surfaceKind = getFootstepSurfaceKind(this.playerPos.x, this.playerPos.z);
     if (this.renderer?.domElement) {
@@ -3127,6 +3206,13 @@ export class WorldEngine {
       this.renderer.domElement.dataset.chimeActivity = lumbiniAudio.chimeActivity.toFixed(2);
       this.renderer.domElement.dataset.bowlActivity = lumbiniAudio.bowlActivity.toFixed(2);
       this.renderer.domElement.dataset.flagFlutter = lumbiniAudio.flagFlutterLevel.toFixed(2);
+      this.renderer.domElement.dataset.lumbiniSpatialAudio = lumbiniSpatial.inZone ? 'true' : 'false';
+      this.renderer.domElement.dataset.lumbiniBirdEmitter =
+        lumbiniSpatial.lastBirdEmitterId ?? lumbiniSpatial.nearestBirdEmitterId ?? 'none';
+      this.renderer.domElement.dataset.lumbiniRustleEmitter =
+        lumbiniSpatial.lastRustleEmitterId ?? lumbiniSpatial.nearestRustleEmitterId ?? 'none';
+      this.renderer.domElement.dataset.lumbiniBirdEvents = String(lumbiniSpatial.birdEventCount);
+      this.renderer.domElement.dataset.lumbiniRustleEvents = String(lumbiniSpatial.rustleEventCount);
       this.renderer.domElement.dataset.inMeadow = meadowInfo.inMeadow ? 'true' : 'false';
       this.renderer.domElement.dataset.meadowZone = meadowInfo.zoneId ?? 'none';
       this.renderer.domElement.dataset.meadowDisp = this.meadowDisplacementStrength.toFixed(2);
@@ -3667,6 +3753,19 @@ export class WorldEngine {
           if (strideIdx !== this.lastFootstepStrideIdx) {
             this.lastFootstepStrideIdx = strideIdx;
             this.spawnFootstepBurst(surfaceKind, false, strideIdx % 2 === 0 ? 1 : -1);
+            const trailRipple = findLumbiniTrailPondRippleOrigin(
+              this.playerPos.x,
+              this.playerPos.z,
+              strideIdx,
+            );
+            if (trailRipple && elapsed - this.lastTrailRippleAt >= 0.18) {
+              triggerWaterRipple(trailRipple.x, trailRipple.z, elapsed, trailRipple.strength);
+              this.lastTrailRippleAt = elapsed;
+              this.pondTrailRippleCount++;
+              if (this.renderer?.domElement) {
+                this.renderer.domElement.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
+              }
+            }
           }
         }
       }
@@ -3838,6 +3937,9 @@ export class WorldEngine {
     this.cleanupListeners();
 
     this.scene?.traverse((obj) => {
+      if ((obj as { isReflector?: boolean; dispose?: () => void }).isReflector) {
+        (obj as { dispose: () => void }).dispose();
+      }
       if ((obj as THREE.Mesh).isMesh || (obj as THREE.Points).isPoints) {
         const renderable = obj as THREE.Mesh | THREE.Points;
         renderable.geometry?.dispose();

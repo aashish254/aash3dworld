@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 
 export interface WaterShaderOptions {
   mode: 'river' | 'lake' | 'pond';
@@ -8,7 +9,7 @@ export interface WaterShaderOptions {
   deepTint?: THREE.ColorRepresentation;
 }
 
-export const WATER_RIPPLE_COUNT = 8;
+export const WATER_RIPPLE_COUNT = 12;
 
 const rippleSlots: THREE.Vector4[] = Array.from(
   { length: WATER_RIPPLE_COUNT },
@@ -20,6 +21,19 @@ let lastRippleTime = -10;
 export const WATER_INTERACTION_UNIFORMS = {
   uWaterRipples: { value: rippleSlots },
 };
+
+export const REFLECTIVE_WATER_ENV_UNIFORMS = {
+  uWaterTime: { value: 0 },
+  uRainIntensity: { value: 0 },
+  uSkyColor: { value: new THREE.Color('#9ec4de') },
+  uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.35).normalize() },
+  uSunColor: { value: new THREE.Color('#fff2dc') },
+  uFogColor: { value: new THREE.Color('#c9dfef') },
+  uFogDensity: { value: 0.0022 },
+};
+
+let isRenderingPlanarReflection = false;
+const _camDeltaPos = new THREE.Vector3();
 
 /**
  * Spawns an expanding concentric water ripple ring in world XZ coordinates
@@ -39,6 +53,302 @@ export function triggerWaterRipple(
   rippleSlots[rippleCursor].set(worldX, worldZ, elapsed, THREE.MathUtils.clamp(strength, 0.25, 2.0));
   rippleCursor = (rippleCursor + 1) % WATER_RIPPLE_COUNT;
   lastRippleTime = elapsed;
+}
+
+export interface ReflectivePondOptions {
+  textureSize?: number;
+  isSoftwareGl?: boolean;
+  deepTint?: THREE.ColorRepresentation;
+  shallowTint?: THREE.ColorRepresentation;
+  reflectivity?: number;
+  rippleStrength?: number;
+  anchorWorldPos?: THREE.Vector3;
+  maxActiveDistance?: number;
+}
+
+/**
+ * Creates a real-time planar reflective water surface using Three.js Reflector
+ * blended with animated capillary ripples, interactive footstep/prop wave rings,
+ * Schlick Fresnel reflection, deep sacred pond emerald tint, and atmospheric fog.
+ */
+export function createReflectivePondSurface(
+  geometry: THREE.BufferGeometry,
+  options: ReflectivePondOptions = {},
+): Reflector {
+  const isSoft = Boolean(options.isSoftwareGl);
+  const texSize = options.textureSize ?? (isSoft ? 256 : 512);
+  const deepColor = new THREE.Color(options.deepTint ?? 0x0b2d30);
+  const shallowColor = new THREE.Color(options.shallowTint ?? 0x226863);
+  const reflectivity = options.reflectivity ?? 0.86;
+  const rippleStrength = options.rippleStrength ?? 0.022;
+  const anchorPos = (options.anchorWorldPos ?? new THREE.Vector3(-210, 0, 96)).clone();
+  const maxActiveDist = options.maxActiveDistance ?? 225;
+
+  const customShader = {
+    name: 'SacredPondReflectiveWaterShader',
+    uniforms: {
+      color: { value: new THREE.Color(0xc8dfdd) },
+      tDiffuse: { value: null },
+      textureMatrix: { value: new THREE.Matrix4() },
+      uWaterTime: { value: 0 },
+      uRainIntensity: { value: 0 },
+      uSkyColor: { value: new THREE.Color('#9ec4de') },
+      uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.35).normalize() },
+      uSunColor: { value: new THREE.Color('#fff2dc') },
+      uFogColor: { value: new THREE.Color('#c9dfef') },
+      uFogDensity: { value: 0.0022 },
+      uDeepColor: { value: deepColor },
+      uShallowColor: { value: shallowColor },
+      uReflectivity: { value: reflectivity },
+      uRippleStrength: { value: rippleStrength },
+      uWaterRipples: { value: rippleSlots },
+    },
+    vertexShader: /* glsl */ `
+      uniform mat4 textureMatrix;
+      varying vec4 vProjUv;
+      varying vec3 vWorldPos;
+      varying vec2 vPondUv;
+
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+
+      void main() {
+        vPondUv = uv;
+        vProjUv = textureMatrix * vec4(position, 1.0);
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPosition.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+
+        #include <logdepthbuf_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 color;
+      uniform sampler2D tDiffuse;
+      uniform float uWaterTime;
+      uniform float uRainIntensity;
+      uniform vec3 uSkyColor;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      uniform vec3 uDeepColor;
+      uniform vec3 uShallowColor;
+      uniform float uReflectivity;
+      uniform float uRippleStrength;
+      uniform vec4 uWaterRipples[${WATER_RIPPLE_COUNT}];
+
+      varying vec4 vProjUv;
+      varying vec3 vWorldPos;
+      varying vec2 vPondUv;
+
+      #include <logdepthbuf_pars_fragment>
+
+      vec3 rainHash3(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yxz + 33.33);
+        return fract((p3.xxy + p3.yzz) * p3.zyx);
+      }
+
+      // Evaluates a localized expanding raindrop ring inside cell [0..1]^2 with zero boundary crossing
+      vec3 evalRainRingLayer(vec2 worldXZ, float scale, float angle, float rate, vec2 seedOff) {
+        float ca = cos(angle);
+        float sa = sin(angle);
+        mat2 rot = mat2(ca, -sa, sa, ca);
+        vec2 p = (rot * worldXZ) * scale + seedOff;
+        vec2 cell = floor(p);
+        vec2 f = fract(p);
+
+        float slot = floor(uWaterTime * rate);
+        vec3 h = rainHash3(cell + seedOff + slot * 0.37);
+        float cycle = fract(uWaterTime * rate + h.z);
+        if (cycle < 0.01) return vec3(0.0);
+
+        vec2 center = vec2(0.5) + (h.xy - 0.5) * 0.34;
+        vec2 dVec = f - center;
+        float dist = length(dVec);
+        float radius = cycle * 0.27;
+        float ringDelta = dist - radius;
+        float fade = smoothstep(0.0, 0.07, cycle) * pow(max(0.0, 1.0 - cycle), 1.35);
+        float env = exp(-ringDelta * ringDelta * 260.0) * fade;
+        float ringWave = cos(ringDelta * 46.0) * env;
+        float crest = smoothstep(0.28, 0.92, sin(ringDelta * 46.0)) * env;
+
+        vec2 dirLocal = dVec / max(dist, 0.0005);
+        vec2 gradWorld = mat2(ca, sa, -sa, ca) * (dirLocal * ringWave * 0.14);
+        return vec3(gradWorld.x, gradWorld.y, crest);
+      }
+
+      void main() {
+        #include <logdepthbuf_fragment>
+
+        float t = uWaterTime * 0.92;
+        vec2 wp = vWorldPos.xz;
+
+        // Multi-directional calm sacred-garden capillary ripples
+        float w1 = sin(wp.x * 1.45 + wp.y * 0.95 - t * 1.15);
+        float w2 = cos(wp.y * 1.85 - wp.x * 1.12 + t * 0.88);
+        float w3 = sin((wp.x - wp.y) * 2.65 - t * 1.42);
+        float w4 = cos((wp.x + wp.y) * 3.15 + t * 1.25);
+
+        float rainAmt = clamp(uRainIntensity, 0.0, 1.0);
+        float windGain = 1.0 + rainAmt * 0.55;
+        float gx = (cos(wp.x * 1.65 + wp.y * 1.05 - t * 1.15) * 0.55
+                 + sin(wp.y * 2.15 - wp.x * 1.28 + t * 0.88) * 0.35
+                 + cos((wp.x - wp.y) * 2.95 - t * 1.42) * 0.24) * 0.028 * windGain;
+        float gz = (cos(wp.x * 1.65 + wp.y * 1.05 - t * 1.15) * 0.35
+                 - sin(wp.y * 2.15 - wp.x * 1.28 + t * 0.88) * 0.52
+                 + sin((wp.x + wp.y) * 3.35 + t * 1.25) * 0.24) * 0.028 * windGain;
+
+        // Procedural multi-scale raindrop ripple rings across pond surface when raining
+        float interactiveFoam = 0.0;
+        if (rainAmt > 0.005) {
+          vec3 r1 = evalRainRingLayer(wp, 0.92, 0.00, 1.45, vec2(1.3, 4.7));
+          vec3 r2 = evalRainRingLayer(wp, 1.42, 0.62, 1.85, vec2(11.7, 3.1));
+          vec3 r3 = evalRainRingLayer(wp, 2.08, 1.24, 2.35, vec2(5.9, 17.3));
+          vec3 rSum = (r1 + r2 * 0.9 + r3 * 0.78) * rainAmt;
+          gx += rSum.x;
+          gz += rSum.y;
+          interactiveFoam += rSum.z * 0.42;
+        }
+
+        // World-space interactive concentric ripple rings (pilgrim trails, bridges, wading & splashes)
+        for (int rIdx = 0; rIdx < ${WATER_RIPPLE_COUNT}; rIdx++) {
+          vec4 rp = uWaterRipples[rIdx];
+          float age = uWaterTime - rp.z;
+          if (age > 0.0 && age < 2.8 && rp.w > 0.01) {
+            vec2 dVec = wp - rp.xy;
+            float dLen = length(dVec);
+            float radius = age * 3.6;
+            float ringDelta = dLen - radius;
+            float env = exp(-age * 1.15) * exp(-ringDelta * ringDelta * 3.8) * rp.w;
+            float ringWave = sin(ringDelta * 10.5);
+            interactiveFoam += smoothstep(0.30, 0.92, ringWave) * env * 0.62;
+            vec2 dir2 = dVec / max(dLen, 0.001);
+            float dWave = cos(ringDelta * 10.5) * env * 0.17;
+            gx += dir2.x * dWave;
+            gz += dir2.y * dWave;
+          }
+        }
+
+        vec3 N = normalize(vec3(-gx, 1.0, -gz));
+        vec3 toCam = cameraPosition - vWorldPos;
+        float camDist = length(toCam);
+        vec3 V = toCam / max(camDist, 0.0001);
+
+        float ndv = clamp(dot(N, V), 0.0, 1.0);
+        float fresnel = 0.22 + 0.78 * pow(1.0 - ndv, 2.8);
+
+        // Projective planar reflection lookup with calm temple-pond ripple distortion
+        vec4 reflUv = vProjUv;
+        float projW = max(reflUv.w, 0.001);
+        vec2 rippleDisp = vec2(gx, gz) * (uRippleStrength * 11.5) * projW;
+        reflUv.xy += rippleDisp;
+        vec2 safeNd = clamp(reflUv.xy / projW, 0.003, 0.997);
+        reflUv.xy = safeNd * projW;
+        vec3 planarRefl = texture2DProj(tDiffuse, reflUv).rgb;
+
+        // Subtle underwater stone caustic tint + deep emerald absorption
+        float caustic = smoothstep(0.45, 0.95, (w1 * w2 + w3 * w4) * 0.25 + 0.5);
+        vec3 waterBody = mix(uDeepColor, uShallowColor, 0.34 + 0.26 * (1.0 - ndv));
+        waterBody += vec3(0.03, 0.08, 0.075) * caustic;
+
+        // Blend water body with live planar reflection & soft sky bounce
+        vec3 envReflect = mix(planarRefl * color, uSkyColor * 0.95, 0.06 + rainAmt * 0.12);
+        float reflWeight = clamp(fresnel * uReflectivity + 0.32 - rainAmt * 0.08, 0.28, 0.94);
+        vec3 col = mix(waterBody, envReflect, reflWeight);
+
+        // Crisp sun specular sparkle on wave & raindrop crests
+        vec3 L = normalize(uSunDir);
+        vec3 H = normalize(L + V);
+        float sunHeight = smoothstep(0.02, 0.25, L.y);
+        float spec = pow(max(dot(N, H), 0.0), 140.0) * sunHeight;
+        col += uSunColor * spec * 0.85;
+
+        // Interactive splash & raindrop ring foam highlights
+        col = mix(col, vec3(0.92, 0.97, 0.96), clamp(interactiveFoam, 0.0, 0.82));
+
+        // Match scene exponential squared fog
+        float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * camDist * camDist);
+        col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+        gl_FragColor = vec4(col, 0.96);
+
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  };
+
+  const reflector = new Reflector(geometry, {
+    clipBias: 0.003,
+    textureWidth: texSize,
+    textureHeight: texSize,
+    multisample: 0,
+    color: 0xd6e6e4,
+    shader: customShader,
+  });
+
+  // Wire shared live environment uniforms directly after Reflector clones shader.uniforms
+  const mat = reflector.material as THREE.ShaderMaterial;
+  mat.uniforms.uWaterTime = REFLECTIVE_WATER_ENV_UNIFORMS.uWaterTime;
+  mat.uniforms.uRainIntensity = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity;
+  mat.uniforms.uSkyColor = REFLECTIVE_WATER_ENV_UNIFORMS.uSkyColor;
+  mat.uniforms.uSunDir = REFLECTIVE_WATER_ENV_UNIFORMS.uSunDir;
+  mat.uniforms.uSunColor = REFLECTIVE_WATER_ENV_UNIFORMS.uSunColor;
+  mat.uniforms.uFogColor = REFLECTIVE_WATER_ENV_UNIFORMS.uFogColor;
+  mat.uniforms.uFogDensity = REFLECTIVE_WATER_ENV_UNIFORMS.uFogDensity;
+  mat.uniforms.uWaterRipples = WATER_INTERACTION_UNIFORMS.uWaterRipples;
+  mat.transparent = true;
+
+  // Guard against recursive reflector-in-reflector renders + distance & software-GL frame pacing
+  const baseOnBeforeRender = reflector.onBeforeRender;
+  let hasRenderedOnce = false;
+  let frameCounter = 0;
+  const lastCamPos = new THREE.Vector3(1e6, 1e6, 1e6);
+  const lastCamQuat = new THREE.Quaternion();
+
+  reflector.onBeforeRender = function (renderer, scene, camera, ...rest) {
+    if (isRenderingPlanarReflection) return;
+    if (camera.position.distanceTo(anchorPos) > maxActiveDist) return;
+
+    frameCounter++;
+    const camMoved =
+      _camDeltaPos.subVectors(camera.position, lastCamPos).lengthSq() > 0.04;
+    const camRotated =
+      1 - Math.abs(lastCamQuat.dot(camera.quaternion)) > 0.0015;
+
+    if (
+      isSoft &&
+      hasRenderedOnce &&
+      !camMoved &&
+      !camRotated &&
+      frameCounter % 4 !== 0
+    ) {
+      return;
+    }
+
+    isRenderingPlanarReflection = true;
+    try {
+      (
+        baseOnBeforeRender as (
+          r: THREE.WebGLRenderer,
+          s: THREE.Scene,
+          c: THREE.Camera,
+          ...args: unknown[]
+        ) => void
+      ).call(this, renderer, scene, camera, ...rest);
+      hasRenderedOnce = true;
+      lastCamPos.copy(camera.position);
+      lastCamQuat.copy(camera.quaternion);
+    } finally {
+      isRenderingPlanarReflection = false;
+    }
+  };
+
+  reflector.userData.nonCollidable = true;
+  reflector.userData.isReflectiveWater = true;
+  return reflector;
 }
 
 /**
@@ -79,6 +389,7 @@ export function applyRealisticWaterShader(
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uWaterTime = uTime;
+    shader.uniforms.uRainIntensity = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity;
     shader.uniforms.uWaterDeep = { value: deepColor };
     shader.uniforms.uWaterShallow = { value: shallowColor };
     shader.uniforms.uWaterRipples = WATER_INTERACTION_UNIFORMS.uWaterRipples;
@@ -128,13 +439,45 @@ export function applyRealisticWaterShader(
         '#include <common>',
         `#include <common>
          uniform float uWaterTime;
+         uniform float uRainIntensity;
          uniform vec3 uWaterDeep;
          uniform vec3 uWaterShallow;
          uniform vec4 uWaterRipples[${WATER_RIPPLE_COUNT}];
          varying vec2 vWaterUv;
          varying vec3 vWaterLocal;
          varying vec3 vWaterWorldPos;
-         varying float vWaveCrest;`,
+         varying float vWaveCrest;
+
+         vec3 stdRainHash3(vec2 p) {
+           vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+           p3 += dot(p3, p3.yxz + 33.33);
+           return fract((p3.xxy + p3.yzz) * p3.zyx);
+         }
+
+         vec3 evalStdRainRing(vec2 worldXZ, float scale, float angle, float rate, vec2 seedOff) {
+           float ca = cos(angle);
+           float sa = sin(angle);
+           mat2 rot = mat2(ca, -sa, sa, ca);
+           vec2 p = (rot * worldXZ) * scale + seedOff;
+           vec2 cell = floor(p);
+           vec2 f = fract(p);
+           float slot = floor(uWaterTime * rate);
+           vec3 h = stdRainHash3(cell + seedOff + slot * 0.37);
+           float cycle = fract(uWaterTime * rate + h.z);
+           if (cycle < 0.01) return vec3(0.0);
+           vec2 center = vec2(0.5) + (h.xy - 0.5) * 0.34;
+           vec2 dVec = f - center;
+           float dist = length(dVec);
+           float radius = cycle * 0.27;
+           float ringDelta = dist - radius;
+           float fade = smoothstep(0.0, 0.07, cycle) * pow(max(0.0, 1.0 - cycle), 1.35);
+           float env = exp(-ringDelta * ringDelta * 260.0) * fade;
+           float ringWave = cos(ringDelta * 46.0) * env;
+           float crest = smoothstep(0.28, 0.92, sin(ringDelta * 46.0)) * env;
+           vec2 dirLocal = dVec / max(dist, 0.0005);
+           vec2 gradWorld = mat2(ca, sa, -sa, ca) * (dirLocal * ringWave * 0.16);
+           return vec3(gradWorld.x, gradWorld.y, crest);
+         }`,
       )
       .replace(
         '#include <color_fragment>',
@@ -177,23 +520,32 @@ export function applyRealisticWaterShader(
          float f2 = cos(vWaterLocal.x * 2.8 - vWaterLocal.z * 2.4 + wt * 1.1);`
          }
 
-         // Interactive expanding concentric water ripples from footsteps & splashed props
+         // Interactive expanding concentric water ripples from footsteps, trails & rain
          float interactiveFoam = 0.0;
          float rippleGradX = 0.0;
          float rippleGradZ = 0.0;
+         float rainAmt = clamp(uRainIntensity, 0.0, 1.0);
+         if (rainAmt > 0.005) {
+           vec3 rr1 = evalStdRainRing(vWaterWorldPos.xz, 0.92, 0.0, 1.45, vec2(2.3, 6.1));
+           vec3 rr2 = evalStdRainRing(vWaterWorldPos.xz, 1.48, 0.71, 1.95, vec2(9.4, 3.8));
+           vec3 rrSum = (rr1 + rr2 * 0.85) * rainAmt;
+           rippleGradX += rrSum.x;
+           rippleGradZ += rrSum.y;
+           interactiveFoam += rrSum.z * 0.45;
+         }
          for (int rIdx = 0; rIdx < ${WATER_RIPPLE_COUNT}; rIdx++) {
            vec4 rp = uWaterRipples[rIdx];
            float age = uWaterTime - rp.z;
-           if (age > 0.0 && age < 2.6 && rp.w > 0.01) {
+           if (age > 0.0 && age < 2.8 && rp.w > 0.01) {
              vec2 dVec = vWaterWorldPos.xz - rp.xy;
              float dLen = length(dVec);
-             float radius = age * 3.8;
+             float radius = age * 3.6;
              float ringDelta = dLen - radius;
-             float env = exp(-age * 1.35) * exp(-ringDelta * ringDelta * 5.2) * rp.w;
-             float ringWave = sin(ringDelta * 11.5);
-             interactiveFoam += smoothstep(0.35, 0.92, ringWave) * env * 0.85;
+             float env = exp(-age * 1.15) * exp(-ringDelta * ringDelta * 3.8) * rp.w;
+             float ringWave = sin(ringDelta * 10.5);
+             interactiveFoam += smoothstep(0.30, 0.92, ringWave) * env * 0.82;
              vec2 dir2 = dVec / max(dLen, 0.001);
-             float dWave = cos(ringDelta * 11.5) * env * 0.24;
+             float dWave = cos(ringDelta * 10.5) * env * 0.24;
              rippleGradX += dir2.x * dWave;
              rippleGradZ += dir2.y * dWave;
            }
