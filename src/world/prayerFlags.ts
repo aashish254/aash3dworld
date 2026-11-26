@@ -256,6 +256,83 @@ export interface PrayerFlagGarlandOptions {
   poleMaterial?: THREE.Material;
 }
 
+function buildHeritagePoleGroup(
+  height: number,
+  topRad: number,
+  botRad: number,
+  poleMat: THREE.Material,
+  finialMat: THREE.Material,
+): THREE.Group {
+  const poleGroup = new THREE.Group();
+  poleGroup.userData.nonCollidable = true;
+
+  const plinthMat = new THREE.MeshStandardMaterial({
+    color: 0x5c5852,
+    roughness: 0.88,
+    metalness: 0.06,
+  });
+
+  // Carved octagonal stone pedestal collar at ground foot
+  const basePts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(botRad * 2.15, 0.0),
+    new THREE.Vector2(botRad * 2.10, 0.08),
+    new THREE.Vector2(botRad * 1.65, 0.16),
+    new THREE.Vector2(botRad * 1.45, 0.24),
+    new THREE.Vector2(botRad * 1.12, 0.28),
+    new THREE.Vector2(0.0, 0.28),
+  ];
+  const basePlinth = new THREE.Mesh(new THREE.LatheGeometry(basePts, 8), plinthMat);
+  basePlinth.castShadow = true;
+  basePlinth.receiveShadow = true;
+  basePlinth.userData.nonCollidable = true;
+  poleGroup.add(basePlinth);
+
+  // Turned tapered hardwood mast
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(topRad, botRad, height, 12),
+    poleMat,
+  );
+  shaft.position.y = height * 0.5 + 0.04;
+  shaft.castShadow = true;
+  shaft.userData.nonCollidable = true;
+  poleGroup.add(shaft);
+
+  // Brass ferrule reinforcement bands along mast (foot, mid, and rope/banner collar)
+  for (const frac of [0.10, 0.52, 0.92]) {
+    const rAt = THREE.MathUtils.lerp(botRad, topRad, frac) + 0.006;
+    const collar = new THREE.Mesh(
+      new THREE.TorusGeometry(rAt, 0.0085, 8, 16),
+      finialMat,
+    );
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 0.04 + height * frac;
+    collar.userData.nonCollidable = true;
+    poleGroup.add(collar);
+  }
+
+  // Ornate Nepali Kalash / Gajur brass finial at mast crown
+  const gajurPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(topRad * 1.55, 0.0),
+    new THREE.Vector2(topRad * 1.35, 0.025),
+    new THREE.Vector2(topRad * 1.95, 0.055),
+    new THREE.Vector2(topRad * 1.85, 0.092),
+    new THREE.Vector2(topRad * 0.85, 0.125),
+    new THREE.Vector2(topRad * 1.10, 0.145),
+    new THREE.Vector2(topRad * 0.45, 0.185),
+    new THREE.Vector2(0.004, 0.245),
+    new THREE.Vector2(0.0, 0.255),
+  ];
+  const gajur = new THREE.Mesh(new THREE.LatheGeometry(gajurPts, 14), finialMat);
+  gajur.position.y = height + 0.04;
+  gajur.castShadow = true;
+  gajur.userData.nonCollidable = true;
+  poleGroup.add(gajur);
+
+  return poleGroup;
+}
+
 /**
  * Creates a catenary Tibetan Lungta prayer-flag garland between two 3D points,
  * using subdivided GPU-animated cloth flags pinned cleanly along their top rope seam.
@@ -281,23 +358,17 @@ export function createWavingPrayerFlagGarland(
     const getBaseY = options.poleBaseGroundY ?? (() => 0);
     for (const p of [start, end]) {
       const y0 = getBaseY(p.x, p.z);
-      const poleH = Math.max(1.2, p.y - y0 + 0.45);
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.052, 0.075, poleH, 8),
-        poleMat,
-      );
-      pole.position.set(p.x, y0 + poleH * 0.5 - 0.1, p.z);
-      pole.castShadow = true;
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.072, 8, 6), finialMat);
-      knob.position.set(p.x, y0 + poleH - 0.08, p.z);
-      group.add(pole, knob);
+      const poleH = Math.max(1.2, p.y - y0 + 0.36);
+      const heritagePole = buildHeritagePoleGroup(poleH, 0.044, 0.072, poleMat, finialMat);
+      heritagePole.position.set(p.x, y0 - 0.06, p.z);
+      group.add(heritagePole);
     }
   }
 
   const mid = start.clone().lerp(end, 0.5);
   mid.y -= sag;
   const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-  const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.016, 5, false), ropeMat);
+  const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.015, 6, false), ropeMat);
   rope.userData.nonCollidable = true;
   group.add(rope);
 
@@ -347,19 +418,9 @@ export function createWavingPoleBanner(options: WavingPoleBannerOptions = {}): {
   const group = new THREE.Group();
   group.userData.nonCollidable = true;
 
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.032, 0.044, height, 8),
-    options.poleMaterial ?? getSharedPoleMat(),
-  );
-  pole.position.y = height * 0.5;
-  pole.userData.nonCollidable = true;
-
-  const knob = new THREE.Mesh(
-    new THREE.SphereGeometry(0.056, 8, 8),
-    options.finialMaterial ?? getSharedFinialMat(),
-  );
-  knob.position.y = height + 0.02;
-  knob.userData.nonCollidable = true;
+  const poleMat = options.poleMaterial ?? getSharedPoleMat();
+  const finialMat = options.finialMaterial ?? getSharedFinialMat();
+  const heritagePole = buildHeritagePoleGroup(height, 0.032, 0.048, poleMat, finialMat);
 
   const bannerGeo = new THREE.PlaneGeometry(bannerW, bannerH, 10, 5);
   bannerGeo.translate(bannerW * 0.5, 0, 0);
@@ -380,6 +441,6 @@ export function createWavingPoleBanner(options: WavingPoleBannerOptions = {}): {
     clothMesh.rotation.y = baseYaw + Math.sin(targetYaw - baseYaw) * 0.28 + windSway;
   };
 
-  group.add(pole, knob, clothMesh);
+  group.add(heritagePole, clothMesh);
   return { group, clothMesh };
 }

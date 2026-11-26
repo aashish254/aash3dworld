@@ -36,6 +36,8 @@ export const REFLECTIVE_WATER_ENV_UNIFORMS = {
 };
 
 let isRenderingPlanarReflection = false;
+let nextSoftReflectorSlot = 0;
+let lastSoftReflectorRenderMs = -1000;
 const _camDeltaPos = new THREE.Vector3();
 
 /**
@@ -79,7 +81,8 @@ export function createReflectivePondSurface(
   options: ReflectivePondOptions = {},
 ): Reflector {
   const isSoft = Boolean(options.isSoftwareGl);
-  const texSize = options.textureSize ?? (isSoft ? 256 : 512);
+  const texSize = options.textureSize ?? (isSoft ? 128 : 512);
+  const softSlot = nextSoftReflectorSlot++;
   const deepColor = new THREE.Color(options.deepTint ?? 0x0b2d30);
   const shallowColor = new THREE.Color(options.shallowTint ?? 0x226863);
   const reflectivity = options.reflectivity ?? 0.86;
@@ -191,23 +194,31 @@ export function createReflectivePondSurface(
       void main() {
         #include <logdepthbuf_fragment>
 
-        float t = uWaterTime * 0.92;
+        float t = uWaterTime * 0.78;
         vec2 wp = vWorldPos.xz;
 
-        // Multi-directional calm sacred-garden capillary ripples
-        float w1 = sin(wp.x * 1.45 + wp.y * 0.95 - t * 1.15);
-        float w2 = cos(wp.y * 1.85 - wp.x * 1.12 + t * 0.88);
-        float w3 = sin((wp.x - wp.y) * 2.65 - t * 1.42);
-        float w4 = cos((wp.x + wp.y) * 3.15 + t * 1.25);
+        // Multi-angled organic capillary wave octaves (rotated angles avoid grid/horizontal striping)
+        vec2 dir1 = vec2(0.84, 0.54);
+        vec2 dir2 = vec2(-0.61, 0.79);
+        vec2 dir3 = vec2(0.32, -0.95);
+        vec2 dir4 = vec2(-0.92, -0.39);
+        float p1 = dot(wp, dir1) * 1.95 - t * 1.05;
+        float p2 = dot(wp, dir2) * 2.75 + t * 0.84;
+        float p3 = dot(wp, dir3) * 4.10 - t * 1.28;
+        float p4 = dot(wp, dir4) * 5.65 + t * 1.12;
+        float w1 = sin(p1);
+        float w2 = cos(p2);
+        float w3 = sin(p3);
+        float w4 = cos(p4);
 
         float rainAmt = clamp(uRainIntensity, 0.0, 1.0);
         float windGain = 1.0 + rainAmt * 0.55;
-        float gx = (cos(wp.x * 1.65 + wp.y * 1.05 - t * 1.15) * 0.55
-                 + sin(wp.y * 2.15 - wp.x * 1.28 + t * 0.88) * 0.35
-                 + cos((wp.x - wp.y) * 2.95 - t * 1.42) * 0.24) * 0.028 * windGain;
-        float gz = (cos(wp.x * 1.65 + wp.y * 1.05 - t * 1.15) * 0.35
-                 - sin(wp.y * 2.15 - wp.x * 1.28 + t * 0.88) * 0.52
-                 + sin((wp.x + wp.y) * 3.35 + t * 1.25) * 0.24) * 0.028 * windGain;
+        vec2 grad = dir1 * cos(p1) * 0.0085
+                  - dir2 * sin(p2) * 0.0065
+                  + dir3 * cos(p3) * 0.0045
+                  - dir4 * sin(p4) * 0.0032;
+        float gx = grad.x * windGain;
+        float gz = grad.y * windGain;
 
         // Procedural multi-scale raindrop ripple rings across pond surface when raining
         float interactiveFoam = 0.0;
@@ -263,34 +274,34 @@ export function createReflectivePondSurface(
         float ndv = clamp(dot(N, V), 0.0, 1.0);
         float fresnel = 0.08 + 0.86 * pow(1.0 - ndv, 3.6);
 
-        // Edge-distance parameter from UV perimeter for brick-step depth gradient & lacy shoreline foam
+        // Edge-distance parameter from UV perimeter for brick-step depth gradient & organic shoreline lap
         float edgeDist = clamp(min(min(vPondUv.x, 1.0 - vPondUv.x), min(vPondUv.y, 1.0 - vPondUv.y)), 0.0, 0.5);
-        float shallowMask = 1.0 - smoothstep(0.0, 0.14, edgeDist);
+        float shallowMask = 1.0 - smoothstep(0.0, 0.16, edgeDist);
 
-        // Projective planar reflection lookup with calm temple-pond ripple distortion
+        // Projective planar reflection lookup with gentle, natural distortion (zero horizontal banding)
         vec4 reflUv = vProjUv;
         float projW = max(reflUv.w, 0.001);
-        vec2 rippleDisp = vec2(gx, gz) * (uRippleStrength * 12.0) * projW;
+        vec2 rippleDisp = vec2(gx * 0.85, gz * 0.55) * (uRippleStrength * 11.0) * projW;
         reflUv.xy += rippleDisp;
-        vec2 safeNd = clamp(reflUv.xy / projW, 0.003, 0.997);
+        vec2 safeNd = clamp(reflUv.xy / projW, 0.004, 0.996);
         reflUv.xy = safeNd * projW;
         vec3 planarRefl = texture2DProj(tDiffuse, reflUv).rgb;
 
-        // Subtle underwater stone caustic tint + turquoise-to-deep-jade depth absorption
-        float caustic = smoothstep(0.45, 0.95, (w1 * w2 + w3 * w4) * 0.25 + 0.5);
-        float depthMix = clamp(0.18 + 0.22 * (1.0 - ndv) + shallowMask * 0.46, 0.0, 1.0);
+        // Subtle underwater mineral caustic shimmer + emerald-jade depth absorption
+        float caustic = smoothstep(0.52, 0.95, (w1 * w3 + w2 * w4) * 0.24 + 0.5);
+        float depthMix = clamp(0.14 + 0.18 * (1.0 - ndv) + shallowMask * 0.50, 0.0, 1.0);
         vec3 waterBody = mix(uDeepColor, uShallowColor, depthMix);
-        waterBody += vec3(0.030, 0.095, 0.085) * caustic * (0.55 + shallowMask * 0.45);
+        waterBody += vec3(0.026, 0.088, 0.076) * caustic * (0.45 + shallowMask * 0.55);
 
-        // Blend water body with live planar reflection & soft sky bounce
-        vec3 envReflect = mix(planarRefl * color * 0.90, uSkyColor * 0.82, 0.04 + rainAmt * 0.10);
-        float reflWeight = clamp(fresnel * uReflectivity * 0.78 + 0.06 - rainAmt * 0.06, 0.14, 0.82);
+        // Blend water body with live planar reflection & soft sky Fresnel bounce
+        vec3 envReflect = mix(planarRefl * color * 0.92, uSkyColor * 0.86, 0.12 + rainAmt * 0.14);
+        float reflWeight = clamp(fresnel * uReflectivity * 0.72 + 0.08 - rainAmt * 0.05, 0.14, 0.78);
         vec3 col = mix(waterBody, envReflect, reflWeight);
 
-        // Delicate animated shoreline foam hugging the submerged brick steps
-        float shoreWave = sin(edgeDist * 140.0 - uWaterTime * 1.9 + w1 * 1.4 + w2 * 1.1);
-        float shoreFoam = (1.0 - smoothstep(0.0, 0.032, edgeDist)) * smoothstep(0.28, 0.88, shoreWave * 0.5 + 0.5) * 0.34;
-        shoreFoam += (1.0 - smoothstep(0.0, 0.011, edgeDist)) * 0.22;
+        // Soft organic water-edge meniscus against brick ghat steps (no striped parallel lines)
+        float organicEdgeNoise = sin(wp.x * 2.1 + wp.y * 1.7 + t * 0.6) * 0.004 + cos(wp.x * 3.7 - wp.y * 2.9 - t * 0.8) * 0.003;
+        float shoreEdge = max(0.0, edgeDist + organicEdgeNoise);
+        float shoreFoam = (1.0 - smoothstep(0.0, 0.018, shoreEdge)) * (0.14 + 0.12 * smoothstep(0.2, 0.85, w1 * 0.5 + 0.5));
 
         // Crisp sun specular sparkle on wave & raindrop crests
         vec3 L = normalize(uSunDir);
@@ -355,14 +366,15 @@ export function createReflectivePondSurface(
     const camRotated =
       1 - Math.abs(lastCamQuat.dot(camera.quaternion)) > 0.0015;
 
-    if (
-      isSoft &&
-      hasRenderedOnce &&
-      !camMoved &&
-      !camRotated &&
-      frameCounter % 4 !== 0
-    ) {
-      return;
+    if (isSoft) {
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (hasRenderedOnce) {
+        if ((frameCounter + softSlot) % 6 !== 0 && !camMoved && !camRotated) return;
+        if ((camMoved || camRotated) && (frameCounter + softSlot) % 4 !== 0) return;
+      } else if (nowMs - lastSoftReflectorRenderMs < 150) {
+        return;
+      }
+      lastSoftReflectorRenderMs = nowMs;
     }
 
     isRenderingPlanarReflection = true;
@@ -620,15 +632,15 @@ export function applyRealisticWaterShader(
         `#include <normal_fragment_maps>
          {
            float wtn = uWaterTime * ${flowSpeed.toFixed(2)};
-           float gx = cos(vWaterLocal.x * 2.3 + vWaterLocal.z * 1.4 - wtn * 1.4) * 0.065
-                    + sin(vWaterLocal.x * 4.7 - vWaterLocal.z * 3.1 + wtn * 1.9) * 0.032
-                    + rippleGradX;
-           float gz = sin(vWaterLocal.z * 2.1 - vWaterLocal.x * 1.5 - wtn * 1.25) * 0.065
-                    + cos(vWaterLocal.z * 4.3 + vWaterLocal.x * 2.8 - wtn * 1.7) * 0.032
-                    + rippleGradZ;
+           vec2 wpN = vWaterWorldPos.xz;
+           float p1N = dot(wpN, vec2(0.84, 0.54)) * 2.1 - wtn * 1.15;
+           float p2N = dot(wpN, vec2(-0.61, 0.79)) * 3.1 + wtn * 0.95;
+           float p3N = dot(wpN, vec2(0.37, -0.93)) * 4.5 - wtn * 1.45;
+           float gx = cos(p1N) * 0.032 - sin(p2N) * 0.024 + cos(p3N) * 0.016 + rippleGradX;
+           float gz = cos(p1N) * 0.021 + sin(p2N) * 0.030 - cos(p3N) * 0.022 + rippleGradZ;
            vec3 rippleWorldN = normalize(vec3(-gx, 1.0, -gz));
            vec3 rippleViewN = normalize((viewMatrix * vec4(rippleWorldN, 0.0)).xyz);
-           normal = normalize(mix(normal, rippleViewN, 0.62));
+           normal = normalize(mix(normal, rippleViewN, 0.58));
 
            // Fresnel sky/horizon reflection & crisp stylized specular glint
            vec3 viewDirW = normalize(vViewPosition);

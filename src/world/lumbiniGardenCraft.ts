@@ -849,7 +849,7 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
   bronzeParts.forEach((p) => p.dispose());
   giltParts.forEach((p) => p.dispose());
 
-  // Warm frosted amber octagonal glass panes + clear hurricane chimney + teardrop flame
+  // Warm candlelit amber glass chamber + glowing inner mantle + luminous teardrop diyo flame
   const amberGlassGeo = new THREE.CylinderGeometry(0.174, 0.174, 0.41, 8);
   amberGlassGeo.rotateY(Math.PI / 8);
   amberGlassGeo.translate(0, 1.90, 0);
@@ -859,35 +859,35 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
 
   const flamePts = [
     new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.025, 0.02),
-    new THREE.Vector2(0.030, 0.05),
-    new THREE.Vector2(0.017, 0.095),
-    new THREE.Vector2(0.004, 0.135),
-    new THREE.Vector2(0.0, 0.15),
+    new THREE.Vector2(0.032, 0.025),
+    new THREE.Vector2(0.038, 0.065),
+    new THREE.Vector2(0.024, 0.125),
+    new THREE.Vector2(0.008, 0.175),
+    new THREE.Vector2(0.0, 0.195),
   ];
-  const flameGeo = new THREE.LatheGeometry(flamePts, 12);
-  flameGeo.translate(0, 1.795, 0);
+  const flameGeo = new THREE.LatheGeometry(flamePts, 14);
+  flameGeo.translate(0, 1.785, 0);
 
   const amberGlassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffd796,
-    emissive: 0xff9328,
-    emissiveIntensity: 0.44,
-    roughness: 0.16,
+    color: 0xffdf9e,
+    emissive: 0xff9b28,
+    emissiveIntensity: 0.96,
+    roughness: 0.14,
     metalness: 0.04,
     transparent: true,
-    opacity: 0.36,
-    clearcoat: 0.85,
+    opacity: 0.52,
+    clearcoat: 0.9,
     depthWrite: false,
-    side: THREE.FrontSide,
+    side: THREE.DoubleSide,
   });
 
   const chimneyGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xfff8e6,
-    emissive: 0xffb84d,
-    emissiveIntensity: 0.24,
+    emissive: 0xffc864,
+    emissiveIntensity: 0.88,
     roughness: 0.08,
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.48,
     depthWrite: false,
     side: THREE.FrontSide,
   });
@@ -907,9 +907,23 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
   return cachedDetailedLantern;
 }
 
+const lanternInnerCoreGeo = new THREE.SphereGeometry(0.088, 12, 10);
+lanternInnerCoreGeo.scale(1.0, 1.55, 1.0);
+lanternInnerCoreGeo.translate(0, 1.89, 0);
+const lanternInnerCoreMat = new THREE.MeshBasicMaterial({
+  color: 0xffdc8a,
+  transparent: true,
+  opacity: 0.58,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const lanternFlameCoreMat = new THREE.MeshBasicMaterial({
+  color: 0xfff8de,
+});
+
 /**
  * Builds an ultra-detailed, multi-material Nepali Heritage Stone, Oxidized Copper-Slate &
- * Filigree Bronze Chaitya-Dipa Peace Lantern (zero monochrome woodish stone).
+ * Filigree Bronze Chaitya-Dipa Peace Lantern with warm glowing interior light.
  */
 export function buildDetailedPeaceLantern(
   _stoneMat: THREE.Material,
@@ -947,8 +961,20 @@ export function buildDetailedPeaceLantern(
   const chimney = new THREE.Mesh(cache.chimneyGeo, cache.chimneyGlassMat);
   chimney.userData.nonCollidable = true;
 
-  const flame = new THREE.Mesh(cache.flameGeo, glowMat);
+  const flame = new THREE.Mesh(cache.flameGeo, lanternFlameCoreMat);
   flame.userData.nonCollidable = true;
+
+  const innerHalo = new THREE.Mesh(lanternInnerCoreGeo, lanternInnerCoreMat);
+  innerHalo.userData.nonCollidable = true;
+
+  // Subtle warm soffit highlight ring inside roof ceiling
+  const soffitGlow = new THREE.Mesh(
+    new THREE.RingGeometry(0.06, 0.22, 12),
+    glowMat,
+  );
+  soffitGlow.rotation.x = Math.PI / 2;
+  soffitGlow.position.y = 2.11;
+  soffitGlow.userData.nonCollidable = true;
 
   g.add(
     basaltMesh,
@@ -958,7 +984,9 @@ export function buildDetailedPeaceLantern(
     giltMesh,
     amberGlass,
     chimney,
+    innerHalo,
     flame,
+    soffitGlow,
   );
   return g;
 }
@@ -1452,10 +1480,31 @@ export function buildDetailedExcavatedBrickRuin(
 
     // Shadowed recessed niche back wall
     pushNonIndexedPart(localAlcove, new THREE.BoxGeometry(0.46, nicheH, 0.08), nicheMidY, 0, 0, 0, 0, -0.01);
-    // Sculpted bronze/gilt miniature seated Buddha & lotus cushion inside niche
-    pushNonIndexedPart(localBronze, new THREE.CylinderGeometry(0.105, 0.125, 0.045, 10), nicheMidY - nicheH * 0.30, 0, 0, 0, 0, 0.035);
-    pushNonIndexedPart(localBronze, new THREE.ConeGeometry(0.09, 0.16, 10), nicheMidY - nicheH * 0.10, 0, 0, 0, 0, 0.038);
-    pushNonIndexedPart(localBronze, new THREE.SphereGeometry(0.048, 8, 8), nicheMidY + nicheH * 0.08, 0, 0, 0, 0, 0.042);
+    // Sculpted bronze miniature seated meditating Buddha & Prabhavali halo inside niche (no cone+sphere)
+    const nLotus = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.125, 0.038, 12)).geometry;
+    pushNonIndexedPart(localBronze, nLotus, nicheMidY - nicheH * 0.32, 0, 0, 0, 0, 0.036);
+    const nLap = new THREE.CapsuleGeometry(0.036, 0.11, 6, 8);
+    nLap.rotateZ(Math.PI * 0.5);
+    pushNonIndexedPart(localBronze, nLap, nicheMidY - nicheH * 0.21, 0, 0, 0, 0, 0.056);
+    const nTorsoPts = [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.058, 0.01),
+      new THREE.Vector2(0.048, 0.065),
+      new THREE.Vector2(0.062, 0.118),
+      new THREE.Vector2(0.022, 0.140),
+      new THREE.Vector2(0.0, 0.145),
+    ];
+    const nTorso = new THREE.LatheGeometry(nTorsoPts, 14);
+    nTorso.scale(1.12, 1.0, 0.68);
+    pushNonIndexedPart(localBronze, nTorso, nicheMidY - nicheH * 0.21, 0, 0, 0, 0, 0.034);
+    for (const ax of [-1, 1]) {
+      const nArm = new THREE.CapsuleGeometry(0.018, 0.078, 4, 6);
+      pushNonIndexedPart(localBronze, nArm, nicheMidY - nicheH * 0.09, 0.22, 0, ax * 0.28, ax * 0.064, 0.044);
+    }
+    pushNonIndexedPart(localBronze, new THREE.SphereGeometry(0.040, 12, 10), nicheMidY + nicheH * 0.055, 0, 0, 0, 0, 0.038);
+    pushNonIndexedPart(localBronze, new THREE.SphereGeometry(0.018, 8, 8), nicheMidY + nicheH * 0.14, 0, 0, 0, 0, 0.036);
+    const nHalo = new THREE.TorusGeometry(0.088, 0.010, 6, 18);
+    pushNonIndexedPart(localBronze, nHalo, nicheMidY + nicheH * 0.03, 0, 0, 0, 0, 0.018);
 
     // Side sandstone pilasters + offering sill + corbelled pointed Chaitya arch gable
     for (const sx of [-0.26, 0.26]) {
@@ -1481,26 +1530,65 @@ export function buildDetailedExcavatedBrickRuin(
       bronzeParts.push(bg);
     }
 
-    // Front South (+Z) Devotional Brass Diyo Oil Lamps & Marigold Offerings on Sills
+    // Front South (+Z) Sculpted Brass Diyo Oil Lamps & Multi-Petal Marigold Blossoms on Sills
     if (includeOfferings) {
       const sillTopY = nicheMidY - nicheH * 0.5 + 0.014;
       const sillZ = dist + 0.145;
+      const diyoPts = [
+        new THREE.Vector2(0.0, 0.0),
+        new THREE.Vector2(0.034, 0.0),
+        new THREE.Vector2(0.024, 0.008),
+        new THREE.Vector2(0.048, 0.022),
+        new THREE.Vector2(0.056, 0.032),
+        new THREE.Vector2(0.048, 0.035),
+        new THREE.Vector2(0.036, 0.020),
+        new THREE.Vector2(0.0, 0.016),
+      ];
+      const teardropPts = [
+        new THREE.Vector2(0.0, 0.0),
+        new THREE.Vector2(0.014, 0.010),
+        new THREE.Vector2(0.016, 0.022),
+        new THREE.Vector2(0.009, 0.040),
+        new THREE.Vector2(0.002, 0.054),
+        new THREE.Vector2(0.0, 0.060),
+      ];
       for (const lx of [-0.21, 0.21]) {
-        pushNonIndexedPart(bronzeParts, new THREE.CylinderGeometry(0.044, 0.028, 0.034, 10), sillTopY + 0.017, 0, 0, 0, lx, sillZ);
-        pushNonIndexedPart(flameParts, new THREE.ConeGeometry(0.016, 0.048, 7), sillTopY + 0.056, 0, 0, 0, lx, sillZ);
+        pushNonIndexedPart(bronzeParts, new THREE.LatheGeometry(diyoPts, 14), sillTopY, 0, 0, 0, lx, sillZ);
+        pushNonIndexedPart(flameParts, new THREE.LatheGeometry(teardropPts, 10), sillTopY + 0.016, 0, 0, 0, lx, sillZ);
       }
       for (let m = 0; m < 5; m++) {
         const mx = (m - 2) * 0.058;
-        pushNonIndexedPart(
-          marigoldParts,
-          new THREE.DodecahedronGeometry(0.028, 0),
-          sillTopY + 0.018,
-          0,
-          m * 0.7,
-          0,
-          mx,
-          sillZ + 0.01,
-        );
+        // Ruffled marigold rosette (8 outer petals + 5 inner crown petals, zero dodecahedrons)
+        for (let p = 0; p < 8; p++) {
+          const pa = (p / 8) * Math.PI * 2 + m * 0.4;
+          const pet = new THREE.SphereGeometry(0.011, 5, 4);
+          pet.scale(1.15, 0.45, 1.45);
+          pushNonIndexedPart(
+            marigoldParts,
+            pet,
+            sillTopY + 0.011,
+            0.28,
+            pa,
+            0,
+            mx + Math.sin(pa) * 0.016,
+            sillZ + 0.01 + Math.cos(pa) * 0.016,
+          );
+        }
+        for (let p = 0; p < 5; p++) {
+          const pa = (p / 5) * Math.PI * 2 + 0.3;
+          const pet = new THREE.SphereGeometry(0.009, 5, 4);
+          pet.scale(1.0, 0.72, 1.15);
+          pushNonIndexedPart(
+            marigoldParts,
+            pet,
+            sillTopY + 0.020,
+            -0.2,
+            pa,
+            0,
+            mx + Math.sin(pa) * 0.008,
+            sillZ + 0.01 + Math.cos(pa) * 0.008,
+          );
+        }
       }
     }
   };
@@ -2135,56 +2223,66 @@ export function buildRealisticLumbiniHedges(
   hedgeCoords.forEach(([hx, hz, sx, sz], idx) => {
     _craftQ.identity();
 
-    // Outer stepped basalt & world-UV red-brick planter curb
-    pushNonIndexedPart(curbParts, makeWorldUvBoxGeo(sx + 0.16, 0.09, sz + 0.16, 1.2, 1.2), 0.055, 0, 0, 0, hx, hz);
-    pushNonIndexedPart(brickBorderParts, makeWorldUvBoxGeo(sx + 0.08, 0.06, sz + 0.08, 0.75, 0.75), 0.095, 0, 0, 0, hx, hz);
-    pushNonIndexedPart(soilParts, new THREE.BoxGeometry(Math.max(0.2, sx - 0.04), 0.03, Math.max(0.2, sz - 0.04)), 0.125, 0, 0, 0, hx, hz);
+    // Outer stepped basalt & world-UV red-brick planter curb cleanly raised above 0.10m brick walk (zero Z-fighting)
+    pushNonIndexedPart(curbParts, makeWorldUvBoxGeo(sx + 0.18, 0.11, sz + 0.18, 1.2, 1.2), 0.060, 0, 0, 0, hx, hz);
+    pushNonIndexedPart(brickBorderParts, makeWorldUvBoxGeo(sx + 0.10, 0.06, sz + 0.10, 0.75, 0.75), 0.145, 0, 0, 0, hx, hz);
+    pushNonIndexedPart(soilParts, new THREE.BoxGeometry(Math.max(0.2, sx - 0.04), 0.03, Math.max(0.2, sz - 0.04)), 0.168, 0, 0, 0, hx, hz);
 
-    // Compact dark inner shrub branch-shadow core (kept slightly smaller than sprig envelope)
-    _craftV3.set(hx, 0.28, hz);
-    _craftS.set(Math.max(0.32, sx * 0.72), 0.36, Math.max(0.32, sz * 0.72));
+    // Compact dark inner shrub branch-shadow core hidden completely inside the dense 3D shrub canopy
+    _craftV3.set(hx, 0.25, hz);
+    _craftS.set(Math.max(0.22, sx * 0.44), 0.24, Math.max(0.22, sz * 0.44));
     _craftM4.compose(_craftV3, _craftQ, _craftS);
     coreInst.setMatrixAt(idx, _craftM4);
 
-    // Populate organic crossed botanical leaf sprigs densely along major axis + side shoulders
+    // Populate dense, lush multi-tiered botanical leaf sprigs across full shrub volume so zero box core ever shows
     const alongX = sx >= sz;
     const majorLen = alongX ? sx : sz;
     const minorSpan = alongX ? sz : sx;
-    const step = 0.44;
-    const count = Math.max(2, Math.round(majorLen / step));
+    const step = 0.24;
+    const count = Math.max(3, Math.round(majorLen / step));
     for (let k = 0; k <= count; k++) {
       const t = count === 0 ? 0.5 : k / count;
-      const offset = (t - 0.5) * Math.max(0.1, majorLen - 0.22);
+      const offset = (t - 0.5) * Math.max(0.1, majorLen - 0.16);
       const n0 = hash2d(idx * 37 + k, 3, 19);
       const n1 = hash2d(idx * 37 + k, 7, 41);
       const n2 = hash2d(idx * 37 + k, 11, 73);
       const cx = alongX ? hx + offset : hx;
       const cz = alongX ? hz : hz + offset;
 
-      // Top lush crown sprig
+      // Upper and lower central bushy crown sprigs
       sprigTransforms.push({
-        x: cx + (n0 - 0.5) * 0.14,
-        y: 0.24 + n1 * 0.08,
-        z: cz + (n1 - 0.5) * 0.14,
-        rx: (n0 - 0.5) * 0.28,
+        x: cx + (n0 - 0.5) * 0.12,
+        y: 0.27 + n1 * 0.09,
+        z: cz + (n1 - 0.5) * 0.12,
+        rx: (n0 - 0.5) * 0.34,
         ry: n2 * Math.PI * 2,
-        rz: (n1 - 0.5) * 0.28,
-        s: 0.88 + n0 * 0.26,
+        rz: (n1 - 0.5) * 0.34,
+        s: 0.96 + n0 * 0.28,
         tone: n2,
       });
+      sprigTransforms.push({
+        x: cx + (n1 - 0.5) * 0.12,
+        y: 0.17 + n0 * 0.06,
+        z: cz + (n2 - 0.5) * 0.12,
+        rx: (n2 - 0.5) * 0.28,
+        ry: n0 * Math.PI * 2,
+        rz: (n0 - 0.5) * 0.28,
+        s: 0.88 + n1 * 0.22,
+        tone: n1 * 0.8,
+      });
 
-      // Lower flank sprigs leaning slightly outward on both sides for natural bushy volume
+      // Dense flank skirt sprigs along both sides so shrub reads as rich organic greenery down to the brick curb
       for (const side of [-1, 1]) {
-        const perp = side * Math.max(0.16, minorSpan * 0.28);
+        const perp = side * Math.max(0.14, minorSpan * 0.25);
         const sn = hash2d(idx * 53 + k * 2 + (side > 0 ? 1 : 0), 17, 97);
         sprigTransforms.push({
-          x: cx + (alongX ? 0 : perp) + (sn - 0.5) * 0.08,
-          y: 0.12 + sn * 0.05,
-          z: cz + (alongX ? perp : 0) + (n0 - 0.5) * 0.08,
-          rx: alongX ? side * (0.32 + sn * 0.18) : (sn - 0.5) * 0.2,
+          x: cx + (alongX ? 0 : perp) + (sn - 0.5) * 0.09,
+          y: 0.16 + sn * 0.08,
+          z: cz + (alongX ? perp : 0) + (n0 - 0.5) * 0.09,
+          rx: alongX ? side * (0.28 + sn * 0.22) : (sn - 0.5) * 0.24,
           ry: sn * Math.PI * 2,
-          rz: alongX ? (sn - 0.5) * 0.2 : -side * (0.32 + sn * 0.18),
-          s: 0.72 + sn * 0.22,
+          rz: alongX ? (sn - 0.5) * 0.24 : -side * (0.28 + sn * 0.22),
+          s: 0.84 + sn * 0.26,
           tone: sn,
         });
       }
@@ -2214,8 +2312,8 @@ export function buildRealisticLumbiniHedges(
     g.add(curbMesh, brickBorderMesh, soilMesh);
   }
 
-  // Build single-draw-call InstancedMesh for all ~1,200+ crossed botanical shrub clusters
-  const sprigGeo = createCrossedShrubSprigGeo(0.58, 0.56);
+  // Build single-draw-call InstancedMesh for all ~2,800+ crossed botanical shrub clusters
+  const sprigGeo = createCrossedShrubSprigGeo(0.68, 0.62);
   const leafMat = getLumbiniBotanicalLeafMaterial(leafMap, leafNormal);
   const foliageInst = new THREE.InstancedMesh(sprigGeo, leafMat, sprigTransforms.length);
   foliageInst.castShadow = true;

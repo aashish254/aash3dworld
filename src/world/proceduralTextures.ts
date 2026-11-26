@@ -23,6 +23,9 @@ export interface ProceduralTextureSet {
   sandstoneNormal: THREE.CanvasTexture;
   sandstoneRough: THREE.CanvasTexture;
   sandstoneAo: THREE.CanvasTexture;
+  whiteStuccoMap: THREE.CanvasTexture;
+  whiteStuccoNormal: THREE.CanvasTexture;
+  whiteStuccoRough: THREE.CanvasTexture;
   roofTileMap: THREE.CanvasTexture;
   roofTileNormal: THREE.CanvasTexture;
   woodMap: THREE.CanvasTexture;
@@ -576,46 +579,89 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const brickRough = register(brickRC, false, 2, 2);
   const brickAo = register(heightToAoCanvas(brickHC, 3, 1.75), false, 2, 2);
 
-  // 4. Sedimentary Chunar Sandstone Ashlar (VIT Vellore Campus Stonework)
+  // 4. Natural Fine-Grained Chunar Sandstone Ashlar (warm buff mineral mottling, no wood-grain stripes)
   const [sandC, sandCtx] = makeCanvas(512, 512);
   const [sandHC, sandHCtx] = makeCanvas(512, 512);
   const [sandRC, sandRCtx] = makeCanvas(512, 512);
-  sandCtx.fillStyle = '#7c6f5e';
+  sandCtx.fillStyle = '#b4a188';
   sandCtx.fillRect(0, 0, 512, 512);
-  sandHCtx.fillStyle = '#404040';
+  sandHCtx.fillStyle = '#888888';
   sandHCtx.fillRect(0, 0, 512, 512);
-  sandRCtx.fillStyle = '#e0e0e0';
+  sandRCtx.fillStyle = '#dadada';
   sandRCtx.fillRect(0, 0, 512, 512);
 
-  for (let r = 0; r < 10; r++) {
+  for (let r = 0; r < 8; r++) {
     const off = (r % 2) * 64;
     for (let c = -1; c <= 4; c++) {
       const hsh = (r * 43 + c * 89) & 255;
-      const v = (hsh % 22) - 11;
-      const sx = c * 128 + off + 2;
-      const sy = r * 51 + 2;
-      sandCtx.fillStyle = `rgb(${194 + v}, ${166 + v}, ${130 + v})`;
-      sandCtx.fillRect(sx, sy, 124, 47);
+      const v = (hsh % 18) - 9;
+      const sx = c * 128 + off + 1;
+      const sy = r * 64 + 1;
+      sandCtx.fillStyle = `rgb(${208 + v}, ${184 + v}, ${152 + v})`;
+      sandCtx.fillRect(sx, sy, 126, 62);
 
-      // Sedimentary horizontal mineral veins
-      for (let vein = 0; vein < 3; vein++) {
+      // Subtle mineral grain flecks inside each stone slab (isotropic)
+      for (let g = 0; g < 36; g++) {
+        const gh = (hsh * 31 + g * 53) & 1023;
+        const gx = sx + 4 + (gh % 118);
+        const gy = sy + 4 + ((gh * 7) % 54);
         sandCtx.fillStyle =
-          vein % 2 === 0 ? 'rgba(138, 112, 82, 0.14)' : 'rgba(235, 220, 196, 0.12)';
-        sandCtx.fillRect(sx + 4, sy + 9 + vein * 13, 116, 3);
+          g % 3 === 0 ? 'rgba(138, 114, 86, 0.10)' : 'rgba(244, 232, 214, 0.11)';
+        sandCtx.fillRect(gx, gy, 2 + (g % 2), 2);
       }
 
-      const sh = 190 + (hsh % 35);
+      const sh = 188 + (hsh % 30);
       sandHCtx.fillStyle = `rgb(${sh},${sh},${sh})`;
-      sandHCtx.fillRect(sx + 1, sy + 1, 122, 45);
-      const sr = 188 + (hsh % 36);
+      sandHCtx.fillRect(sx + 1, sy + 1, 124, 60);
+      const sr = 192 + (hsh % 34);
       sandRCtx.fillStyle = `rgb(${sr},${sr},${sr})`;
-      sandRCtx.fillRect(sx, sy, 124, 47);
+      sandRCtx.fillRect(sx, sy, 126, 62);
     }
   }
   const sandstoneMap = register(sandC, true, 2, 2);
-  const sandstoneNormal = register(heightToNormalCanvas(sandHC, 2.3), false, 2, 2);
+  const sandstoneNormal = register(heightToNormalCanvas(sandHC, 1.5), false, 2, 2);
   const sandstoneRough = register(sandRC, false, 2, 2);
-  const sandstoneAo = register(heightToAoCanvas(sandHC, 3, 1.65), false, 2, 2);
+  const sandstoneAo = register(heightToAoCanvas(sandHC, 3, 1.25), false, 2, 2);
+
+  // 4b. Crisp Lime-White Monument Stucco (Western White Peace Stupa & Sacred Plinths)
+  const [wsC, wsCtx] = makeCanvas(512, 512);
+  const [wsHC, wsHCtx] = makeCanvas(512, 512);
+  const [wsRC, wsRCtx] = makeCanvas(512, 512);
+  wsCtx.fillStyle = '#f5f1e7';
+  wsCtx.fillRect(0, 0, 512, 512);
+  wsHCtx.fillStyle = '#c8c8c8';
+  wsHCtx.fillRect(0, 0, 512, 512);
+  wsRCtx.fillStyle = '#cfcfcf';
+  wsRCtx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 320; i++) {
+    const hsh = (i * 97 + 31) & 4095;
+    const x = (hsh * 17) % 512;
+    const y = (hsh * 43) % 512;
+    const r = 10 + (hsh % 26);
+    const rg = wsCtx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, i % 2 === 0 ? 'rgba(255,254,250,0.08)' : 'rgba(218,210,194,0.08)');
+    rg.addColorStop(1, 'rgba(245,241,231,0)');
+    wsCtx.fillStyle = rg;
+    wsCtx.beginPath();
+    wsCtx.arc(x, y, r, 0, Math.PI * 2);
+    wsCtx.fill();
+  }
+  for (let i = 0; i < 3600; i++) {
+    const x = ((i * 73 + 19) % 512);
+    const y = ((i * 137 + 41) % 512);
+    const tone = (i * 29) % 100;
+    wsCtx.fillStyle = tone > 50 ? 'rgba(255,255,255,0.09)' : 'rgba(182,174,160,0.08)';
+    wsCtx.fillRect(x, y, 1.5, 1.5);
+    const hv = 186 + (tone % 38);
+    wsHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
+    wsHCtx.fillRect(x, y, 2, 2);
+    const rv = 190 + (tone % 42);
+    wsRCtx.fillStyle = `rgb(${rv},${rv},${rv})`;
+    wsRCtx.fillRect(x, y, 2, 2);
+  }
+  const whiteStuccoMap = register(wsC, true, 2, 2);
+  const whiteStuccoNormal = register(heightToNormalCanvas(wsHC, 0.9), false, 2, 2);
+  const whiteStuccoRough = register(wsRC, false, 2, 2);
 
   // 5. Weathered Terracotta & Lichen *Jhingati* Scalloped Pagoda Roof Tiles
   const [roofC, roofCtx] = makeCanvas(256, 256);
@@ -1861,6 +1907,9 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     sandstoneNormal,
     sandstoneRough,
     sandstoneAo,
+    whiteStuccoMap,
+    whiteStuccoNormal,
+    whiteStuccoRough,
     roofTileMap,
     roofTileNormal,
     woodMap,

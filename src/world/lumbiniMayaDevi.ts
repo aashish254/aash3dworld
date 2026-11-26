@@ -151,17 +151,18 @@ export function buildMayaDeviTemple(
   // =========================================================================
   // 1. BRICK FOUNDATION APRON & SOLID WHITE-PAINTED BRICK OUTER WALLS
   // =========================================================================
-  // Perimeter brick skirting apron (leaves sunken central pit clear)
+  // Perimeter brick skirting apron (disjoint corners, leaves sunken central pit clear)
   const skirtN = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.44, 2.2), mats.brickMat);
   skirtN.position.set(0, 0.16, -D * 0.5 + 0.55);
   skirtN.receiveShadow = true;
   const skirtS = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.44, 2.2), mats.brickMat);
   skirtS.position.set(0, 0.16, D * 0.5 - 0.55);
   skirtS.receiveShadow = true;
-  const skirtW = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.44, D - 1.2), mats.brickMat);
+  const skirtSideLen = D - 3.31;
+  const skirtW = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.44, skirtSideLen), mats.brickMat);
   skirtW.position.set(-W * 0.5 + 0.55, 0.16, 0);
   skirtW.receiveShadow = true;
-  const skirtE = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.44, D - 1.2), mats.brickMat);
+  const skirtE = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.44, skirtSideLen), mats.brickMat);
   skirtE.position.set(W * 0.5 - 0.55, 0.16, 0);
   skirtE.receiveShadow = true;
   group.add(skirtN, skirtS, skirtW, skirtE);
@@ -586,8 +587,8 @@ export function buildMayaDeviTemple(
   // =========================================================================
   const skyHoleW = 9.0;
   const skyHoleD = 7.0;
-  const roofThickness = 0.38;
-  const roofY = wallH - roofThickness * 0.5;
+  const roofThickness = 0.36;
+  const roofY = wallH - roofThickness * 0.5 - 0.018;
   const addRoofSlab = (cx: number, cz: number, sx: number, sz: number) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, roofThickness, sz), mats.stuccoWhiteMat);
     m.position.set(cx, roofY, cz);
@@ -597,28 +598,36 @@ export function buildMayaDeviTemple(
     group.add(m);
     cameraOccluders.push(m);
   };
-  // 4 roof slabs framing central skylight opening
-  const sideRoofX = (W - skyHoleW) * 0.5;
-  const sideRoofZ = (D - skyHoleD) * 0.5;
-  addRoofSlab(0, -(skyHoleD * 0.5 + sideRoofZ * 0.5), W, sideRoofZ);
-  addRoofSlab(0, skyHoleD * 0.5 + sideRoofZ * 0.5, W, sideRoofZ);
+  // 4 roof slabs strictly inside outer masonry walls (ZERO coplanar overlap with exterior header walls!)
+  const innerRoofW = W - wallT * 2.02;
+  const innerRoofD = D - wallT * 2.02;
+  const sideRoofX = (innerRoofW - skyHoleW) * 0.5;
+  const sideRoofZ = (innerRoofD - skyHoleD) * 0.5;
+  addRoofSlab(0, -(skyHoleD * 0.5 + sideRoofZ * 0.5), innerRoofW, sideRoofZ);
+  addRoofSlab(0, skyHoleD * 0.5 + sideRoofZ * 0.5, innerRoofW, sideRoofZ);
   addRoofSlab(-(skyHoleW * 0.5 + sideRoofX * 0.5), 0, sideRoofX, skyHoleD);
   addRoofSlab(skyHoleW * 0.5 + sideRoofX * 0.5, 0, sideRoofX, skyHoleD);
 
   // Low continuous perimeter parapet curb + evenly spaced piers with signature terracotta-red caps
   const curbH = 0.24;
+  const curbW = 0.46; // Narrower than 0.62m piers so pier faces stand proud without coplanar Z-fighting
   const pierTransforms: THREE.Matrix4[] = [];
   const capTransforms: THREE.Matrix4[] = [];
   const railTransforms: THREE.Matrix4[] = [];
 
   const addParapetEdge = (axis: 'x' | 'z', fixedCoord: number, length: number, divisions: number) => {
+    const curbLen = axis === 'z' ? length - 0.2 : length - wallT * 2.02;
     const curb = new THREE.Mesh(
       axis === 'z'
-        ? new THREE.BoxGeometry(length, curbH, wallT * 0.85)
-        : new THREE.BoxGeometry(wallT * 0.85, curbH, length),
+        ? new THREE.BoxGeometry(curbLen, curbH, curbW)
+        : new THREE.BoxGeometry(curbW, curbH, curbLen),
       mats.whiteBrickMat,
     );
-    curb.position.set(axis === 'x' ? fixedCoord : 0, wallH + curbH * 0.5, axis === 'z' ? fixedCoord : 0);
+    curb.position.set(
+      axis === 'x' ? fixedCoord : 0,
+      wallH + curbH * 0.5 + 0.004,
+      axis === 'z' ? fixedCoord : 0,
+    );
     curb.userData.nonCollidable = true;
     group.add(curb);
 
@@ -626,26 +635,26 @@ export function buildMayaDeviTemple(
     for (const ry of [wallH + 0.44, wallH + 0.68]) {
       _v3.set(axis === 'x' ? fixedCoord : 0, ry, axis === 'z' ? fixedCoord : 0);
       _q.setFromEuler(_e.set(0, axis === 'z' ? 0 : Math.PI * 0.5, 0));
-      _s.set(length - 0.4, 0.036, 0.036);
+      _s.set(length - 0.8, 0.036, 0.036);
       railTransforms.push(new THREE.Matrix4().compose(_v3, _q, _s));
     }
 
     for (let i = 0; i <= divisions; i++) {
       // Skip corners on X-edges so corners aren't duplicated
       if (axis === 'x' && (i === 0 || i === divisions)) continue;
-      const along = -length * 0.5 + 0.36 + (i / divisions) * (length - 0.72);
+      const along = -length * 0.5 + 0.46 + (i / divisions) * (length - 0.92);
       const px = axis === 'z' ? along : fixedCoord;
       const pz = axis === 'z' ? fixedCoord : along;
       const isCorner = axis === 'z' && (i === 0 || i === divisions);
-      const pw = isCorner ? 0.92 : 0.62;
+      const pw = isCorner ? 0.90 : 0.62;
       const ph = isCorner ? parapetH + 0.14 : parapetH;
 
-      _v3.set(px, wallH + ph * 0.5, pz);
+      _v3.set(px, wallH + ph * 0.5 + 0.002, pz);
       _q.identity();
       _s.set(pw, ph, pw);
       pierTransforms.push(new THREE.Matrix4().compose(_v3, _q, _s));
 
-      _v3.set(px, wallH + ph + 0.055, pz);
+      _v3.set(px, wallH + ph + 0.058, pz);
       _s.set(pw + 0.08, 0.11, pw + 0.08);
       capTransforms.push(new THREE.Matrix4().compose(_v3, _q, _s));
     }
@@ -720,14 +729,14 @@ export function buildMayaDeviTemple(
   const pavGlassY = 0.88 + pavGlassH * 0.5;
   for (const sz of [-1, 1]) {
     const zCoord = sz * (pD * 0.5 - 0.28);
-    const baseWall = new THREE.Mesh(new THREE.BoxGeometry(pW - 0.4, 0.88, 0.42), mats.stuccoWhiteMat);
+    const baseWall = new THREE.Mesh(new THREE.BoxGeometry(pW - 1.38, 0.88, 0.42), mats.stuccoWhiteMat);
     baseWall.position.set(0, 0.44, zCoord);
     const topLintel = new THREE.Mesh(new THREE.BoxGeometry(pW + 0.22, 0.46, 0.52), mats.stuccoWhiteMat);
     topLintel.position.set(0, pH - 0.23, zCoord);
     pavGroup.add(baseWall, topLintel);
     for (const px of [-1.85, 1.85]) {
-      const pil = new THREE.Mesh(new THREE.BoxGeometry(0.42, pH - 0.4, 0.48), mats.stuccoWhiteMat);
-      pil.position.set(px, pH * 0.5, zCoord);
+      const pil = new THREE.Mesh(new THREE.BoxGeometry(0.42, pavGlassH, 0.46), mats.stuccoWhiteMat);
+      pil.position.set(px, pavGlassY, zCoord);
       pavGroup.add(pil);
     }
     // 3 cleanly separated framed window bays between pilasters & corner columns
@@ -748,14 +757,14 @@ export function buildMayaDeviTemple(
   }
   for (const sx of [-1, 1]) {
     const xCoord = sx * (pW * 0.5 - 0.28);
-    const baseWall = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.88, pD - 0.4), mats.stuccoWhiteMat);
+    const baseWall = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.88, pD - 1.38), mats.stuccoWhiteMat);
     baseWall.position.set(xCoord, 0.44, 0);
-    const topLintel = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.46, pD + 0.22), mats.stuccoWhiteMat);
+    const topLintel = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.46, pD - 0.84), mats.stuccoWhiteMat);
     topLintel.position.set(xCoord, pH - 0.23, 0);
     pavGroup.add(baseWall, topLintel);
     for (const pz of [-1.45, 1.45]) {
-      const pil = new THREE.Mesh(new THREE.BoxGeometry(0.48, pH - 0.4, 0.42), mats.stuccoWhiteMat);
-      pil.position.set(xCoord, pH * 0.5, pz);
+      const pil = new THREE.Mesh(new THREE.BoxGeometry(0.46, pavGlassH, 0.42), mats.stuccoWhiteMat);
+      pil.position.set(xCoord, pavGlassY, pz);
       pavGroup.add(pil);
     }
     // 3 cleanly separated framed window bays between pilasters & corner columns
@@ -1768,8 +1777,8 @@ export function buildMayaDeviTemple(
     [0, -wallInnerZ + 0.04, innerSpanW, 0.08],
     [-(doorHalfW + (innerSpanW * 0.5 - doorHalfW) * 0.5), wallInnerZ - 0.04, innerSpanW * 0.5 - doorHalfW, 0.08],
     [doorHalfW + (innerSpanW * 0.5 - doorHalfW) * 0.5, wallInnerZ - 0.04, innerSpanW * 0.5 - doorHalfW, 0.08],
-    [-wallInnerX + 0.04, 0, 0.08, innerSpanD],
-    [wallInnerX - 0.04, 0, 0.08, innerSpanD],
+    [-wallInnerX + 0.04, 0, 0.08, innerSpanD - 0.162],
+    [wallInnerX - 0.04, 0, 0.08, innerSpanD - 0.162],
   ] as Array<[number, number, number, number]>) {
     const dado = new THREE.Mesh(new THREE.BoxGeometry(dsx, dadoH, dsz), salBeamMat);
     dado.position.set(dx, walkY + dadoH * 0.5, dz);
@@ -1785,9 +1794,9 @@ export function buildMayaDeviTemple(
       warmPlasterMat,
     );
     plaster.position.set(
-      dx === -wallInnerX + 0.04 ? dx - 0.015 : dx === wallInnerX - 0.04 ? dx + 0.015 : dx,
+      dx === -wallInnerX + 0.04 ? -wallInnerX + 0.032 : dx === wallInnerX - 0.04 ? wallInnerX - 0.032 : dx,
       walkY + dadoH + plasterH * 0.5,
-      dz === -wallInnerZ + 0.04 ? dz - 0.015 : dz === wallInnerZ - 0.04 ? dz + 0.015 : dz,
+      dz === -wallInnerZ + 0.04 ? -wallInnerZ + 0.032 : dz === wallInnerZ - 0.04 ? wallInnerZ - 0.032 : dz,
     );
     plaster.receiveShadow = true;
     plaster.userData.nonCollidable = true;

@@ -3571,115 +3571,36 @@ export interface TrailPondRippleOrigin {
 }
 
 /**
- * Detects when the player walks along the pilgrim trails, promenades, or causeway bridges
- * flanking the Lumbini Sacred Garden Surrounding Pond or inner Pushkarini Sacred Pond,
- * returning the water-surface coordinate inside the adjacent reflective pond where a ripple expands.
+ * Detects when the player is wading inside the Lumbini Surrounding Sacred Pond or
+ * inner Pushkarini Sacred Pond, returning the water-surface coordinate where a ripple expands.
+ * Dry-ground paths, promenades, and bridges never trigger water ripples.
  */
 export function findLumbiniTrailPondRippleOrigin(
   playerX: number,
   playerZ: number,
   strideIndex = 0,
 ): TrailPondRippleOrigin | null {
-  // Fast spatial AABB cull around the outer Lumbini promenade ring
-  if (playerX < -265.0 || playerX > -155.5 || playerZ < 38.0 || playerZ > 163.5) {
-    return null;
+  if (isInLumbiniPushkariniPond(playerX, playerZ)) {
+    const sway = Math.sin(strideIndex * 1.73) * 0.25;
+    const pk = LUMBINI_PUSHKARINI_POND;
+    return {
+      x: Math.max(pk.minX + 0.5, Math.min(pk.maxX - 0.5, playerX + sway)),
+      z: Math.max(pk.minZ + 0.5, Math.min(pk.maxZ - 0.5, playerZ + sway * 0.6)),
+      pond: 'pushkarini',
+      strength: 0.92,
+      trailZone: 'pushkarini-wade',
+    };
   }
-
-  const sway = Math.sin(strideIndex * 1.73) * 0.45;
-  const p = LUMBINI_SACRED_POND;
-
-  // 1. Walking on one of the 4 Sacred Causeway Bridges spanning the Surrounding Pond
-  if (isOnLumbiniSacredBridge(playerX, playerZ)) {
-    const side = strideIndex % 2 === 0 ? 1 : -1;
-    if (playerZ >= p.southBridge.minZ - 0.5) {
-      const rx = Math.max(-258.5, Math.min(-161.5, p.centerX + side * (4.4 + (strideIndex % 3) * 0.35)));
-      const rz = Math.max(p.innerMaxZ + 0.95, Math.min(p.outerMaxZ - 0.95, playerZ));
-      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'south-bridge' };
-    }
-    if (playerZ <= p.northBridge.maxZ + 0.5) {
-      const rx = Math.max(-258.5, Math.min(-161.5, p.centerX + side * (4.4 + (strideIndex % 3) * 0.35)));
-      const rz = Math.max(p.outerMinZ + 0.95, Math.min(p.innerMinZ - 0.95, playerZ));
-      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'north-bridge' };
-    }
-    if (playerX >= p.eastBridge.minX - 0.5) {
-      const rx = Math.max(p.innerMaxX + 0.95, Math.min(p.outerMaxX - 0.95, playerX));
-      const rz = Math.max(p.outerMinZ + 1.0, Math.min(p.outerMaxZ - 1.0, 100.0 + side * (3.9 + (strideIndex % 3) * 0.35)));
-      return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'east-bridge' };
-    }
-    const rx = Math.max(p.outerMinX + 0.95, Math.min(p.innerMinX - 0.95, playerX));
-    const rz = Math.max(p.outerMinZ + 1.0, Math.min(p.outerMaxZ - 1.0, 100.0 + side * (3.9 + (strideIndex % 3) * 0.35)));
-    return { x: rx, z: rz, pond: 'surrounding', strength: 0.78, trailZone: 'west-bridge' };
+  if (isInLumbiniSurroundingPond(playerX, playerZ)) {
+    const sway = Math.sin(strideIndex * 1.73) * 0.25;
+    return {
+      x: playerX + sway,
+      z: playerZ + sway * 0.6,
+      pond: 'surrounding',
+      strength: 0.92,
+      trailZone: 'surrounding-wade',
+    };
   }
-
-  // 2. Outer Surrounding Pond Pilgrim Promenades & bordering approach paths
-  const avoidNSBridgeX = (wx: number): number => {
-    if (Math.abs(wx - p.centerX) < 4.55) {
-      return wx >= p.centerX ? p.centerX + 4.75 : p.centerX - 4.75;
-    }
-    return wx;
-  };
-  const avoidEWBridgeZ = (wz: number): number => {
-    if (Math.abs(wz - 100.0) < 4.15) {
-      return wz >= 100.0 ? 104.35 : 95.65;
-    }
-    return wz;
-  };
-
-  if (playerX >= -262.0 && playerX <= -158.5 && playerZ >= 156.0 && playerZ <= 163.2) {
-    const rx = avoidNSBridgeX(Math.max(p.outerMinX + 1.1, Math.min(p.outerMaxX - 1.1, playerX + sway)));
-    return { x: rx, z: p.outerMaxZ - 1.05, pond: 'surrounding', strength: 0.74, trailZone: 'south-outer-trail' };
-  }
-  if (playerX >= -262.0 && playerX <= -158.5 && playerZ >= 38.4 && playerZ <= 44.2) {
-    const rx = avoidNSBridgeX(Math.max(p.outerMinX + 1.1, Math.min(p.outerMaxX - 1.1, playerX + sway)));
-    return { x: rx, z: p.outerMinZ + 1.05, pond: 'surrounding', strength: 0.74, trailZone: 'north-outer-trail' };
-  }
-  if (playerX >= -264.5 && playerX <= -259.8 && playerZ >= 43.8 && playerZ <= 156.2) {
-    const rz = avoidEWBridgeZ(Math.max(p.outerMinZ + 1.1, Math.min(p.outerMaxZ - 1.1, playerZ + sway)));
-    return { x: p.outerMinX + 1.05, z: rz, pond: 'surrounding', strength: 0.74, trailZone: 'west-outer-trail' };
-  }
-  if (playerX >= -160.2 && playerX <= -155.8 && playerZ >= 43.8 && playerZ <= 156.2) {
-    const rz = avoidEWBridgeZ(Math.max(p.outerMinZ + 1.1, Math.min(p.outerMaxZ - 1.1, playerZ + sway)));
-    return { x: p.outerMaxX - 1.05, z: rz, pond: 'surrounding', strength: 0.74, trailZone: 'east-outer-trail' };
-  }
-
-  // 3. Inner Sacred Garden perimeter pilgrim trails overlooking the moat inside the walls
-  const inInnerIsland =
-    playerX >= p.innerMinX && playerX <= p.innerMaxX && playerZ >= p.innerMinZ && playerZ <= p.innerMaxZ;
-  if (inInnerIsland) {
-    if (playerZ >= p.innerMaxZ - 4.2) {
-      const rx = avoidNSBridgeX(Math.max(p.innerMinX + 1.0, Math.min(p.innerMaxX - 1.0, playerX + sway)));
-      return { x: rx, z: p.innerMaxZ + 1.05, pond: 'surrounding', strength: 0.70, trailZone: 'south-inner-trail' };
-    }
-    if (playerZ <= p.innerMinZ + 4.2) {
-      const rx = avoidNSBridgeX(Math.max(p.innerMinX + 1.0, Math.min(p.innerMaxX - 1.0, playerX + sway)));
-      return { x: rx, z: p.innerMinZ - 1.05, pond: 'surrounding', strength: 0.70, trailZone: 'north-inner-trail' };
-    }
-    if (playerX <= p.innerMinX + 4.2) {
-      const rz = avoidEWBridgeZ(Math.max(p.innerMinZ + 1.0, Math.min(p.innerMaxZ - 1.0, playerZ + sway)));
-      return { x: p.innerMinX - 1.05, z: rz, pond: 'surrounding', strength: 0.70, trailZone: 'west-inner-trail' };
-    }
-    if (playerX >= p.innerMaxX - 4.2) {
-      const rz = avoidEWBridgeZ(Math.max(p.innerMinZ + 1.0, Math.min(p.innerMaxZ - 1.0, playerZ + sway)));
-      return { x: p.innerMaxX + 1.05, z: rz, pond: 'surrounding', strength: 0.70, trailZone: 'east-inner-trail' };
-    }
-  }
-
-  // 4. Inner Pushkarini Sacred Pond Overlook Causeway & South/East/North Brick Walks
-  const pk = LUMBINI_PUSHKARINI_POND;
-  if (
-    !isInLumbiniPushkariniPond(playerX, playerZ) &&
-    playerX >= pk.minX - 7.8 &&
-    playerX <= pk.maxX + 6.5 &&
-    playerZ >= pk.minZ - 6.0 &&
-    playerZ <= pk.maxZ + 7.6
-  ) {
-    const clampedX = Math.max(pk.minX + 0.9, Math.min(pk.maxX - 0.9, playerX + sway * 0.6));
-    const clampedZ = Math.max(pk.minZ + 0.9, Math.min(pk.maxZ - 0.9, playerZ + sway * 0.6));
-    const rx = playerX < pk.minX ? pk.minX + 0.9 : playerX > pk.maxX ? pk.maxX - 0.9 : clampedX;
-    const rz = playerZ < pk.minZ ? pk.minZ + 0.9 : playerZ > pk.maxZ ? pk.maxZ - 0.9 : clampedZ;
-    return { x: rx, z: rz, pond: 'pushkarini', strength: 0.72, trailZone: 'pushkarini-trail' };
-  }
-
   return null;
 }
 
@@ -4522,109 +4443,91 @@ export interface WaterEdgeRippleOrigin {
 }
 
 /**
- * Generalized water-edge ripple detector spanning Lumbini Pushkarini Pond, Surrounding Sacred Pond,
- * Maitri Peace Canal, Bagmati River shores, Glacial Lake shoreline, and Janaki Ganga Sagar ghat.
+ * Generalized water-wading ripple detector: ONLY emits ripples when the player is actually
+ * stepping inside water (Pushkarini Pond, Surrounding Sacred Pond, Maitri Peace Canal,
+ * Bagmati River, Glacial Lake, or Janaki Ganga Sagar). Walking or sprinting on dry paths
+ * or bridges never emits water ripples.
  */
 export function findWaterEdgeRippleOrigin(
   playerX: number,
   playerZ: number,
   strideIndex = 0,
 ): WaterEdgeRippleOrigin | null {
-  const lumbiniTrail = findLumbiniTrailPondRippleOrigin(playerX, playerZ, strideIndex);
-  if (lumbiniTrail) {
+  const lumbiniWade = findLumbiniTrailPondRippleOrigin(playerX, playerZ, strideIndex);
+  if (lumbiniWade) {
     return {
-      x: lumbiniTrail.x,
-      z: lumbiniTrail.z,
-      waterBody: lumbiniTrail.pond,
-      strength: lumbiniTrail.strength,
-      trailZone: lumbiniTrail.trailZone,
+      x: lumbiniWade.x,
+      z: lumbiniWade.z,
+      waterBody: lumbiniWade.pond,
+      strength: lumbiniWade.strength,
+      trailZone: lumbiniWade.trailZone,
     };
   }
 
-  const sway = Math.sin(strideIndex * 1.73) * 0.45;
+  const sway = Math.sin(strideIndex * 1.73) * 0.25;
 
-  // Maitri Peace Canal banks & Peace Bridge
+  // Maitri Peace Canal (only when wading in the canal water itself, never on the bridge)
   const pc = LUMBINI_PEACE_CANAL;
   if (
-    playerZ >= pc.minZ - 2.0 &&
-    playerZ <= pc.maxZ + 2.0 &&
-    playerX >= pc.minX - 6.0 &&
-    playerX <= pc.maxX + 6.0
+    !isOnLumbiniCanalBridge(playerX, playerZ) &&
+    playerX > pc.minX + 0.25 &&
+    playerX < pc.maxX - 0.25 &&
+    playerZ > pc.minZ + 0.25 &&
+    playerZ < pc.maxZ - 0.25
   ) {
-    const onBridge = Math.abs(playerZ - pc.bridgeCenterZ) <= pc.bridgeHalfWidth + 0.6;
-    if (onBridge) {
-      const side = strideIndex % 2 === 0 ? 1 : -1;
-      const rx = Math.max(pc.minX + 1.1, Math.min(pc.maxX - 1.1, playerX + sway));
-      const rz = pc.bridgeCenterZ + side * 3.1;
-      return { x: rx, z: rz, waterBody: 'peace-canal', strength: 0.72, trailZone: 'peace-canal-bridge' };
-    }
-    if (playerX < pc.minX) {
-      return {
-        x: pc.minX + 1.0,
-        z: Math.max(pc.minZ + 1.2, Math.min(pc.maxZ - 1.2, playerZ + sway)),
-        waterBody: 'peace-canal',
-        strength: 0.68,
-        trailZone: 'peace-canal-west-bank',
-      };
-    }
-    if (playerX > pc.maxX) {
-      return {
-        x: pc.maxX - 1.0,
-        z: Math.max(pc.minZ + 1.2, Math.min(pc.maxZ - 1.2, playerZ + sway)),
-        waterBody: 'peace-canal',
-        strength: 0.68,
-        trailZone: 'peace-canal-east-bank',
-      };
-    }
+    return {
+      x: playerX + sway * 0.5,
+      z: playerZ + sway * 0.5,
+      waterBody: 'peace-canal',
+      strength: 0.9,
+      trailZone: 'peace-canal-wade',
+    };
   }
 
-  // Glacial Lake circular alpine shore
+  // Glacial Lake (only inside water radius)
   const dxLake = playerX - GLACIAL_LAKE.x;
   const dzLake = playerZ - GLACIAL_LAKE.z;
   const distLake = Math.hypot(dxLake, dzLake);
-  if (distLake >= GLACIAL_LAKE.waterRadius - 1.2 && distLake <= GLACIAL_LAKE.waterRadius + 3.8 && distLake > 0.1) {
-    const ux = dxLake / distLake;
-    const uz = dzLake / distLake;
-    const r = GLACIAL_LAKE.waterRadius - 1.15;
+  if (distLake < GLACIAL_LAKE.waterRadius - 0.3) {
     return {
-      x: GLACIAL_LAKE.x + ux * r,
-      z: GLACIAL_LAKE.z + uz * r,
+      x: playerX + sway * 0.4,
+      z: playerZ + sway * 0.4,
       waterBody: 'glacial-lake',
-      strength: 0.74,
-      trailZone: 'glacial-lake-shore',
+      strength: 0.9,
+      trailZone: 'glacial-lake-wade',
     };
   }
 
-  // Janaki Mandir Ganga Sagar Ghat Pond (world center approx (-136.5, 108.0))
-  const gsMinX = -143.1;
-  const gsMaxX = -129.9;
-  const gsMinZ = 99.6;
-  const gsMaxZ = 116.4;
+  // Janaki Mandir Ganga Sagar Ghat Pond (inside basin only)
+  const gsMinX = -142.8;
+  const gsMaxX = -130.2;
+  const gsMinZ = 100.0;
+  const gsMaxZ = 116.0;
   if (
-    playerX >= gsMinX - 3.6 &&
-    playerX <= gsMaxX + 3.6 &&
-    playerZ >= gsMinZ - 3.6 &&
-    playerZ <= gsMaxZ + 3.6 &&
-    !(playerX > gsMinX + 0.6 && playerX < gsMaxX - 0.6 && playerZ > gsMinZ + 0.6 && playerZ < gsMaxZ - 0.6)
+    playerX > gsMinX &&
+    playerX < gsMaxX &&
+    playerZ > gsMinZ &&
+    playerZ < gsMaxZ
   ) {
-    const rx = Math.max(gsMinX + 0.9, Math.min(gsMaxX - 0.9, playerX + sway * 0.5));
-    const rz = Math.max(gsMinZ + 0.9, Math.min(gsMaxZ - 0.9, playerZ + sway * 0.5));
-    return { x: rx, z: rz, waterBody: 'ganga-sagar', strength: 0.70, trailZone: 'ganga-sagar-ghat' };
+    return {
+      x: playerX + sway * 0.4,
+      z: playerZ + sway * 0.4,
+      waterBody: 'ganga-sagar',
+      strength: 0.88,
+      trailZone: 'ganga-sagar-wade',
+    };
   }
 
-  // Bagmati River shores (outside stone bridge decks, z within river extent)
-  if (playerZ >= -220 && playerZ <= 240) {
+  // Bagmati River (only when wading inside channel, never on bridge deck)
+  if (playerZ >= -220 && playerZ <= 240 && !isOnBridgeDeck(playerX, playerZ)) {
     const riverX = getRiverCenterX(playerZ);
-    const offset = playerX - riverX;
-    const absOffset = Math.abs(offset);
-    if (absOffset >= 5.2 && absOffset <= 9.6) {
-      const sign = offset >= 0 ? 1 : -1;
+    if (Math.abs(playerX - riverX) < 6.4) {
       return {
-        x: riverX + sign * 4.5,
-        z: playerZ + sway * 0.5,
+        x: playerX + sway * 0.4,
+        z: playerZ + sway * 0.4,
         waterBody: 'bagmati-river',
-        strength: 0.70,
-        trailZone: sign > 0 ? 'bagmati-east-bank' : 'bagmati-west-bank',
+        strength: 0.9,
+        trailZone: 'bagmati-river-wade',
       };
     }
   }
@@ -5168,46 +5071,17 @@ export interface LumbiniPondProximityState {
 }
 
 /**
- * Computes continuous shader-based proximity ripple excitation for the Lumbini Sacred Garden
- * ponds (Pushkarini Sacred Pond and Surrounding Sacred Garden Moat) based on the player's
- * distance to the water surface and movement speed.
+ * Computes continuous shader-based wake ripple excitation for Lumbini Sacred Garden ponds
+ * strictly when the player is wading inside Pushkarini Sacred Pond or Surrounding Sacred Pond.
  */
 export function computeLumbiniPondProximityState(
   playerX: number,
   playerZ: number,
   playerSpeed: number,
 ): LumbiniPondProximityState {
-  const pk = LUMBINI_PUSHKARINI_POND;
-  const clampedPkX = Math.max(pk.minX + 0.6, Math.min(pk.maxX - 0.6, playerX));
-  const clampedPkZ = Math.max(pk.minZ + 0.6, Math.min(pk.maxZ - 0.6, playerZ));
-  const distPk = Math.hypot(playerX - clampedPkX, playerZ - clampedPkZ);
-
-  const sp = LUMBINI_SACRED_POND;
-  // Nearest water band on surrounding moat (4 channel bands around inner island)
-  let bestSpDist = Infinity;
-  let bestSpX = sp.centerX;
-  let bestSpZ = sp.outerMaxZ - 1.0;
-  const bands: Array<[number, number, number, number]> = [
-    [sp.outerMinX + 0.8, sp.outerMaxX - 0.8, sp.innerMaxZ + 0.8, sp.outerMaxZ - 0.8], // South channel
-    [sp.outerMinX + 0.8, sp.outerMaxX - 0.8, sp.outerMinZ + 0.8, sp.innerMinZ - 0.8], // North channel
-    [sp.outerMinX + 0.8, sp.innerMinX - 0.8, sp.innerMinZ, sp.innerMaxZ], // West channel
-    [sp.innerMaxX + 0.8, sp.outerMaxX - 0.8, sp.innerMinZ, sp.innerMaxZ], // East channel
-  ];
-  for (const [minX, maxX, minZ, maxZ] of bands) {
-    const cx = Math.max(minX, Math.min(maxX, playerX));
-    const cz = Math.max(minZ, Math.min(maxZ, playerZ));
-    const d = Math.hypot(playerX - cx, playerZ - cz);
-    if (d < bestSpDist) {
-      bestSpDist = d;
-      bestSpX = cx;
-      bestSpZ = cz;
-    }
-  }
-
-  const maxReach = 10.5;
-  const usePushkarini = distPk <= bestSpDist;
-  const bestDist = usePushkarini ? distPk : bestSpDist;
-  if (bestDist > maxReach) {
+  const inPushkarini = isInLumbiniPushkariniPond(playerX, playerZ);
+  const inSurrounding = !inPushkarini && isInLumbiniSurroundingPond(playerX, playerZ);
+  if (!inPushkarini && !inSurrounding) {
     return {
       active: false,
       factor: 0,
@@ -5217,16 +5091,15 @@ export function computeLumbiniPondProximityState(
     };
   }
 
-  const proximityNorm = Math.max(0, Math.min(1, 1 - bestDist / maxReach));
-  const speedNorm = Math.max(0, Math.min(1, playerSpeed / 5.5));
-  const factor = Math.min(1, proximityNorm * (0.42 + 0.58 * speedNorm));
+  const speedNorm = Math.max(0, Math.min(1, playerSpeed / 4.5));
+  const factor = Math.min(1, 0.35 + 0.65 * speedNorm);
 
   return {
     active: factor > 0.02,
     factor,
-    anchorX: usePushkarini ? clampedPkX : bestSpX,
-    anchorZ: usePushkarini ? clampedPkZ : bestSpZ,
-    nearestPond: usePushkarini ? 'pushkarini' : 'surrounding',
+    anchorX: playerX,
+    anchorZ: playerZ,
+    nearestPond: inPushkarini ? 'pushkarini' : 'surrounding',
   };
 }
 

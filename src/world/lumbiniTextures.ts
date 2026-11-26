@@ -623,36 +623,71 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   const [chuC, chuCtx] = makeCanvas(512, 512);
   const [chuH, chuHCtx] = makeCanvas(512, 512);
   const [chuR, chuRCtx] = makeCanvas(512, 512);
-  const chuGrad = chuCtx.createLinearGradient(0, 0, 512, 512);
-  chuGrad.addColorStop(0, '#c8a987');
-  chuGrad.addColorStop(0.5, '#ba9c7a');
-  chuGrad.addColorStop(1, '#d2b492');
+  const chuGrad = chuCtx.createRadialGradient(256, 256, 40, 256, 256, 360);
+  chuGrad.addColorStop(0, '#cbb08e');
+  chuGrad.addColorStop(0.55, '#bfa27f');
+  chuGrad.addColorStop(1, '#c6a885');
   chuCtx.fillStyle = chuGrad;
   chuCtx.fillRect(0, 0, 512, 512);
   chuHCtx.fillStyle = '#c8c8c8';
   chuHCtx.fillRect(0, 0, 512, 512);
-  chuRCtx.fillStyle = '#a8a8a8';
+  chuRCtx.fillStyle = '#bababa';
   chuRCtx.fillRect(0, 0, 512, 512);
 
-  for (let i = 0; i < 1900; i++) {
+  // Soft cloudy mineral patina patches (isotropic, no horizontal streaks)
+  for (let i = 0; i < 420; i++) {
+    const x = seededNoise(i, 7, 19) * 512;
+    const y = seededNoise(i, 13, 29) * 512;
+    const rx = 14 + seededNoise(i, 17, 37) * 34;
+    const ry = 12 + seededNoise(i, 23, 43) * 30;
+    const tone = seededNoise(i, 31, 53);
+    const rg = chuCtx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+    if (tone > 0.54) {
+      rg.addColorStop(0, 'rgba(232, 212, 186, 0.08)');
+      rg.addColorStop(1, 'rgba(232, 212, 186, 0)');
+    } else if (tone > 0.16) {
+      rg.addColorStop(0, 'rgba(136, 108, 78, 0.08)');
+      rg.addColorStop(1, 'rgba(136, 108, 78, 0)');
+    } else {
+      rg.addColorStop(0, 'rgba(98, 96, 74, 0.06)');
+      rg.addColorStop(1, 'rgba(98, 96, 74, 0)');
+    }
+    chuCtx.fillStyle = rg;
+    chuCtx.beginPath();
+    chuCtx.ellipse(x, y, rx, ry, tone * Math.PI, 0, Math.PI * 2);
+    chuCtx.fill();
+  }
+
+  // Fine isotropic sandstone quartz & feldspar grit pores
+  for (let i = 0; i < 6500; i++) {
     const x = seededNoise(i, 11, 5) * 512;
     const y = seededNoise(i, 22, 9) * 512;
-    const w = 10 + seededNoise(i, 33, 15) * 42;
-    const h = 1.5 + seededNoise(i, 44, 21) * 4;
+    const rad = 0.7 + seededNoise(i, 33, 15) * 1.9;
     const tone = seededNoise(i, 55, 29);
-    chuCtx.fillStyle = tone > 0.5 ? 'rgba(244, 224, 198, 0.14)' : 'rgba(116, 88, 60, 0.14)';
-    chuCtx.fillRect(x, y, w, h);
-    const hv = Math.round(176 + tone * 56);
+    chuCtx.fillStyle =
+      tone > 0.62
+        ? 'rgba(245, 228, 204, 0.14)'
+        : tone < 0.25
+          ? 'rgba(96, 72, 48, 0.14)'
+          : 'rgba(176, 146, 114, 0.10)';
+    chuCtx.beginPath();
+    chuCtx.arc(x, y, rad, 0, Math.PI * 2);
+    chuCtx.fill();
+    const hv = Math.round(166 + tone * 58);
     chuHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.22)`;
-    chuHCtx.fillRect(x, y, w, h);
-    const rv = Math.round(135 + (1 - tone) * 72);
-    chuRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.26)`;
-    chuRCtx.fillRect(x, y, w, h);
+    chuHCtx.beginPath();
+    chuHCtx.arc(x, y, rad, 0, Math.PI * 2);
+    chuHCtx.fill();
+    const rv = Math.round(165 + (1 - tone) * 55);
+    chuRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.22)`;
+    chuRCtx.beginPath();
+    chuRCtx.arc(x, y, rad * 1.15, 0, Math.PI * 2);
+    chuRCtx.fill();
   }
   const chunarStoneMap = toTex(chuC, true, 1, 2);
-  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.55), false, 1, 2);
+  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.35), false, 1, 2);
   const chunarStoneRough = toTex(chuR, false, 1, 2);
-  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.35, 120), false, 1, 2);
+  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.2, 124), false, 1, 2);
 
   // 8. Antique Gilded Bronze Patina (Statues, Golden Gajur Spire, Myanmar Stupa, Baby Buddha)
   const [giltC, giltCtx] = makeCanvas(512, 512);

@@ -897,54 +897,57 @@ export function createMonumentalSeatedBuddha(
   drapeMesh.castShadow = true;
   buddha.add(drapeMesh);
 
-  // Sculpted Torso & Robe-draped Shoulders
+  // Sculpted Anatomical Torso & Robe-draped Shoulders (clean silhouette without protruding spheres)
   const torsoPts = [
     new THREE.Vector2(0.0, 0.42),
     new THREE.Vector2(0.84, 0.52),
-    new THREE.Vector2(0.66, 0.94),
-    new THREE.Vector2(0.68, 1.38),
-    new THREE.Vector2(0.82, 1.84),
-    new THREE.Vector2(0.65, 2.08),
+    new THREE.Vector2(0.65, 0.94),
+    new THREE.Vector2(0.69, 1.38),
+    new THREE.Vector2(0.80, 1.82),
+    new THREE.Vector2(0.64, 2.06),
     new THREE.Vector2(0.24, 2.22),
     new THREE.Vector2(0.19, 2.40),
   ];
-  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 32), mats.robeMat);
-  torso.scale.set(1.16, 1.0, 0.72);
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 36), mats.robeMat);
+  torso.scale.set(1.14, 1.0, 0.70);
   torso.castShadow = true;
   torso.receiveShadow = true;
   buddha.add(torso);
 
-  // Exposed right chest/shoulder skin section in authentic open-shoulder Uttarasanga style
-  const rightChest = new THREE.Mesh(new THREE.SphereGeometry(0.46, 18, 16), mats.skinMat);
-  rightChest.scale.set(1.08, 1.12, 0.78);
-  rightChest.position.set(0.32, 1.68, 0.14);
+  // Smooth sculpted bare right shoulder & upper chest contour flush with the torso
+  const rightChest = new THREE.Mesh(new THREE.SphereGeometry(0.33, 18, 14), mats.skinMat);
+  rightChest.scale.set(1.06, 0.90, 0.56);
+  rightChest.position.set(0.30, 1.71, 0.11);
   rightChest.castShadow = true;
-  buddha.add(rightChest);
+  const rightCollar = new THREE.Mesh(new THREE.CapsuleGeometry(0.135, 0.34, 8, 12), mats.skinMat);
+  rightCollar.rotation.z = -1.28;
+  rightCollar.position.set(0.41, 1.91, 0.04);
+  buddha.add(rightChest, rightCollar);
 
-  // Diagonal rolled monastic Sanghati robe edge & 6 sculpted radial fold ribs across chest
-  for (let f = 0; f < 6; f++) {
-    const off = f * 0.095;
+  // Diagonal rolled monastic Sanghati robe edge & 5 tailored chest drapery folds hugging the torso
+  for (let f = 0; f < 5; f++) {
+    const off = f * 0.11;
     const foldCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.66 + off * 0.24, 2.04 - off * 0.25, 0.18),
-      new THREE.Vector3(-0.14, 1.70 - off * 0.46, 0.57),
-      new THREE.Vector3(0.44, 1.40 - off * 0.40, 0.48),
-      new THREE.Vector3(0.72, 1.15 - off * 0.26, 0.08),
+      new THREE.Vector3(-0.66 + off * 0.22, 2.02 - off * 0.24, 0.12),
+      new THREE.Vector3(-0.14, 1.72 - off * 0.42, 0.51),
+      new THREE.Vector3(0.42, 1.44 - off * 0.38, 0.44),
+      new THREE.Vector3(0.70, 1.18 - off * 0.24, 0.06),
     ]);
-    const foldRadius = f === 0 ? 0.062 : 0.042;
+    const foldRadius = f === 0 ? 0.044 : 0.028;
     const fold = new THREE.Mesh(new THREE.TubeGeometry(foldCurve, 22, foldRadius, 10, false), mats.robeMat);
     fold.castShadow = true;
     buddha.add(fold);
   }
 
-  // Pleated folded shoulder shawl descending over left shoulder
+  // Pleated folded shoulder shawl descending neatly over left shoulder
   const shawlCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.46, 2.16, -0.26),
-    new THREE.Vector3(-0.56, 2.08, 0.16),
-    new THREE.Vector3(-0.44, 1.62, 0.48),
-    new THREE.Vector3(-0.34, 1.18, 0.51),
+    new THREE.Vector3(-0.44, 2.12, -0.22),
+    new THREE.Vector3(-0.54, 2.04, 0.14),
+    new THREE.Vector3(-0.42, 1.62, 0.44),
+    new THREE.Vector3(-0.34, 1.18, 0.46),
   ]);
-  const shawl = new THREE.Mesh(new THREE.TubeGeometry(shawlCurve, 18, 0.095, 10, false), mats.robeMat);
-  shawl.scale.set(1.2, 1, 0.45);
+  const shawl = new THREE.Mesh(new THREE.TubeGeometry(shawlCurve, 18, 0.072, 10, false), mats.robeMat);
+  shawl.scale.set(1.15, 1, 0.42);
   shawl.castShadow = true;
   buddha.add(shawl);
 
@@ -1253,6 +1256,114 @@ export function createNativitySiddharthaStatue(
   return g;
 }
 
+export function createRoundedSpoonLotusPetalGeo(
+  width = 0.062,
+  length = 0.118,
+  cupDepth = 0.022,
+): THREE.BufferGeometry {
+  const uSegs = 6;
+  const vSegs = 8;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+
+  for (let iv = 0; iv <= vSegs; iv++) {
+    const v = iv / vSegs;
+    // Rounded spoon profile: slender base -> broad mid-belly -> softly rounded tip (never pointy)
+    const widthEnv = Math.sin(Math.pow(v, 0.72) * Math.PI * 0.94 + 0.12);
+    const halfW = width * 0.5 * widthEnv;
+    const y = Math.pow(v, 1.08) * length;
+    const spoonCurl = Math.sin(v * Math.PI) * cupDepth * 0.55;
+    for (let iu = 0; iu <= uSegs; iu++) {
+      const u = iu / uSegs;
+      const s = u * 2 - 1;
+      const x = s * halfW;
+      // Cupped concave inner dish + delicate central vein ridge
+      const dish = (1 - s * s) * Math.sin(v * Math.PI) * cupDepth;
+      const vein = Math.exp(-s * s * 16) * 0.0025 * Math.sin(v * Math.PI);
+      const z = dish + spoonCurl - vein;
+      pos.push(x, y, z);
+      uv.push(u, v);
+    }
+  }
+  const stride = uSegs + 1;
+  for (let iv = 0; iv < vSegs; iv++) {
+    for (let iu = 0; iu < uSegs; iu++) {
+      const a = iv * stride + iu;
+      const b = a + 1;
+      const c = (iv + 1) * stride + iu + 1;
+      const d = (iv + 1) * stride + iu;
+      idx.push(a, b, c, a, c, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export function createBotanicalLotusTextures(): {
+  petalMap: THREE.CanvasTexture | null;
+  padMap: THREE.CanvasTexture | null;
+} {
+  if (typeof document === 'undefined') return { petalMap: null, padMap: null };
+
+  // Delicate pink-to-ivory sacred Nelumbo petal texture with vertical crimson veins
+  const pc = document.createElement('canvas');
+  pc.width = 128;
+  pc.height = 128;
+  const pCtx = pc.getContext('2d')!;
+  const pGrad = pCtx.createLinearGradient(0, 128, 0, 0);
+  pGrad.addColorStop(0.0, '#fff4ea');
+  pGrad.addColorStop(0.45, '#fbd6e0');
+  pGrad.addColorStop(0.84, '#f094b2');
+  pGrad.addColorStop(1.0, '#d85b86');
+  pCtx.fillStyle = pGrad;
+  pCtx.fillRect(0, 0, 128, 128);
+  pCtx.strokeStyle = 'rgba(196, 62, 108, 0.28)';
+  pCtx.lineWidth = 1.4;
+  for (let v = -5; v <= 5; v++) {
+    pCtx.beginPath();
+    pCtx.moveTo(64 + v * 3, 128);
+    pCtx.quadraticCurveTo(64 + v * 11, 64, 64 + v * 7, 4);
+    pCtx.stroke();
+  }
+  const petalMap = new THREE.CanvasTexture(pc);
+  petalMap.colorSpace = THREE.SRGBColorSpace;
+
+  // Radial veined emerald lily pad texture with subtle burgundy edge & water droplets
+  const lc = document.createElement('canvas');
+  lc.width = 256;
+  lc.height = 256;
+  const lCtx = lc.getContext('2d')!;
+  const lGrad = lCtx.createRadialGradient(128, 128, 8, 128, 128, 126);
+  lGrad.addColorStop(0, '#629842');
+  lGrad.addColorStop(0.55, '#3b7329');
+  lGrad.addColorStop(0.92, '#2d5c20');
+  lGrad.addColorStop(1.0, '#574828');
+  lCtx.fillStyle = lGrad;
+  lCtx.fillRect(0, 0, 256, 256);
+  lCtx.strokeStyle = 'rgba(146, 198, 92, 0.42)';
+  lCtx.lineWidth = 1.6;
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    lCtx.beginPath();
+    lCtx.moveTo(128, 128);
+    lCtx.quadraticCurveTo(
+      128 + Math.cos(a + 0.1) * 68,
+      128 + Math.sin(a + 0.1) * 68,
+      128 + Math.cos(a) * 120,
+      128 + Math.sin(a) * 120,
+    );
+    lCtx.stroke();
+  }
+  const padMap = new THREE.CanvasTexture(lc);
+  padMap.colorSpace = THREE.SRGBColorSpace;
+  return { petalMap, padMap };
+}
+
 function createSculptedMarigoldFlowerGeo(): { petalGeo: THREE.BufferGeometry; calyxGeo: THREE.BufferGeometry } {
   const petalParts: THREE.BufferGeometry[] = [];
   const push = (g: THREE.BufferGeometry, y = 0, rx = 0, ry = 0, rz = 0, x = 0, z = 0) => {
@@ -1269,65 +1380,135 @@ function createSculptedMarigoldFlowerGeo(): { petalGeo: THREE.BufferGeometry; ca
     g.dispose();
   };
 
-  // Outer ruffled marigold petal whorl (10 cupped ruffled petals)
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2;
-    const p = new THREE.SphereGeometry(0.022, 6, 5);
-    p.scale(1.15, 0.55, 1.55);
-    push(p, 0.018, 0.35, -a, 0, Math.cos(a) * 0.036, Math.sin(a) * 0.036);
+  // Delicate individual ruffled Sayapatri marigold florets arranged in 3 airy concentric whorls (never lumpy spheres)
+  const floretOuter = createRoundedSpoonLotusPetalGeo(0.020, 0.036, 0.005);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const tilt = 1.08 + (i % 2) * 0.14;
+    push(floretOuter.clone(), 0.014, tilt, -a, 0, Math.sin(a) * 0.018, Math.cos(a) * 0.018);
   }
-  // Middle dense ruffled crown whorl (8 upright florets)
-  for (let i = 0; i < 8; i++) {
-    const a = ((i + 0.5) / 8) * Math.PI * 2;
-    const p = new THREE.SphereGeometry(0.018, 6, 5);
-    p.scale(1.0, 0.85, 1.25);
-    push(p, 0.034, -0.25, -a, 0, Math.cos(a) * 0.021, Math.sin(a) * 0.021);
+  for (let i = 0; i < 9; i++) {
+    const a = ((i + 0.45) / 9) * Math.PI * 2;
+    const f = floretOuter.clone();
+    f.scale(0.84, 0.86, 0.84);
+    push(f, 0.020, 0.62 + (i % 2) * 0.12, -a, 0, Math.sin(a) * 0.011, Math.cos(a) * 0.011);
   }
-  // Central saffron-orange core dome
-  push(new THREE.SphereGeometry(0.020, 7, 6), 0.042);
+  for (let i = 0; i < 6; i++) {
+    const a = ((i + 0.25) / 6) * Math.PI * 2;
+    const f = floretOuter.clone();
+    f.scale(0.64, 0.72, 0.64);
+    push(f, 0.025, 0.24, -a, 0, Math.sin(a) * 0.004, Math.cos(a) * 0.004);
+  }
+  floretOuter.dispose();
 
   const petalGeo = mergeGeometries(petalParts, false)!;
   petalParts.forEach((p) => p.dispose());
 
-  // Green sepal calyx cup under blossom
-  const calyxGeo = new THREE.CylinderGeometry(0.030, 0.014, 0.018, 7).toNonIndexed();
-  calyxGeo.translate(0, 0.009, 0);
+  // Tapered green sepal calyx cup + flanking leaf tips
+  const calyxParts: THREE.BufferGeometry[] = [];
+  const cup = new THREE.CylinderGeometry(0.022, 0.010, 0.018, 7).toNonIndexed();
+  cup.translate(0, 0.009, 0);
+  calyxParts.push(cup);
+  for (let l = 0; l < 2; l++) {
+    const leaf = createRoundedSpoonLotusPetalGeo(0.016, 0.032, 0.003).toNonIndexed();
+    leaf.rotateX(1.32);
+    leaf.rotateY(l * Math.PI + 0.4);
+    leaf.translate(0, 0.008, 0);
+    calyxParts.push(leaf);
+  }
+  const calyxGeo = mergeGeometries(calyxParts, false)!;
+  calyxParts.forEach((c) => c.dispose());
   return { petalGeo, calyxGeo };
 }
 
-function createSculptedCuppedLotusFlowerGeo(): { petalGeo: THREE.BufferGeometry; podGeo: THREE.BufferGeometry } {
+function createSculptedCuppedLotusFlowerGeo(): {
+  petalGeo: THREE.BufferGeometry;
+  podGeo: THREE.BufferGeometry;
+  padGeo: THREE.BufferGeometry;
+} {
   const parts: THREE.BufferGeometry[] = [];
   const push = (g: THREE.BufferGeometry, y = 0, ry = 0, rx = 0, x = 0, z = 0) => {
     const ni = g.index ? g.toNonIndexed() : g.clone();
     if (rx) ni.rotateX(rx);
     if (ry) ni.rotateY(ry);
     ni.translate(x, y, z);
-    if (!ni.getAttribute('uv')) {
-      ni.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(ni.getAttribute('position').count * 2), 2));
-    }
     parts.push(ni);
     g.dispose();
   };
-  const basePetal = createCarvedLotusPetalGeometry(0.085, 0.145, 0.022);
-  // Outer 8 flaring lotus petals
+  const outerPetal = createRoundedSpoonLotusPetalGeo(0.068, 0.118, 0.024);
+  // Outer 8 wide-open gently cupped petals
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    push(basePetal.clone(), 0.014, -a, 0.92, Math.cos(a) * 0.035, Math.sin(a) * 0.035);
+    push(outerPetal.clone(), 0.012, a, 1.02 + (i % 2) * 0.08, Math.sin(a) * 0.032, Math.cos(a) * 0.032);
   }
-  // Inner 6 cupped upright petals
+  // Middle 8 half-cupped lush petals
+  for (let i = 0; i < 8; i++) {
+    const a = ((i + 0.5) / 8) * Math.PI * 2;
+    const mid = outerPetal.clone();
+    mid.scale(0.88, 0.92, 0.90);
+    push(mid, 0.018, a, 0.64, Math.sin(a) * 0.024, Math.cos(a) * 0.024);
+  }
+  // Inner 6 upright bud-forming petals
   for (let i = 0; i < 6; i++) {
-    const a = ((i + 0.5) / 6) * Math.PI * 2;
-    const inner = basePetal.clone();
-    inner.scale(0.82, 0.86, 0.82);
-    push(inner, 0.022, -a, 0.42, Math.cos(a) * 0.022, Math.sin(a) * 0.022);
+    const a = ((i + 0.25) / 6) * Math.PI * 2;
+    const inner = outerPetal.clone();
+    inner.scale(0.72, 0.80, 0.78);
+    push(inner, 0.024, a, 0.30, Math.sin(a) * 0.015, Math.cos(a) * 0.015);
   }
-  basePetal.dispose();
+  outerPetal.dispose();
   const petalGeo = mergeGeometries(parts, false)!;
   parts.forEach((p) => p.dispose());
 
-  const podGeo = new THREE.CylinderGeometry(0.032, 0.016, 0.042, 10);
-  podGeo.translate(0, 0.035, 0);
-  return { petalGeo, podGeo };
+  // Sculpted inverted-cone seed-pod receptacle + delicate stamen ring
+  const podParts: THREE.BufferGeometry[] = [];
+  const podCore = new THREE.CylinderGeometry(0.030, 0.014, 0.034, 12).toNonIndexed();
+  podCore.translate(0, 0.032, 0);
+  podParts.push(podCore);
+  for (let s = 0; s < 12; s++) {
+    const sa = (s / 12) * Math.PI * 2;
+    const st = new THREE.CylinderGeometry(0.0022, 0.0018, 0.026, 4).toNonIndexed();
+    st.rotateX(0.32);
+    st.rotateY(sa);
+    st.translate(Math.sin(sa) * 0.030, 0.036, Math.cos(sa) * 0.030);
+    podParts.push(st);
+  }
+  const podGeo = mergeGeometries(podParts, false)!;
+  podParts.forEach((p) => p.dispose());
+
+  // Notched veined lily pad with planar radial UVs & slightly upturned rim
+  const segs = 22;
+  const notchGap = 0.28;
+  const padPos: number[] = [];
+  const padUv: number[] = [];
+  const padIdx: number[] = [];
+  padPos.push(0, 0.002, 0);
+  padUv.push(0.5, 0.5);
+  for (let ring = 1; ring <= 2; ring++) {
+    const r = ring === 1 ? 0.115 : 0.175;
+    const y = ring === 1 ? 0.001 : 0.007;
+    for (let i = 0; i <= segs; i++) {
+      const a = notchGap * 0.5 + (i / segs) * (Math.PI * 2 - notchGap);
+      const wave = ring === 2 ? Math.sin(a * 5) * 0.004 : 0;
+      const x = Math.cos(a) * (r + wave);
+      const z = Math.sin(a) * (r + wave);
+      padPos.push(x, y, z);
+      padUv.push(0.5 + (x / 0.36), 0.5 + (z / 0.36));
+    }
+  }
+  const r1Start = 1;
+  const r2Start = 1 + (segs + 1);
+  for (let i = 0; i < segs; i++) {
+    padIdx.push(0, r1Start + i, r1Start + i + 1);
+    padIdx.push(r1Start + i, r2Start + i, r2Start + i + 1);
+    padIdx.push(r1Start + i, r2Start + i + 1, r1Start + i + 1);
+  }
+  const padGeo = new THREE.BufferGeometry();
+  padGeo.setAttribute('position', new THREE.Float32BufferAttribute(padPos, 3));
+  padGeo.setAttribute('uv', new THREE.Float32BufferAttribute(padUv, 2));
+  padGeo.setIndex(padIdx);
+  padGeo.computeVertexNormals();
+
+  return { petalGeo, podGeo, padGeo };
 }
 
 function hashFloat2(x: number, y: number, seed = 41): number {
@@ -2319,29 +2500,35 @@ export function createMonumentalBabyBuddhaMonument(
     opacity: 0.92,
   });
 
+  const botanicalLotusTex = createBotanicalLotusTextures();
+
   const marigoldPetalMat = new THREE.MeshStandardMaterial({
     color: 0xf77e14,
-    roughness: 0.62,
+    roughness: 0.68,
     metalness: 0.02,
-    emissive: 0x451800,
-    emissiveIntensity: 0.14,
+    emissive: 0x3b1200,
+    emissiveIntensity: 0.08,
+    side: THREE.DoubleSide,
   });
 
   const mangoLeafRopeMat = new THREE.MeshStandardMaterial({
-    color: 0x2d5820,
-    roughness: 0.82,
+    color: 0x264b1c,
+    roughness: 0.84,
     metalness: 0.02,
   });
 
   const lotusPetalPinkMat = new THREE.MeshStandardMaterial({
-    color: 0xf6c0cf,
-    roughness: 0.56,
+    color: 0xffffff,
+    map: botanicalLotusTex.petalMap,
+    roughness: 0.52,
     metalness: 0.02,
+    side: THREE.DoubleSide,
   });
 
   const lotusPadMat = new THREE.MeshStandardMaterial({
-    color: 0x386a2b,
-    roughness: 0.78,
+    color: 0xffffff,
+    map: botanicalLotusTex.padMap,
+    roughness: 0.72,
     metalness: 0.02,
     side: THREE.DoubleSide,
   });
@@ -2393,38 +2580,89 @@ export function createMonumentalBabyBuddhaMonument(
   basaltPetals.computeBoundingSphere();
   root.add(basaltPetals);
 
-  // Interactive Digital Butter Lamps (Diyo / Choemi) mounted around the basalt lotus basin rim
-  const plinthGeo = new THREE.BoxGeometry(0.32, 0.14, 0.34);
+  // Interactive Digital Butter Lamps (Ornate Newari Sukunda / Choemi) mounted around the basalt lotus basin rim
+  const plinthParts: THREE.BufferGeometry[] = [];
+  const pBase = new THREE.BoxGeometry(0.34, 0.09, 0.36).toNonIndexed();
+  pBase.translate(0, -0.025, 0);
+  const pCap = new THREE.BoxGeometry(0.28, 0.045, 0.30).toNonIndexed();
+  pCap.translate(0, 0.042, 0);
+  const pPad = new THREE.CylinderGeometry(0.115, 0.135, 0.022, 16).toNonIndexed();
+  pPad.translate(0, 0.075, 0);
+  plinthParts.push(pBase, pCap, pPad);
+  const plinthGeo = mergeGeometries(plinthParts, false)!;
+  plinthParts.forEach((p) => p.dispose());
+
+  // Sculpted Newari brass butter lamp: stepped lotus foot + turned baluster + embossed lotus chalice + beaded lip
+  const lampParts: THREE.BufferGeometry[] = [];
   const lampProfilePts = [
     new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.056, 0.0),
-    new THREE.Vector2(0.052, 0.016),
-    new THREE.Vector2(0.022, 0.032),
-    new THREE.Vector2(0.018, 0.088),
-    new THREE.Vector2(0.034, 0.104),
-    new THREE.Vector2(0.072, 0.132),
-    new THREE.Vector2(0.078, 0.144),
-    new THREE.Vector2(0.066, 0.146),
-    new THREE.Vector2(0.056, 0.128),
+    new THREE.Vector2(0.068, 0.0),
+    new THREE.Vector2(0.066, 0.010),
+    new THREE.Vector2(0.056, 0.018),
+    new THREE.Vector2(0.036, 0.028),
+    new THREE.Vector2(0.018, 0.042),
+    new THREE.Vector2(0.026, 0.058), // Baluster center knot
+    new THREE.Vector2(0.016, 0.074),
+    new THREE.Vector2(0.028, 0.092),
+    new THREE.Vector2(0.062, 0.114),
+    new THREE.Vector2(0.088, 0.136),
+    new THREE.Vector2(0.096, 0.146), // Rolled rim bead
+    new THREE.Vector2(0.084, 0.150),
+    new THREE.Vector2(0.070, 0.132),
     new THREE.Vector2(0.0, 0.124),
   ];
-  const butterLampBodyGeo = setGeometryCavityColor(
-    new THREE.LatheGeometry(lampProfilePts, 18),
-    (i, pos) => (pos.getY(i) < 0.04 ? 0.52 : 0.16),
+  const lampLathe = setGeometryCavityColor(
+    new THREE.LatheGeometry(lampProfilePts, 24).toNonIndexed(),
+    (i, pos) => (pos.getY(i) < 0.045 || (pos.getY(i) > 0.085 && pos.getY(i) < 0.115) ? 0.56 : 0.14),
   );
-  const lampGheeGeo = new THREE.CylinderGeometry(0.056, 0.052, 0.012, 16);
-  const lampWickGeo = new THREE.CylinderGeometry(0.005, 0.007, 0.022, 8);
+  lampParts.push(lampLathe);
+  // 12 embossed lotus petals encircling the chalice belly & foot
+  const lampPetalGeo = createRoundedSpoonLotusPetalGeo(0.024, 0.042, 0.006);
+  for (let lp = 0; lp < 12; lp++) {
+    const la = (lp / 12) * Math.PI * 2;
+    const petal = lampPetalGeo.clone().toNonIndexed();
+    petal.rotateX(0.68);
+    petal.rotateY(la);
+    petal.translate(Math.sin(la) * 0.044, 0.096, Math.cos(la) * 0.044);
+    setGeometryCavityColor(petal, () => 0.34);
+    lampParts.push(petal);
+  }
+  lampPetalGeo.dispose();
+  const lampBeadRing = setGeometryCavityColor(
+    new THREE.TorusGeometry(0.088, 0.0065, 8, 28).toNonIndexed(),
+    () => 0.18,
+  );
+  lampBeadRing.rotateX(Math.PI / 2);
+  lampBeadRing.translate(0, 0.145, 0);
+  lampParts.push(lampBeadRing);
+  const butterLampBodyGeo = mergeGeometries(lampParts, false)!;
+  lampParts.forEach((p) => p.dispose());
+
+  // Concave molten golden ghee meniscus + braided twisted cotton wick with dark charred tip
+  const gheePts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.022, -0.002),
+    new THREE.Vector2(0.056, 0.001),
+    new THREE.Vector2(0.072, 0.007),
+    new THREE.Vector2(0.0, 0.007),
+  ];
+  const lampGheeGeo = new THREE.LatheGeometry(gheePts, 20);
+  const lampWickGeo = new THREE.ConeGeometry(0.0055, 0.024, 8);
   const lampWickMat = new THREE.MeshStandardMaterial({
-    color: 0x2a1f18,
-    roughness: 0.92,
+    color: 0x3b2a1c,
+    roughness: 0.90,
     metalness: 0.02,
+    emissive: 0x2e1204,
+    emissiveIntensity: 0.32,
   });
-  const lampGheeMat = new THREE.MeshStandardMaterial({
-    color: 0xf4b63c,
-    roughness: 0.24,
-    metalness: 0.08,
-    emissive: 0x3b1f00,
-    emissiveIntensity: 0.15,
+  const lampGheeMat = new THREE.MeshPhysicalMaterial({
+    color: 0xf4a828,
+    roughness: 0.16,
+    metalness: 0.04,
+    clearcoat: 0.92,
+    clearcoatRoughness: 0.12,
+    emissive: 0x5c2d00,
+    emissiveIntensity: 0.24,
   });
   const outerFlameGeo = new THREE.SphereGeometry(0.024, 12, 10);
   outerFlameGeo.scale(0.85, 1.95, 0.85);
@@ -2461,18 +2699,18 @@ export function createMonumentalBabyBuddhaMonument(
     p.castShadow = true;
 
     const lampBody = new THREE.Mesh(butterLampBodyGeo, ornamentGoldMat);
-    lampBody.position.set(rx, 0.508, rz);
+    lampBody.position.set(rx, 0.525, rz);
     lampBody.castShadow = true;
 
     const ghee = new THREE.Mesh(lampGheeGeo, lampGheeMat);
-    ghee.position.set(rx, 0.638, rz);
+    ghee.position.set(rx, 0.654, rz);
 
     const wick = new THREE.Mesh(lampWickGeo, lampWickMat);
-    wick.position.set(rx, 0.648, rz);
+    wick.position.set(rx, 0.668, rz);
 
     const flameGroup = new THREE.Group();
     flameGroup.name = `BabyBuddhaButterLampFlame_${i}`;
-    flameGroup.position.set(rx, 0.652, rz);
+    flameGroup.position.set(rx, 0.674, rz);
     flameGroup.scale.setScalar(0);
     flameGroup.visible = false;
     flameGroup.userData.nonCollidable = true;
@@ -2494,7 +2732,7 @@ export function createMonumentalBabyBuddhaMonument(
       lampIndex: i,
       flameGroup,
       haloMesh,
-      localPos: [rx, 0.652, rz],
+      localPos: [rx, 0.674, rz],
     });
   }
   root.userData.butterLamps = butterLamps;
@@ -2505,32 +2743,76 @@ export function createMonumentalBabyBuddhaMonument(
   root.userData.ritualLampLight = ritualLampLight;
 
   // 4 Sculpted Cast-Bronze Dhupa Incense Braziers seated around the golden lotus pedestal (r = 1.06m)
-  const brazierPedestalGeo = new THREE.CylinderGeometry(0.145, 0.175, 0.12, 12);
+  const brPedPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.195, 0.0),
+    new THREE.Vector2(0.188, 0.032),
+    new THREE.Vector2(0.155, 0.048),
+    new THREE.Vector2(0.145, 0.088),
+    new THREE.Vector2(0.165, 0.108),
+    new THREE.Vector2(0.0, 0.112),
+  ];
+  const brazierPedestalGeo = new THREE.LatheGeometry(brPedPts, 8);
+  const brazierParts: THREE.BufferGeometry[] = [];
   const brazierBowlPts = [
     new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.095, 0.0),
-    new THREE.Vector2(0.088, 0.02),
-    new THREE.Vector2(0.052, 0.045),
-    new THREE.Vector2(0.135, 0.088),
-    new THREE.Vector2(0.148, 0.118),
-    new THREE.Vector2(0.125, 0.122),
-    new THREE.Vector2(0.105, 0.095),
-    new THREE.Vector2(0.0, 0.092),
+    new THREE.Vector2(0.105, 0.0),
+    new THREE.Vector2(0.100, 0.018),
+    new THREE.Vector2(0.054, 0.042),
+    new THREE.Vector2(0.088, 0.068),
+    new THREE.Vector2(0.158, 0.108),
+    new THREE.Vector2(0.164, 0.132),
+    new THREE.Vector2(0.146, 0.146),
+    new THREE.Vector2(0.126, 0.142),
+    new THREE.Vector2(0.115, 0.112),
+    new THREE.Vector2(0.0, 0.104),
   ];
-  const brazierBowlGeo = new THREE.LatheGeometry(brazierBowlPts, 18);
-  const ashBedGeo = new THREE.CylinderGeometry(0.106, 0.088, 0.016, 16);
+  brazierParts.push(new THREE.LatheGeometry(brazierBowlPts, 24).toNonIndexed());
+  // Embossed bronze collar & twin temple ring handles
+  const brCollar = new THREE.TorusGeometry(0.154, 0.0085, 8, 24).toNonIndexed();
+  brCollar.rotateX(Math.PI / 2);
+  brCollar.translate(0, 0.122, 0);
+  brazierParts.push(brCollar);
+  for (const hSide of [-1, 1]) {
+    const hRing = new THREE.TorusGeometry(0.026, 0.006, 6, 14).toNonIndexed();
+    hRing.rotateY(Math.PI / 2);
+    hRing.translate(hSide * 0.164, 0.112, 0);
+    brazierParts.push(hRing);
+  }
+  const brPetal = createRoundedSpoonLotusPetalGeo(0.036, 0.056, 0.009);
+  for (let bp = 0; bp < 12; bp++) {
+    const ba = (bp / 12) * Math.PI * 2;
+    const petal = brPetal.clone().toNonIndexed();
+    petal.rotateX(0.76);
+    petal.rotateY(ba);
+    petal.translate(Math.sin(ba) * 0.094, 0.072, Math.cos(ba) * 0.094);
+    brazierParts.push(petal);
+  }
+  brPetal.dispose();
+  const brazierBowlGeo = mergeGeometries(brazierParts, false)!;
+  brazierParts.forEach((p) => p.dispose());
+
+  // Sculpted mounded ash bed
+  const ashPts = [
+    new THREE.Vector2(0.0, 0.022),
+    new THREE.Vector2(0.052, 0.015),
+    new THREE.Vector2(0.116, 0.002),
+    new THREE.Vector2(0.0, 0.0),
+  ];
+  const ashBedGeo = new THREE.LatheGeometry(ashPts, 18);
   const ashBedMat = new THREE.MeshStandardMaterial({
-    color: 0x706c66,
-    roughness: 0.94,
+    color: 0x8d8880,
+    roughness: 0.96,
     metalness: 0.02,
   });
-  const incenseStickGeo = new THREE.CylinderGeometry(0.0045, 0.0055, 0.145, 6);
+  const incenseStickGeo = new THREE.CylinderGeometry(0.0032, 0.0044, 0.155, 6);
   const incenseStickMat = new THREE.MeshStandardMaterial({
-    color: 0x6b3a1f,
-    roughness: 0.85,
+    color: 0x62341c,
+    roughness: 0.88,
   });
-  const emberTipGeo = new THREE.SphereGeometry(0.0075, 6, 6);
-  const emberTipMat = new THREE.MeshBasicMaterial({ color: 0xff6e1a });
+  const emberTipGeo = new THREE.ConeGeometry(0.0048, 0.012, 6);
+  const emberTipMat = new THREE.MeshBasicMaterial({ color: 0xff7824 });
+  const coalEmberMat = new THREE.MeshBasicMaterial({ color: 0xff5a12 });
 
   for (let b = 0; b < 4; b++) {
     const ba = Math.PI * 0.25 + b * Math.PI * 0.5;
@@ -2538,27 +2820,35 @@ export function createMonumentalBabyBuddhaMonument(
     const bz = Math.cos(ba) * 1.06;
     const brazier = new THREE.Group();
     brazier.name = `DhupaIncenseBrazier_${b}`;
-    brazier.position.set(bx, 0.382, bz);
+    brazier.position.set(bx, 0.376, bz);
+    brazier.rotation.y = ba;
 
     const ped = new THREE.Mesh(brazierPedestalGeo, craftMats.basaltMat);
-    ped.position.y = 0.015;
     ped.castShadow = true;
     const bowl = new THREE.Mesh(brazierBowlGeo, mats.bronzeMat);
-    bowl.position.y = 0.072;
+    bowl.position.y = 0.102;
     bowl.castShadow = true;
     const ash = new THREE.Mesh(ashBedGeo, ashBedMat);
-    ash.position.y = 0.168;
+    ash.position.y = 0.214;
     brazier.add(ped, bowl, ash);
 
+    for (let e = 0; e < 4; e++) {
+      const ea = e * 1.57 + 0.4;
+      const coal = new THREE.Mesh(emberTipGeo, coalEmberMat);
+      coal.position.set(Math.sin(ea) * 0.045, 0.225, Math.cos(ea) * 0.045);
+      coal.scale.setScalar(0.8);
+      brazier.add(coal);
+    }
+
     for (let s = 0; s < 3; s++) {
-      const sa = ba + (s - 1) * 1.95;
+      const sa = (s - 1) * 1.85;
       const stickHolder = new THREE.Group();
-      stickHolder.position.set(Math.sin(sa) * 0.022, 0.172, Math.cos(sa) * 0.022);
-      stickHolder.rotation.set(Math.cos(sa) * 0.24, 0, -Math.sin(sa) * 0.24);
+      stickHolder.position.set(Math.sin(sa) * 0.022, 0.228, Math.cos(sa) * 0.022);
+      stickHolder.rotation.set(Math.cos(sa) * 0.20, 0, -Math.sin(sa) * 0.20);
       const stick = new THREE.Mesh(incenseStickGeo, incenseStickMat);
-      stick.position.y = 0.068;
+      stick.position.y = 0.072;
       const tip = new THREE.Mesh(emberTipGeo, emberTipMat);
-      tip.position.y = 0.142;
+      tip.position.y = 0.154;
       stickHolder.add(stick, tip);
       brazier.add(stickHolder);
     }
@@ -2582,14 +2872,14 @@ export function createMonumentalBabyBuddhaMonument(
   }
 
   // =========================================================================
-  // B. WOVEN MULTI-PETAL SAYAPATRI MARIGOLD GARLANDS & FLOATING LOTUS BLOOMS
+  // B. WOVEN SAYAPATRI MARIGOLD GARLANDS & FLOATING SACRED LOTUS BLOOMS
   // =========================================================================
   for (const gRad of [2.74, 0.92]) {
-    const rope = new THREE.Mesh(new THREE.TorusGeometry(gRad, 0.036, 8, 48), mangoLeafRopeMat);
-    rope.rotation.x = Math.PI / 2;
-    rope.position.y = 0.422;
-    rope.userData.nonCollidable = true;
-    root.add(rope);
+    const vine = new THREE.Mesh(new THREE.TorusGeometry(gRad, 0.011, 6, 48), mangoLeafRopeMat);
+    vine.rotation.x = Math.PI / 2;
+    vine.position.y = 0.412;
+    vine.userData.nonCollidable = true;
+    root.add(vine);
   }
   const festoonCoords: Array<[number, number, number]> = [];
   for (let f = 0; f < 8; f++) {
@@ -2600,32 +2890,32 @@ export function createMonumentalBabyBuddhaMonument(
       const t = s / 12;
       const a = a0 + (a1 - a0) * t;
       const r = 2.74 - Math.sin(t * Math.PI) * 0.42;
-      const pos = new THREE.Vector3(Math.sin(a) * r, 0.415, Math.cos(a) * r);
+      const pos = new THREE.Vector3(Math.sin(a) * r, 0.402, Math.cos(a) * r);
       pts.push(pos);
       if (s > 0 && s < 12) {
-        festoonCoords.push([pos.x, 0.405, pos.z]);
+        festoonCoords.push([pos.x, 0.398, pos.z]);
       }
     }
-    const festoonRope = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.026, 6, false),
+    const festoonVine = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.0085, 5, false),
       mangoLeafRopeMat,
     );
-    festoonRope.userData.nonCollidable = true;
-    root.add(festoonRope);
+    festoonVine.userData.nonCollidable = true;
+    root.add(festoonVine);
   }
 
   const flowerCoords: Array<[number, number, number, number]> = [];
   for (const [ringR, stepCount] of [
-    [2.74, 132],
-    [0.92, 48],
+    [2.74, 156],
+    [0.92, 54],
   ] as Array<[number, number]>) {
     for (let i = 0; i < stepCount; i++) {
       const a = (i / stepCount) * Math.PI * 2;
-      flowerCoords.push([Math.sin(a) * ringR, 0.432, Math.cos(a) * ringR, 0.92 + (i % 3) * 0.10]);
+      flowerCoords.push([Math.sin(a) * ringR, 0.414, Math.cos(a) * ringR, 0.96 + (i % 3) * 0.12]);
     }
   }
   festoonCoords.forEach(([fx, fy, fz], idx) => {
-    flowerCoords.push([fx, fy, fz, 0.95 + (idx % 2) * 0.12]);
+    flowerCoords.push([fx, fy + 0.006, fz, 0.95 + (idx % 2) * 0.14]);
   });
 
   const { petalGeo: mgPetalGeo, calyxGeo: mgCalyxGeo } = createSculptedMarigoldFlowerGeo();
@@ -2636,13 +2926,15 @@ export function createMonumentalBabyBuddhaMonument(
 
   flowerCoords.forEach(([bx, by, bz, bs], idx) => {
     _v3.set(bx, by, bz);
-    _q.setFromEuler(_e.set(0.08 * Math.sin(idx), idx * 1.1, 0.08 * Math.cos(idx)));
+    _q.setFromEuler(_e.set(0.14 * Math.sin(idx * 1.7), idx * 1.17, 0.14 * Math.cos(idx * 1.3)));
     _s.setScalar(bs);
     _m4.compose(_v3, _q, _s);
     marigoldBlossomInst.setMatrixAt(idx, _m4);
     marigoldCalyxInst.setMatrixAt(idx, _m4);
-    const tone = idx % 3;
-    _cTmp.setHex(tone === 0 ? 0xffaa1d : tone === 1 ? 0xf67214 : 0xe5510a);
+    const tone = idx % 4;
+    _cTmp.setHex(
+      tone === 0 ? 0xffb824 : tone === 1 ? 0xf78618 : tone === 2 ? 0xe85a0c : 0xffcc36,
+    );
     marigoldBlossomInst.setColorAt(idx, _cTmp);
   });
   marigoldBlossomInst.instanceMatrix.needsUpdate = true;
@@ -2652,28 +2944,27 @@ export function createMonumentalBabyBuddhaMonument(
   marigoldCalyxInst.computeBoundingSphere();
   root.add(marigoldBlossomInst, marigoldCalyxInst);
 
-  const { petalGeo: lotPetalGeo, podGeo: lotPodGeo } = createSculptedCuppedLotusFlowerGeo();
+  const { petalGeo: lotPetalGeo, podGeo: lotPodGeo, padGeo } = createSculptedCuppedLotusFlowerGeo();
   setGeometryUniformColor(lotPodGeo, 0xe8b63c);
-  const padGeo = new THREE.CylinderGeometry(0.16, 0.15, 0.010, 14, 1, false, 0.25, Math.PI * 1.86);
   const floatLotusCoords: Array<[number, number, number]> = [];
   for (let i = 0; i < 16; i++) {
     const a = ((i + 0.35) / 16) * Math.PI * 2;
     const rad = i % 2 === 0 ? 1.56 : 1.98;
-    floatLotusCoords.push([Math.sin(a) * rad, Math.cos(a) * rad, 0.85 + (i % 3) * 0.14]);
+    floatLotusCoords.push([Math.sin(a) * rad, Math.cos(a) * rad, 0.90 + (i % 3) * 0.14]);
   }
   const padInst = new THREE.InstancedMesh(padGeo, lotusPadMat, floatLotusCoords.length);
   const lotBloomInst = new THREE.InstancedMesh(lotPetalGeo, lotusPetalPinkMat, floatLotusCoords.length);
   const lotPodInst = new THREE.InstancedMesh(lotPodGeo, ornamentGoldMat, floatLotusCoords.length);
   for (const inst of [padInst, lotBloomInst, lotPodInst]) inst.userData.nonCollidable = true;
   floatLotusCoords.forEach(([lx, lz, ls], idx) => {
-    _v3.set(lx, 0.388, lz);
-    _q.setFromEuler(_e.set(0, idx * 1.3, 0));
+    _v3.set(lx, 0.386, lz);
+    _q.setFromEuler(_e.set(0, idx * 1.37, 0));
     _s.setScalar(ls);
     _m4.compose(_v3, _q, _s);
     padInst.setMatrixAt(idx, _m4);
     lotBloomInst.setMatrixAt(idx, _m4);
     lotPodInst.setMatrixAt(idx, _m4);
-    _cTmp.setHex(idx % 3 === 0 ? 0xfff0f4 : 0xf4a8be);
+    _cTmp.setHex(idx % 3 === 0 ? 0xfff4f7 : 0xfad2df);
     lotBloomInst.setColorAt(idx, _cTmp);
   });
   for (const inst of [padInst, lotBloomInst, lotPodInst]) {
@@ -2994,3 +3285,122 @@ export function createMonumentalBabyBuddhaMonument(
   root.add(fig);
   return root;
 }
+
+/**
+ * Compact sculpted Padmasana Dhyana Buddha for stupa shrines & facade alcoves (total height ~0.95m, faces +Z).
+ */
+export function createDetailedNicheSeatedBuddha(
+  goldMat: THREE.Material,
+  bronzeMat: THREE.Material,
+): THREE.Group {
+  const g = new THREE.Group();
+
+  // Double-lotus seat plinth
+  const plinthPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.34, 0.0),
+    new THREE.Vector2(0.28, 0.06),
+    new THREE.Vector2(0.25, 0.10),
+    new THREE.Vector2(0.32, 0.15),
+    new THREE.Vector2(0.0, 0.15),
+  ];
+  const plinth = new THREE.Mesh(new THREE.LatheGeometry(plinthPts, 20), bronzeMat);
+  plinth.castShadow = true;
+  g.add(plinth);
+
+  const petalGeo = createRoundedSpoonLotusPetalGeo(0.085, 0.09, 0.018);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const p = new THREE.Mesh(petalGeo, goldMat);
+    p.position.set(Math.sin(a) * 0.28, 0.08, Math.cos(a) * 0.28);
+    p.rotation.y = a;
+    p.rotation.x = 0.45;
+    g.add(p);
+  }
+
+  // Padmasana crossed legs
+  const lapPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.30, 0.0),
+    new THREE.Vector2(0.28, 0.06),
+    new THREE.Vector2(0.22, 0.11),
+    new THREE.Vector2(0.14, 0.14),
+  ];
+  const lap = new THREE.Mesh(new THREE.LatheGeometry(lapPts, 20), goldMat);
+  lap.scale.set(1.12, 1.0, 0.78);
+  lap.position.y = 0.15;
+  lap.castShadow = true;
+  g.add(lap);
+
+  for (const side of [-1, 1]) {
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), goldMat);
+    knee.scale.set(1.25, 0.68, 1.0);
+    knee.position.set(side * 0.22, 0.20, 0.04);
+    g.add(knee);
+  }
+
+  // Sculpted torso + draped shoulders
+  const torsoPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.17, 0.02),
+    new THREE.Vector2(0.13, 0.13),
+    new THREE.Vector2(0.15, 0.24),
+    new THREE.Vector2(0.18, 0.34),
+    new THREE.Vector2(0.14, 0.41),
+    new THREE.Vector2(0.055, 0.45),
+    new THREE.Vector2(0.048, 0.49),
+  ];
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoPts, 22), goldMat);
+  torso.scale.set(1.12, 1.0, 0.72);
+  torso.position.y = 0.24;
+  torso.castShadow = true;
+  g.add(torso);
+
+  // Tapered Dhyana arms & folded palms + alms vessel
+  for (const side of [-1, 1]) {
+    const armCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side * 0.15, 0.59, 0.01),
+      new THREE.Vector3(side * 0.21, 0.46, 0.04),
+      new THREE.Vector3(side * 0.15, 0.33, 0.10),
+      new THREE.Vector3(side * 0.04, 0.29, 0.13),
+    ]);
+    const arm = new THREE.Mesh(
+      createTaperedLimbGeometry(armCurve, (t) => THREE.MathUtils.lerp(0.044, 0.028, t), 14, 10),
+      goldMat,
+    );
+    g.add(arm);
+  }
+  const hands = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.060, 0.026, 12), goldMat);
+  hands.position.set(0, 0.285, 0.13);
+  const bowl = new THREE.Mesh(
+    new THREE.SphereGeometry(0.052, 12, 8, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.65),
+    bronzeMat,
+  );
+  bowl.position.set(0, 0.33, 0.13);
+  g.add(hands, bowl);
+
+  // Head + snail-shell hair dome + Ushnisha + elongated ears
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.095, 16, 14), goldMat);
+  head.scale.set(0.92, 1.08, 0.96);
+  head.position.set(0, 0.79, 0.01);
+  const ushnisha = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), goldMat);
+  ushnisha.scale.set(1.0, 0.85, 1.0);
+  ushnisha.position.set(0, 0.895, 0.0);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.058, 8), goldMat);
+  flame.position.set(0, 0.945, 0.0);
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.055, 4, 6), goldMat);
+    ear.position.set(side * 0.088, 0.77, 0.0);
+    g.add(ear);
+  }
+
+  // Ornate concentric Prabhavali aura ring
+  const haloOuter = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.016, 8, 28), goldMat);
+  haloOuter.position.set(0, 0.74, -0.10);
+  const haloInner = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.009, 6, 24), bronzeMat);
+  haloInner.position.set(0, 0.74, -0.095);
+
+  g.add(head, ushnisha, flame, haloOuter, haloInner);
+  return g;
+}
+

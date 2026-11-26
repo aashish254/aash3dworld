@@ -334,6 +334,10 @@ export class WorldEngine {
   private butterflyWingInst!: THREE.InstancedMesh;
   private butterflyWingGeo!: THREE.BufferGeometry;
   private butterflyWingMat!: THREE.MeshStandardMaterial;
+  private butterflyWingTex!: THREE.CanvasTexture;
+  private butterflyBodyInst!: THREE.InstancedMesh;
+  private butterflyBodyGeo!: THREE.BufferGeometry;
+  private butterflyBodyMat!: THREE.MeshStandardMaterial;
   private butterflyRootDummy = new THREE.Object3D();
   private butterflyWingDummy = new THREE.Object3D();
   private butterflyMat4Tmp = new THREE.Matrix4();
@@ -1947,27 +1951,135 @@ export class WorldEngine {
   }
 
   private buildMeditationButterflies(): void {
-    // Wing hinged along x=0 extending to +x so mirroring scale.x = -1 forms paired wings in 1 InstancedMesh
+    // Paint a detailed scalloped monarch/swallowtail wing alpha+vein CanvasTexture
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 256, 256);
+
+    // Forewing outer silhouette (hinge at x=0, tip toward x=244, y=34)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(4, 112);
+    ctx.bezierCurveTo(58, 44, 168, 12, 238, 30);
+    ctx.bezierCurveTo(250, 48, 240, 96, 210, 128);
+    ctx.bezierCurveTo(174, 146, 84, 138, 4, 128);
+    ctx.closePath();
+
+    // Hindwing scalloped silhouette (y=124..242)
+    ctx.moveTo(4, 124);
+    ctx.bezierCurveTo(86, 126, 178, 138, 198, 174);
+    ctx.bezierCurveTo(206, 200, 178, 232, 138, 240);
+    ctx.bezierCurveTo(122, 244, 112, 234, 96, 242);
+    ctx.bezierCurveTo(60, 234, 22, 196, 4, 142);
+    ctx.closePath();
+
+    const grad = ctx.createRadialGradient(34, 124, 12, 140, 124, 210);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.55, '#f4f4f4');
+    grad.addColorStop(0.84, '#d8d8d8');
+    grad.addColorStop(1, '#262120');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.clip();
+
+    // Dark scalloped wing margin & delicate cream marginal spots
+    ctx.strokeStyle = '#1c1816';
+    ctx.lineWidth = 22;
+    ctx.stroke();
+
+    ctx.fillStyle = '#fff9eb';
+    const spots: Array<[number, number, number]> = [
+      [226, 42, 4.5],
+      [228, 66, 4.0],
+      [218, 92, 4.0],
+      [204, 115, 3.8],
+      [186, 166, 3.6],
+      [176, 194, 4.0],
+      [154, 218, 4.2],
+      [126, 228, 3.8],
+      [94, 226, 3.6],
+    ];
+    for (const [sx, sy, sr] of spots) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Crisp organic wing veins radiating from thorax hinge
+    ctx.strokeStyle = 'rgba(26, 20, 18, 0.85)';
+    ctx.lineCap = 'round';
+    const foreVeins: Array<[number, number, number, number, number, number]> = [
+      [8, 116, 86, 82, 226, 38],
+      [8, 118, 96, 94, 222, 68],
+      [8, 120, 102, 108, 210, 98],
+      [8, 122, 92, 122, 192, 124],
+    ];
+    ctx.lineWidth = 3.2;
+    for (const [x0, y0, cx1, cy1, x1, y1] of foreVeins) {
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx1, cy1, x1, y1);
+      ctx.stroke();
+    }
+    const hindVeins: Array<[number, number, number, number, number, number]> = [
+      [8, 130, 88, 148, 188, 168],
+      [8, 133, 82, 166, 166, 204],
+      [8, 136, 62, 184, 128, 228],
+      [8, 140, 38, 188, 76, 224],
+    ];
+    ctx.lineWidth = 2.8;
+    for (const [x0, y0, cx1, cy1, x1, y1] of hindVeins) {
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx1, cy1, x1, y1);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    this.butterflyWingTex = new THREE.CanvasTexture(canvas);
+    this.butterflyWingTex.colorSpace = THREE.SRGBColorSpace;
+    this.butterflyWingTex.needsUpdate = true;
+
+    // Slightly cambered multi-quad wing mesh hinged at x=0 (positive +X wing; mirrored for left wing)
     const wingPos = new Float32Array([
-      // Forewing upper triangle
-      0.0, 0.0, 0.02,
-      0.16, 0.01, 0.11,
-      0.13, 0.01, -0.02,
-      // Hindwing lower triangle
-      0.0, 0.0, 0.01,
-      0.13, 0.01, -0.02,
-      0.09, 0.0, -0.11,
+      // Inner forewing + hindwing strip (x: 0 -> 0.085)
+      0.0, 0.0, 0.095,
+      0.085, 0.012, 0.125,
+      0.0, 0.0, -0.095,
+      0.085, 0.012, 0.125,
+      0.085, 0.008, -0.115,
+      0.0, 0.0, -0.095,
+      // Outer wing tip strip (x: 0.085 -> 0.175)
+      0.085, 0.012, 0.125,
+      0.175, 0.005, 0.145,
+      0.085, 0.008, -0.115,
+      0.175, 0.005, 0.145,
+      0.175, -0.002, -0.125,
+      0.085, 0.008, -0.115,
+    ]);
+    const wingUv = new Float32Array([
+      0.0, 1.0, 0.49, 1.0, 0.0, 0.0,
+      0.49, 1.0, 0.49, 0.0, 0.0, 0.0,
+      0.49, 1.0, 1.0, 1.0, 0.49, 0.0,
+      1.0, 1.0, 1.0, 0.0, 0.49, 0.0,
     ]);
     this.butterflyWingGeo = new THREE.BufferGeometry();
     this.butterflyWingGeo.setAttribute('position', new THREE.BufferAttribute(wingPos, 3));
+    this.butterflyWingGeo.setAttribute('uv', new THREE.BufferAttribute(wingUv, 2));
     this.butterflyWingGeo.computeVertexNormals();
 
     this.butterflyWingMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.42,
-      metalness: 0.08,
-      emissive: 0x261a08,
-      emissiveIntensity: 0.22,
+      map: this.butterflyWingTex,
+      alphaTest: 0.36,
+      transparent: false,
+      roughness: 0.48,
+      metalness: 0.06,
+      emissive: 0x1c1208,
+      emissiveIntensity: 0.16,
       side: THREE.DoubleSide,
     });
 
@@ -1980,7 +2092,23 @@ export class WorldEngine {
     this.butterflyWingInst.frustumCulled = false;
     this.butterflyWingInst.userData.nonCollidable = true;
 
-    const palette = [0xf59e28, 0x38bdf8, 0xfacc15, 0xf472b6, 0xa7f3d0];
+    // Slender body (thorax + tapered abdomen)
+    this.butterflyBodyGeo = new THREE.CapsuleGeometry(0.008, 0.082, 4, 6);
+    this.butterflyBodyGeo.rotateX(Math.PI / 2);
+    this.butterflyBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x201a16,
+      roughness: 0.65,
+      metalness: 0.05,
+    });
+    this.butterflyBodyInst = new THREE.InstancedMesh(
+      this.butterflyBodyGeo,
+      this.butterflyBodyMat,
+      this.butterflyStates.length,
+    );
+    this.butterflyBodyInst.frustumCulled = false;
+    this.butterflyBodyInst.userData.nonCollidable = true;
+
+    const palette = [0xf59e28, 0x38bdf8, 0xfacc15, 0xf472b6, 0x6ee7b7];
     const tmpCol = new THREE.Color();
     for (let i = 0; i < this.butterflyStates.length; i++) {
       tmpCol.setHex(palette[this.butterflyStates[i].colorIndex % palette.length]);
@@ -1991,6 +2119,7 @@ export class WorldEngine {
       this.butterflyWingInst.instanceColor.needsUpdate = true;
     }
     this.scene.add(this.butterflyWingInst);
+    this.scene.add(this.butterflyBodyInst);
     this.updateMeditationButterflies(0.016, 0);
   }
 
@@ -2008,14 +2137,16 @@ export class WorldEngine {
 
     for (let i = 0; i < this.butterflyStates.length; i++) {
       const b = this.butterflyStates[i];
-      this.butterflyRootDummy.position.set(b.x, b.y, b.z);
-      this.butterflyRootDummy.rotation.set(0, b.yaw, 0);
+      const flap = Math.sin(b.flapPhase) * 0.88 + 0.16;
+      const bodyBob = -Math.sin(b.flapPhase) * 0.014;
+      this.butterflyRootDummy.position.set(b.x, b.y + bodyBob, b.z);
+      this.butterflyRootDummy.rotation.set(0.12, b.yaw, 0);
       this.butterflyRootDummy.scale.setScalar(1);
       this.butterflyRootDummy.updateMatrix();
+      this.butterflyBodyInst?.setMatrixAt(i, this.butterflyRootDummy.matrix);
 
-      const flap = Math.sin(b.flapPhase) * 0.92 + 0.18;
       // Right wing (+X)
-      this.butterflyWingDummy.position.set(0, 0, 0);
+      this.butterflyWingDummy.position.set(0.004, 0, 0);
       this.butterflyWingDummy.rotation.set(0, 0, flap);
       this.butterflyWingDummy.scale.set(1, 1, 1);
       this.butterflyWingDummy.updateMatrix();
@@ -2026,6 +2157,7 @@ export class WorldEngine {
       this.butterflyWingInst.setMatrixAt(i * 2, this.butterflyMat4Tmp);
 
       // Left wing (-X mirrored)
+      this.butterflyWingDummy.position.set(-0.004, 0, 0);
       this.butterflyWingDummy.rotation.set(0, 0, -flap);
       this.butterflyWingDummy.scale.set(-1, 1, 1);
       this.butterflyWingDummy.updateMatrix();
@@ -2036,6 +2168,9 @@ export class WorldEngine {
       this.butterflyWingInst.setMatrixAt(i * 2 + 1, this.butterflyMat4Tmp);
     }
     this.butterflyWingInst.instanceMatrix.needsUpdate = true;
+    if (this.butterflyBodyInst) {
+      this.butterflyBodyInst.instanceMatrix.needsUpdate = true;
+    }
     if (this.renderer?.domElement) {
       this.renderer.domElement.dataset.butterflyCount = String(this.butterflyStates.length);
       this.renderer.domElement.dataset.butterflyFlockActive = this.isMeditating ? 'true' : 'false';
@@ -4318,11 +4453,11 @@ export class WorldEngine {
     }
 
     const horizSpeed = Math.hypot(this.playerVx, this.playerVz);
-    const pondProximity = computeLumbiniPondProximityState(
-      this.playerPos.x,
-      this.playerPos.z,
-      horizSpeed,
-    );
+    const curWater = this.getWaterSurfaceAt(this.playerPos.x, this.playerPos.z);
+    const playerInWaterNow = curWater.inWater && this.playerPos.y < curWater.surfaceY + 0.45;
+    const pondProximity = playerInWaterNow
+      ? computeLumbiniPondProximityState(this.playerPos.x, this.playerPos.z, horizSpeed)
+      : { active: false, factor: 0, anchorX: this.playerPos.x, anchorZ: this.playerPos.z, nearestPond: 'none' as const };
     const proxBlend = 1 - Math.exp(-8 * dt);
     REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value = THREE.MathUtils.lerp(
       REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value,
@@ -4331,7 +4466,7 @@ export class WorldEngine {
     );
     REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed.value = THREE.MathUtils.lerp(
       REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerWaterSpeed.value,
-      horizSpeed,
+      playerInWaterNow ? horizSpeed : 0,
       proxBlend,
     );
     if (pondProximity.active) {
@@ -5230,6 +5365,7 @@ export class WorldEngine {
       }
     });
     this.footprintTex?.dispose();
+    this.butterflyWingTex?.dispose();
     this.tossedPebbleGeo?.dispose();
     this.tossedPebbleMat?.dispose();
     this.weatherParticles?.dispose();

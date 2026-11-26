@@ -77,12 +77,12 @@ export class LumbiniIncenseSmokeSystem {
           float t = fract(uTime * speed + phase);
           vAge = t;
 
-          // Laminar ribbon near brazier -> gentle helical curl -> soft wind dispersion aloft
-          float curlEnv = smoothstep(0.06, 0.85, t);
+          // Delicate rising ribbon near brazier -> gentle helical curl -> soft wispy dispersion aloft
+          float curlEnv = smoothstep(0.04, 0.88, t);
           float angle = t * swirlFreq * 6.283185 + vPhase;
-          float driftX = cos(angle) * swirlRadius * curlEnv + sin(uTime * 0.45 + vPhase) * 0.12 * curlEnv;
-          float driftZ = sin(angle * 0.92) * swirlRadius * curlEnv + cos(uTime * 0.39 + vPhase * 1.3) * 0.12 * curlEnv;
-          vec2 windOffset = uWind * pow(t, 1.35) * 1.15;
+          float driftX = cos(angle) * swirlRadius * curlEnv + sin(uTime * 0.42 + vPhase + t * 2.5) * 0.14 * curlEnv;
+          float driftZ = sin(angle * 0.92) * swirlRadius * curlEnv + cos(uTime * 0.37 + vPhase * 1.3 + t * 2.1) * 0.14 * curlEnv;
+          vec2 windOffset = uWind * pow(t, 1.35) * 1.18;
 
           vec3 worldPos = vec3(
             position.x + driftX + windOffset.x,
@@ -93,14 +93,14 @@ export class LumbiniIncenseSmokeSystem {
           vec4 mvPosition = modelViewMatrix * vec4(worldPos, 1.0);
           float camDist = -mvPosition.z;
 
-          float lifeFade = smoothstep(0.0, 0.14, t) * (1.0 - smoothstep(0.52, 1.0, t));
+          float lifeFade = smoothstep(0.0, 0.16, t) * pow(1.0 - smoothstep(0.32, 1.0, t), 1.35);
           float distFade = (1.0 - smoothstep(40.0, 92.0, camDist)) * smoothstep(0.55, 1.6, camDist);
-          vAlpha = lifeFade * distFade * 0.46;
+          vAlpha = lifeFade * distFade * 0.34;
 
           gl_Position = projectionMatrix * mvPosition;
-          float expand = mix(105.0, 325.0, pow(t, 0.72));
+          float expand = mix(72.0, 290.0, pow(t, 0.78));
           float pointSz = (expand * sizeScale * uPixelScale) / max(camDist, 1.0);
-          gl_PointSize = clamp(pointSz, 3.2, 46.0 * uPixelScale);
+          gl_PointSize = clamp(pointSz, 3.0, 42.0 * uPixelScale);
         }
       `,
       fragmentShader: `
@@ -112,22 +112,56 @@ export class LumbiniIncenseSmokeSystem {
         varying float vPhase;
         varying float vAge;
 
+        float smokeHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float smokeNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(smokeHash(i), smokeHash(i + vec2(1.0, 0.0)), u.x),
+            mix(smokeHash(i + vec2(0.0, 1.0)), smokeHash(i + vec2(1.0, 1.0)), u.x),
+            u.y
+          );
+        }
+
+        float smokeFbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.52;
+          mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+          for (int i = 0; i < 3; i++) {
+            v += a * smokeNoise(p);
+            p = rot * p * 2.08 + vec2(1.7, 3.1);
+            a *= 0.48;
+          }
+          return v;
+        }
+
         void main() {
-          if (vAlpha <= 0.006) discard;
+          if (vAlpha <= 0.004) discard;
           vec2 uv = gl_PointCoord - vec2(0.5);
           float r = length(uv) * 2.0;
           if (r > 1.0) discard;
 
-          float ang = atan(uv.y, uv.x) + vPhase + vAge * 2.4;
-          float wisp = 0.78 + 0.22 * sin(ang * 2.0 + r * 4.5) * cos(ang * 3.0 - vAge * 3.1);
-          float radial = pow(smoothstep(1.0, 0.04, r), 1.75);
-          float alpha = clamp(radial * wisp * vAlpha, 0.0, 0.68);
-          if (alpha <= 0.006) discard;
+          // Curl-like wispy distortion so smoke trails look organic and feathery, never star-shaped
+          float ca = cos(vPhase + vAge * 1.4);
+          float sa = sin(vPhase + vAge * 1.4);
+          vec2 p = mat2(ca, -sa, sa, ca) * (uv * 3.6) + vec2(vPhase * 0.85, -vAge * 1.65);
+          float qx = smokeFbm(p + vec2(0.4, 1.2));
+          float qy = smokeFbm(p + vec2(3.7, 2.1));
+          float wispNoise = smokeFbm(p + vec2(qx, qy) * 1.45);
 
-          vec3 sandalMist = vec3(0.84, 0.83, 0.81);
-          vec3 warmAmberMist = vec3(0.96, 0.88, 0.76);
+          float radialMask = pow(smoothstep(1.0, 0.08, r), 1.85);
+          float wispDensity = smoothstep(0.24, 0.82, wispNoise * 0.88 + (1.0 - r) * 0.28);
+          float alpha = clamp(radialMask * wispDensity * vAlpha, 0.0, 0.56);
+          if (alpha <= 0.004) discard;
+
+          vec3 sandalMist = vec3(0.85, 0.84, 0.82);
+          vec3 warmAmberMist = vec3(0.95, 0.88, 0.77);
           vec3 baseSmoke = mix(sandalMist, warmAmberMist, vWarmShift * 0.65 + uRitualGlow * 0.35);
-          vec3 litSmoke = baseSmoke * mix(vec3(0.82), uLightTint, 0.45);
+          vec3 litSmoke = baseSmoke * mix(vec3(0.84), uLightTint, 0.45);
           gl_FragColor = vec4(litSmoke, alpha);
         }
       `,

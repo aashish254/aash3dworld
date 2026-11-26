@@ -5,6 +5,7 @@ import {
   createRectangularHipRoofGeometry,
 } from './janakiMandirCraft';
 import { buildDetailedLumbiniBench } from './lumbiniGardenCraft';
+import { createDetailedNicheSeatedBuddha, createRoundedSpoonLotusPetalGeo } from './lumbiniBuddhaSculpt';
 import { buildPeaceLantern } from './lumbiniShrines';
 import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 import { ProceduralTextureSet } from './proceduralTextures';
@@ -3223,11 +3224,12 @@ export function createLumbiniPeaceParkland(
     metalness: 0.02,
   });
   const whiteStuccoMat = new THREE.MeshStandardMaterial({
-    map: textures.sandstoneMap,
-    normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.45, 0.45),
-    color: 0xf7f4ec,
-    roughness: 0.8,
+    map: textures.whiteStuccoMap,
+    normalMap: textures.whiteStuccoNormal,
+    normalScale: new THREE.Vector2(0.32, 0.32),
+    roughnessMap: textures.whiteStuccoRough,
+    color: 0xf9f7f2,
+    roughness: 0.78,
     metalness: 0.02,
   });
   const bronzeMat = new THREE.MeshStandardMaterial({
@@ -3286,24 +3288,35 @@ export function createLumbiniPeaceParkland(
   canalBed.receiveShadow = true;
   group.add(canalBed);
 
-  // 2. Stepped Canal Coping Walls & Twin Brick Promenades (East & West banks)
+  // 2. Stepped Canal Coping Walls & Twin Brick Promenades (split cleanly at the Maitri Bridge opening)
   const stepWallMat = brickPaverMat;
+  const bZ = LUMBINI_PEACE_CANAL.bridgeCenterZ;
+  const canalWallMinZ = LUMBINI_PEACE_CANAL.minZ - 0.6;
+  const canalWallMaxZ = LUMBINI_PEACE_CANAL.maxZ + 0.6;
+  const bridgeOpeningHalfZ = 2.78;
+  const bankRuns: Array<[number, number]> = [
+    [canalWallMinZ, bZ - bridgeOpeningHalfZ],
+    [bZ + bridgeOpeningHalfZ, canalWallMaxZ],
+  ];
   for (const side of [-1, 1]) {
     const bankX = LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 0.25);
-    // Lower submerged step + middle ledge + upper sandstone coping rim
-    const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, canalSpanZ + 1.2), stepWallMat);
-    lowerStep.position.set(bankX - side * 0.15, -0.62, canalMidZ);
-    lowerStep.receiveShadow = true;
+    for (const [rz0, rz1] of bankRuns) {
+      const rLen = rz1 - rz0;
+      const rMid = (rz0 + rz1) * 0.5;
+      const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, rLen), stepWallMat);
+      lowerStep.position.set(bankX - side * 0.15, -0.62, rMid);
+      lowerStep.receiveShadow = true;
 
-    const copingWall = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.72, canalSpanZ + 1.2), chunarStoneMat);
-    copingWall.position.set(bankX + side * 0.15, 0.06, canalMidZ);
-    copingWall.castShadow = true;
-    copingWall.receiveShadow = true;
+      const copingWall = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.72, rLen), chunarStoneMat);
+      copingWall.position.set(bankX + side * 0.15, 0.04, rMid);
+      copingWall.castShadow = true;
+      copingWall.receiveShadow = true;
 
-    const promenade = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.22, canalSpanZ + 0.6), brickPaverMat);
-    promenade.position.set(LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 2.8), 0.21, canalMidZ);
-    promenade.receiveShadow = true;
-    group.add(lowerStep, copingWall, promenade);
+      const promenade = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.22, rLen), brickPaverMat);
+      promenade.position.set(LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 2.8), 0.21, rMid);
+      promenade.receiveShadow = true;
+      group.add(lowerStep, copingWall, promenade);
+    }
   }
   for (const endZ of [LUMBINI_PEACE_CANAL.minZ - 0.25, LUMBINI_PEACE_CANAL.maxZ + 0.25]) {
     const endWall = new THREE.Mesh(new THREE.BoxGeometry(canalWidthX + 1.5, 1.35, 0.9), chunarStoneMat);
@@ -3313,18 +3326,18 @@ export function createLumbiniPeaceParkland(
     group.add(endWall);
   }
 
-  // Axial brick approach walk linking Maya Devi West Gate (x = -254) across canal to Peace Stupa (x = -295)
+  // Axial brick approach walk linking Maya Devi West Gate across canal cleanly to Peace Stupa plaza rim
   for (const [segX, segW] of [
-    [-259.6, 11.4],
-    [-287.6, 15.2],
+    [-258.95, 10.1],
+    [-287.225, 14.45],
   ] as Array<[number, number]>) {
     const axisWalk = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.24, 5.2), brickPaverMat);
-    axisWalk.position.set(segX, 0.23, LUMBINI_PEACE_CANAL.bridgeCenterZ);
+    axisWalk.position.set(segX, 0.23, bZ);
     axisWalk.receiveShadow = true;
     group.add(axisWalk);
     for (const sz of [-2.68, 2.68]) {
-      const curb = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.3, 0.24), chunarStoneMat);
-      curb.position.set(segX, 0.23, LUMBINI_PEACE_CANAL.bridgeCenterZ + sz);
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.28, 0.24), chunarStoneMat);
+      curb.position.set(segX, 0.24, bZ + sz);
       curb.receiveShadow = true;
       group.add(curb);
     }
@@ -3334,10 +3347,22 @@ export function createLumbiniPeaceParkland(
   const bridgeGroup = new THREE.Group();
   const bMin = LUMBINI_PEACE_CANAL.bridgeMinX;
   const bMax = LUMBINI_PEACE_CANAL.bridgeMaxX;
-  const bZ = LUMBINI_PEACE_CANAL.bridgeCenterZ;
   const bLen = bMax - bMin;
   const segCount = 16;
   const segLen = bLen / segCount;
+
+  const maitriBalusterPts = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.088, 0.0),
+    new THREE.Vector2(0.072, 0.09),
+    new THREE.Vector2(0.045, 0.20),
+    new THREE.Vector2(0.074, 0.36),
+    new THREE.Vector2(0.044, 0.56),
+    new THREE.Vector2(0.078, 0.70),
+    new THREE.Vector2(0.090, 0.78),
+  ];
+  const maitriBalusterGeo = new THREE.LatheGeometry(maitriBalusterPts, 10);
+
   for (let i = 0; i < segCount; i++) {
     const t = (i + 0.5) / segCount;
     const x = THREE.MathUtils.lerp(bMin, bMax, t);
@@ -3345,46 +3370,96 @@ export function createLumbiniPeaceParkland(
     const slope = ((Math.cos(t * Math.PI) * Math.PI) / bLen) * 0.62;
     const pitch = Math.atan(slope);
 
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.14, 0.26, 5.15), brickPaverMat);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.12, 0.26, 4.95), brickPaverMat);
     slab.position.set(x, y - 0.13, bZ);
     slab.rotation.z = pitch;
     slab.castShadow = true;
     slab.receiveShadow = true;
     bridgeGroup.add(slab);
 
-    const archFascia = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.16, 0.36, 5.38), chunarStoneMat);
-    archFascia.position.set(x, y - 0.32, bZ);
+    const archFascia = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.14, 0.38, 5.38), chunarStoneMat);
+    archFascia.position.set(x, y - 0.28, bZ);
     archFascia.rotation.z = pitch;
     archFascia.castShadow = true;
     bridgeGroup.add(archFascia);
 
-    // Carved Chunar sandstone parapet balusters on both sides of the bridge
+    // Carved Chunar sandstone spandrel arch voussoir ribs + turned stone balusters
     for (const side of [-1, 1]) {
-      const bzSide = bZ + side * 2.38;
-      if (i % 2 === 0) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.92, 0.24), chunarStoneMat);
-        post.position.set(x, y + 0.44, bzSide);
+      const bzSide = bZ + side * 2.42;
+      const archUnderY = y - 0.50 - (1 - Math.sin(t * Math.PI)) * 0.44;
+      const isKeystone = i === Math.floor(segCount / 2) - 1 || i === Math.floor(segCount / 2);
+      const voussoir = new THREE.Mesh(
+        new THREE.BoxGeometry(segLen * 0.90, 0.24, 0.38),
+        isKeystone ? brickPaverMat : chunarStoneMat,
+      );
+      voussoir.position.set(x, archUnderY, bzSide);
+      voussoir.rotation.z = pitch * 1.4;
+      voussoir.castShadow = true;
+      bridgeGroup.add(voussoir);
+
+      if (i % 4 === 0 || i === segCount - 1) {
+        const isEnd = i === 0 || i === segCount - 1;
+        const postH = isEnd ? 0.98 : 0.88;
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(isEnd ? 0.34 : 0.24, postH, isEnd ? 0.34 : 0.24),
+          chunarStoneMat,
+        );
+        post.position.set(x, y + postH * 0.5, bzSide);
         post.castShadow = true;
-        bridgeGroup.add(post);
+        const cap = new THREE.Mesh(
+          new THREE.BoxGeometry(isEnd ? 0.40 : 0.28, 0.08, isEnd ? 0.40 : 0.28),
+          chunarStoneMat,
+        );
+        cap.position.set(x, y + postH + 0.02, bzSide);
+        const finial = new THREE.Mesh(new THREE.SphereGeometry(isEnd ? 0.10 : 0.075, 10, 8), goldMat);
+        finial.position.set(x, y + postH + (isEnd ? 0.12 : 0.10), bzSide);
+        bridgeGroup.add(post, cap, finial);
+      } else {
+        const baluster = new THREE.Mesh(maitriBalusterGeo, chunarStoneMat);
+        baluster.position.set(x, y + 0.02, bzSide);
+        baluster.castShadow = true;
+        bridgeGroup.add(baluster);
       }
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.14, 0.14, 0.22), chunarStoneMat);
-      rail.position.set(x, y + 0.88, bzSide);
-      rail.rotation.z = pitch;
-      rail.castShadow = true;
-      bridgeGroup.add(rail);
+      if (i < segCount - 1) {
+        const tMid = (i + 1) / segCount;
+        const xMid = THREE.MathUtils.lerp(bMin, bMax, tMid);
+        const yMid = 0.36 + Math.sin(tMid * Math.PI) * 0.62;
+        const pitchMid = Math.atan(((Math.cos(tMid * Math.PI) * Math.PI) / bLen) * 0.62);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.08, 0.12, 0.22), chunarStoneMat);
+        rail.position.set(xMid, yMid + 0.84, bzSide);
+        rail.rotation.z = pitchMid;
+        rail.castShadow = true;
+        bridgeGroup.add(rail);
+      }
     }
   }
-  // Bridge stone abutments & 4 Maitri Peace Lanterns flanking bridge entrances
+  // Twin underwater canal bridge piers supporting arch spans
+  for (const pierX of [LUMBINI_PEACE_CANAL.centerX - 4.0, LUMBINI_PEACE_CANAL.centerX + 4.0]) {
+    const canalPier = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.35, 5.2), brickPaverMat);
+    canalPier.position.set(pierX, -0.52, bZ);
+    canalPier.receiveShadow = true;
+    bridgeGroup.add(canalPier);
+  }
+  // Flush bridge stone abutments (top 0.34m < 0.35m walk) & 4 Maitri Peace Lanterns on offset piers clear of handrails
   for (const bxEnd of [bMin + 0.45, bMax - 0.45]) {
-    const abutment = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.45, 5.5), chunarStoneMat);
-    abutment.position.set(bxEnd, -0.25, bZ);
+    const abutment = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.32, 5.5), chunarStoneMat);
+    abutment.position.set(bxEnd, -0.32, bZ);
     abutment.castShadow = true;
     abutment.receiveShadow = true;
     bridgeGroup.add(abutment);
 
     for (const side of [-1, 1]) {
+      const lanternZ = bZ + side * 3.18; // 0.76m outside handrail at bZ ± 2.42
+      const pierBase = new THREE.Mesh(new THREE.BoxGeometry(1.16, 1.24, 1.16), chunarStoneMat);
+      pierBase.position.set(bxEnd, -0.26, lanternZ);
+      pierBase.castShadow = true;
+      pierBase.receiveShadow = true;
+      const pierCap = new THREE.Mesh(new THREE.BoxGeometry(1.24, 0.12, 1.24), chunarStoneMat);
+      pierCap.position.set(bxEnd, 0.33, lanternZ);
+      bridgeGroup.add(pierBase, pierCap);
+
       const lantern = buildPeaceLantern(chunarStoneMat, bronzeMat, lanternGlowMat);
-      lantern.position.set(bxEnd, 0.36, bZ + side * 2.48);
+      lantern.position.set(bxEnd, 0.39, lanternZ);
       bridgeGroup.add(lantern);
       const pLight = new THREE.PointLight(0xffb85c, 1.35, 19, 1.65);
       pLight.position.set(0, 1.65, 0);
@@ -3408,60 +3483,82 @@ export function createLumbiniPeaceParkland(
     new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius, LUMBINI_PEACE_CANAL.stupaPlazaRadius + 0.55, 0.32, 36),
     chunarStoneMat,
   );
-  plazaPad.position.y = 0.19;
+  plazaPad.position.y = 0.16; // top = +0.32m
   plazaPad.receiveShadow = true;
   const brickInlay = new THREE.Mesh(
-    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, 0.04, 36),
+    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, 0.03, 36),
     brickPaverMat,
   );
-  brickInlay.position.y = 0.345;
+  brickInlay.position.y = 0.335; // bottom = 0.320m, top = +0.350m (zero Z-fighting)
   brickInlay.receiveShadow = true;
   stupaGroup.add(plazaPad, brickInlay);
 
-  // Layered Shanti Stupa: stepped plinths -> white hemispherical dome -> harmika cube -> golden Gajur spire
-  const baseTier1 = new THREE.Mesh(new THREE.CylinderGeometry(4.35, 4.75, 0.72, 24), whiteStuccoMat);
+  // Layered Shanti Stupa: stepped white lime-stucco plinths -> carved lotus collar -> Anda dome -> Harmika -> Chhatri spire
+  const baseTier1 = new THREE.Mesh(new THREE.CylinderGeometry(4.35, 4.75, 0.72, 28), whiteStuccoMat);
   baseTier1.position.y = 0.71;
   baseTier1.castShadow = true;
   baseTier1.receiveShadow = true;
-  const baseTier2 = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.95, 0.68, 24), whiteStuccoMat);
+  const baseRim1 = new THREE.Mesh(new THREE.TorusGeometry(4.36, 0.075, 8, 32), chunarStoneMat);
+  baseRim1.rotation.x = Math.PI / 2;
+  baseRim1.position.y = 1.07;
+
+  const baseTier2 = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.95, 0.68, 28), whiteStuccoMat);
   baseTier2.position.y = 1.41;
   baseTier2.castShadow = true;
-  const medhiCollar = new THREE.Mesh(new THREE.TorusGeometry(3.25, 0.14, 10, 32), goldMat);
+  const medhiCollar = new THREE.Mesh(new THREE.TorusGeometry(3.26, 0.13, 10, 32), goldMat);
   medhiCollar.rotation.x = Math.PI / 2;
   medhiCollar.position.y = 1.76;
 
-  const domeGeo = new THREE.SphereGeometry(3.15, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  // Sculpted spoon-lotus relief petals encircling the stupa Medhi drum
+  const stupaLotusPetalGeo = createRoundedSpoonLotusPetalGeo(0.42, 0.44, 0.075);
+  for (let p = 0; p < 16; p++) {
+    const pa = (p / 16) * Math.PI * 2;
+    const petal = new THREE.Mesh(stupaLotusPetalGeo, p % 2 === 0 ? goldMat : whiteStuccoMat);
+    petal.position.set(Math.sin(pa) * 3.36, 1.74, Math.cos(pa) * 3.36);
+    petal.rotation.y = pa;
+    petal.rotation.x = 0.38;
+    stupaGroup.add(petal);
+  }
+
+  const domeGeo = new THREE.SphereGeometry(3.15, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.52);
   const dome = new THREE.Mesh(domeGeo, whiteStuccoMat);
   dome.position.y = 1.76;
   dome.castShadow = true;
   dome.receiveShadow = true;
 
+  const harmikaBase = new THREE.Mesh(new THREE.BoxGeometry(1.64, 0.16, 1.64), whiteStuccoMat);
+  harmikaBase.position.y = 4.78;
   const harmika = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.78, 1.42), goldMat);
-  harmika.position.y = 5.15;
+  harmika.position.y = 5.22;
   harmika.castShadow = true;
   const harmikaCap = new THREE.Mesh(
     createRectangularHipRoofGeometry(1.68, 0.42, 1.68, 0.12),
     goldMat,
   );
-  harmikaCap.position.y = 5.56;
+  harmikaCap.position.y = 5.63;
   const gajur = createDetailedGajurSpire(goldMat, bronzeMat, 2.35, 0.44);
-  gajur.position.y = 5.95;
+  gajur.position.y = 6.02;
 
   // East-facing Buddha Blessing Niche overlooking the Peace Canal & Maya Devi Temple
-  const nicheFrame = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.55, 1.25), goldMat);
-  nicheFrame.position.set(3.22, 1.78, 0);
-  const nicheAlcove = new THREE.Mesh(
-    new THREE.BoxGeometry(0.28, 1.25, 0.92),
-    new THREE.MeshStandardMaterial({ color: 0x2c1b12, roughness: 0.75 }),
+  const nicheFrame = new THREE.Mesh(new THREE.BoxGeometry(0.48, 1.62, 1.34), goldMat);
+  nicheFrame.position.set(3.22, 1.82, 0);
+  const nichePediment = new THREE.Mesh(
+    createRectangularHipRoofGeometry(0.64, 0.36, 1.54, 0.16),
+    goldMat,
   );
-  nicheAlcove.position.set(3.32, 1.78, 0);
-  const dharmaHalo = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.045, 8, 24), goldMat);
-  dharmaHalo.rotation.y = Math.PI / 2;
-  dharmaHalo.position.set(3.48, 1.98, 0);
-  const stupaBuddhaBody = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.78, 12), goldMat);
-  stupaBuddhaBody.position.set(3.48, 1.64, 0);
-  const stupaBuddhaHead = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), goldMat);
-  stupaBuddhaHead.position.set(3.48, 2.12, 0);
+  nichePediment.position.set(3.25, 2.74, 0);
+  const nicheAlcove = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 1.32, 0.98),
+    new THREE.MeshStandardMaterial({ color: 0x24160e, roughness: 0.78 }),
+  );
+  nicheAlcove.position.set(3.34, 1.82, 0);
+  const nicheSill = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 1.24), chunarStoneMat);
+  nicheSill.position.set(3.40, 1.15, 0);
+
+  const stupaNicheBuddha = createDetailedNicheSeatedBuddha(goldMat, bronzeMat);
+  stupaNicheBuddha.scale.setScalar(0.95);
+  stupaNicheBuddha.rotation.y = Math.PI / 2; // faces +X toward Maya Devi Temple
+  stupaNicheBuddha.position.set(3.48, 1.22, 0);
 
   const stupaLight = new THREE.PointLight(0xffcb78, 1.65, 24, 1.6);
   stupaLight.position.set(2.4, 3.2, 0);
@@ -3473,17 +3570,19 @@ export function createLumbiniPeaceParkland(
 
   stupaGroup.add(
     baseTier1,
+    baseRim1,
     baseTier2,
     medhiCollar,
     dome,
+    harmikaBase,
     harmika,
     harmikaCap,
     gajur,
     nicheFrame,
+    nichePediment,
     nicheAlcove,
-    dharmaHalo,
-    stupaBuddhaBody,
-    stupaBuddhaHead,
+    nicheSill,
+    stupaNicheBuddha,
     stupaLight,
   );
 

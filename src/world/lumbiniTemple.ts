@@ -282,8 +282,8 @@ export function createLumbiniBuddha(
     group.add(walk);
   };
   // Non-overlapping Terracotta Red-Brick Ceremonial Walkways (y = +0.10 top surface -> world +0.35m)
-  addBrickWalk(-8.5, 8.5, 28.0, 52.0); // Grand South Axial Forecourt (around Baby Buddha)
-  addBrickWalk(-8.5, -3.2, 6.0, 28.0); // Continuous Pushkarini West Overlook Causeway -> Temple Forecourt
+  addBrickWalk(-8.5, 8.5, 30.8, 52.0); // Grand South Axial Forecourt (south of South Promenade)
+  addBrickWalk(-8.5, -3.2, 6.0, 27.2); // Continuous Pushkarini West Overlook Causeway -> South Promenade
   addBrickWalk(-5.8, 5.8, -10.0, 2.0); // Expanded Maya Devi South Temple Forecourt & Axial Ramp Approach
   addBrickWalk(-44.0, 44.0, 2.0, 6.0); // Grand East-West Cross Promenade between West & East Gates
   addBrickWalk(-22.4, -19.2, -42.5, 2.0); // West Brick Garden Walk (North segment)
@@ -467,7 +467,8 @@ export function createLumbiniBuddha(
     [-8.9, 35.1, 0.68, 7.6],
     [-8.9, 47.2, 0.68, 7.8],
     [8.9, 41.2, 0.68, 19.8],
-    [-16.4, 31.2, 13.8, 0.68],
+    [-19.2, 31.2, 8.2, 0.68],
+    [-10.2, 31.2, 1.4, 0.68],
     [16.4, 31.2, 13.8, 0.68],
   ];
   const realisticHedges = buildRealisticLumbiniHedges(
@@ -663,21 +664,16 @@ export function createLumbiniBuddha(
   // =========================================================================
   // 9. EXCAVATED MAURYAN BRICK RUINS, PEACE BELL PAVILION, PRAYER WHEELS & SHILALEKH
   // =========================================================================
+  // Symmetrically aligned Mauryan archaeological stupa courtyard bays (clear of walks, hedges & lanterns)
   const ruinSpecs: Array<[number, number, number, number, number]> = [
-    [-9.5, -3.5, 3.6, 1.05, 3.0],
-    [9.5, -3.5, 4.0, 1.10, 3.2],
-    [16.5, -3.2, 3.2, 0.96, 2.8],
-    [-28.5, -8.0, 3.6, 1.02, 3.0],
-    [-35.0, -3.5, 3.8, 1.12, 3.2],
-    [-32.5, -32.0, 4.2, 1.15, 3.4],
-    [33.5, -6.5, 3.4, 0.96, 2.8],
-    [34.5, -0.5, 3.6, 1.02, 3.0],
-    [-13.0, 13.5, 3.0, 0.92, 2.8],
-    [-13.0, 20.5, 2.8, 0.88, 2.6],
-    [-34.5, 26.5, 3.4, 0.98, 3.0],
-    [35.0, 13.5, 3.2, 0.94, 2.8],
-    [-14.5, -38.5, 3.4, 0.98, 2.8],
-    [14.5, -38.5, 3.4, 0.98, 2.8],
+    [-13.5, -5.0, 3.6, 1.05, 3.0],
+    [13.5, -5.0, 3.6, 1.05, 3.0],
+    [-32.5, -5.0, 3.6, 1.05, 3.0],
+    [35.0, -5.0, 3.6, 1.05, 3.0],
+    [-13.5, 13.5, 3.2, 0.96, 2.8],
+    [-13.5, 20.5, 3.2, 0.96, 2.8],
+    [35.0, 13.5, 3.2, 0.96, 2.8],
+    [-32.5, -31.5, 3.8, 1.08, 3.0],
   ];
   ruinSpecs.forEach(([rx, rz, rw, rh, rd], idx) => {
     const ruin = buildExcavatedBrickRuin(archaeoBrickMat, rw, rh, rd, {
@@ -690,29 +686,87 @@ export function createLumbiniBuddha(
     group.add(ruin);
   });
 
-  // Interactive Sacred Peace Bell Pavilion (-13.0, +30.5)
+  // Detailed 4-Pillar Newari Timber & Terracotta-Tile Sacred Peace Bell Shrine (-13.0, +30.5)
   const bellPav = new THREE.Group();
   bellPav.scale.setScalar(1.15);
   bellPav.position.set(-13.0, 0.10, 30.5);
-  const bellBase = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.24, 2.0), chunarStoneMat);
-  bellBase.position.y = 0.12;
-  for (const sx of [-0.68, 0.68]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.45, 0.18), timberMat);
-    post.position.set(sx, 1.46, 0);
-    post.castShadow = true;
-    bellPav.add(post);
+
+  const bellPlinth1 = new THREE.Mesh(new THREE.BoxGeometry(2.50, 0.18, 2.50), brickMat);
+  bellPlinth1.position.y = 0.09;
+  bellPlinth1.castShadow = true;
+  bellPlinth1.receiveShadow = true;
+  const bellPlinth2 = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.18, 2.08), chunarStoneMat);
+  bellPlinth2.position.y = 0.27;
+  bellPlinth2.castShadow = true;
+  bellPlinth2.receiveShadow = true;
+  const bellStep = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.16, 0.36), chunarStoneMat);
+  bellStep.position.set(0, 0.08, 1.32);
+  bellPav.add(bellPlinth1, bellPlinth2, bellStep);
+
+  // 4 Carved timber pillars with stone column shoes, collar moldings & angled Newari Tundal struts
+  const colOff = 0.74;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const cx = sx * colOff;
+      const cz = sz * colOff;
+      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.14, 0.28), chunarStoneMat);
+      shoe.position.set(cx, 0.43, cz);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 2.15, 12), timberMat);
+      post.position.set(cx, 1.56, cz);
+      post.castShadow = true;
+      const midBand = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.020, 6, 12), warmBronzeMat);
+      midBand.rotation.x = Math.PI / 2;
+      midBand.position.set(cx, 1.48, cz);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.26), timberMat);
+      cap.position.set(cx, 2.68, cz);
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.56, 0.09), timberMat);
+      strut.position.set(cx + sx * 0.18, 2.52, cz + sz * 0.18);
+      strut.rotation.z = -sx * 0.58;
+      strut.rotation.x = sz * 0.58;
+      bellPav.add(shoe, post, midBand, cap, strut);
+    }
   }
-  const bellBeam = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.20, 0.28), timberMat);
-  bellBeam.position.set(0, 2.74, 0);
-  const bellRoof = new THREE.Mesh(createRectangularHipRoofGeometry(2.4, 0.62, 1.6, 0.52), terracottaCapMat);
-  bellRoof.position.set(0, 3.15, 0);
-  bellRoof.castShadow = true;
-  const bellGajur = createDetailedGajurSpire(giltGoldMat, warmBronzeMat, 0.42);
-  bellGajur.position.set(0, 3.46, 0);
+
+  // Carved tie beams, perimeter architrave & central suspension yoke + brass chain
+  for (const sz of [-colOff, colOff]) {
+    const beamX = new THREE.Mesh(new THREE.BoxGeometry(1.90, 0.16, 0.18), timberMat);
+    beamX.position.set(0, 2.78, sz);
+    bellPav.add(beamX);
+  }
+  for (const sx of [-colOff, colOff]) {
+    const beamZ = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 1.72), timberMat);
+    beamZ.position.set(sx, 2.78, 0);
+    bellPav.add(beamZ);
+  }
+  const bellCrossBeam = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.18, 0.22), timberMat);
+  bellCrossBeam.position.set(0, 2.80, 0);
+  const suspensionRing = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.020, 8, 16), giltGoldMat);
+  suspensionRing.position.set(0, 2.66, 0);
+  bellPav.add(bellCrossBeam, suspensionRing);
+
+  // Double-tiered Newari terracotta hip roof with golden trim & bronze wind-chimes
+  const bellEavesTrim = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.08, 2.38), warmBronzeMat);
+  bellEavesTrim.position.set(0, 2.89, 0);
+  const bellRoof1 = new THREE.Mesh(createRectangularHipRoofGeometry(2.68, 0.52, 2.68, 0.56), terracottaCapMat);
+  bellRoof1.position.set(0, 3.16, 0);
+  bellRoof1.castShadow = true;
+  const bellRoof2 = new THREE.Mesh(createRectangularHipRoofGeometry(1.64, 0.42, 1.64, 0.48), terracottaCapMat);
+  bellRoof2.position.set(0, 3.58, 0);
+  bellRoof2.castShadow = true;
+  const bellGajur = createDetailedGajurSpire(giltGoldMat, warmBronzeMat, 0.44);
+  bellGajur.position.set(0, 3.80, 0);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const chime = new THREE.Mesh(new THREE.ConeGeometry(0.036, 0.10, 6), giltGoldMat);
+      chime.position.set(sx * 1.18, 2.79, sz * 1.18);
+      bellPav.add(chime);
+    }
+  }
+
   const mainBell = createDetailedTempleBell(warmBronzeMat, giltGoldMat, 1.05);
-  mainBell.position.set(0, 2.60, 0);
+  mainBell.position.set(0, 2.58, 0);
   templeBells.push(mainBell);
-  bellPav.add(bellBase, bellBeam, bellRoof, bellGajur, mainBell);
+  bellPav.add(bellEavesTrim, bellRoof1, bellRoof2, bellGajur, mainBell);
   group.add(bellPav);
 
   // 4 Interactive Mani Prayer-Wheel Shrines: Baby Buddha Forecourt (x=±7.4, z=+39.0) & Maya Devi South Forecourt (x=±6.8, z=+1.8)
@@ -832,29 +886,12 @@ export function createLumbiniBuddha(
     group.add(rack);
   }
 
-  // Smooth river-pebble offering cairns beside Pushkarini Pond Overlook & South Steps for pebble tossing
-  const pebblePileMat = new THREE.MeshStandardMaterial({ color: 0x7a7d80, roughness: 0.86 });
+  // Pond-margin pebble-toss interaction spots (no obtrusive bowls blocking temple walkways)
   const localPebbleSpecs: Array<[number, number, number, number, string]> = [
-    [-5.5, 16.5, 5.0, 16.5, 'Pushkarini Pond'],
-    [10.0, 6.4, 10.0, 15.0, 'Pushkarini Pond'],
-    [-2.5, 52.8, -8.5, 55.0, 'Sacred Pond'],
+    [-3.6, 16.5, 5.0, 16.5, 'Pushkarini Pond'],
+    [10.0, 7.6, 10.0, 15.0, 'Pushkarini Pond'],
+    [-6.8, 53.6, -8.5, 55.0, 'Sacred Pond'],
   ];
-  for (const [px, pz] of localPebbleSpecs) {
-    const cairn = new THREE.Group();
-    cairn.position.set(px, 0.12, pz);
-    cairn.userData.nonCollidable = true;
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.24, 0.14, 10), chunarStoneMat);
-    bowl.position.y = 0.07;
-    cairn.add(bowl);
-    for (let k = 0; k < 5; k++) {
-      const ang = (k / 5) * Math.PI * 2;
-      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.085, 0), pebblePileMat);
-      st.scale.set(1.2, 0.65, 1.0);
-      st.position.set(Math.cos(ang) * 0.12, 0.15 + (k % 2) * 0.04, Math.sin(ang) * 0.12);
-      cairn.add(st);
-    }
-    group.add(cairn);
-  }
 
   // Peace Garden Stone Lanterns along axial red-brick walks, Pushkarini Overlook & Outer Sacred Bridges
   for (const [lx, lz] of [
@@ -873,17 +910,17 @@ export function createLumbiniBuddha(
     group.add(lantern);
   }
 
-  // Waving 5-color Buddhist Lungta garlands along South Forecourt, Overlook & Outer Sacred Bridge Archways
+  // Waving 5-color Buddhist Lungta garlands anchored to heritage poles >= 1.8m clear of all Peace Lanterns & Bell Shrine
   const sanctuaryGarlandSpecs: Array<[THREE.Vector3, THREE.Vector3, number, boolean]> = [
-    [new THREE.Vector3(-7.4, 3.35, 48.5), new THREE.Vector3(-7.4, 3.35, 33.0), 12, true],
-    [new THREE.Vector3(7.4, 3.35, 48.5), new THREE.Vector3(7.4, 3.35, 33.0), 12, true],
+    [new THREE.Vector3(-9.6, 3.35, 48.5), new THREE.Vector3(-9.6, 3.35, 33.0), 12, true],
+    [new THREE.Vector3(9.6, 3.35, 48.5), new THREE.Vector3(9.6, 3.35, 33.0), 12, true],
     [new THREE.Vector3(-42.5, 3.45, 1.4), new THREE.Vector3(-22.8, 3.45, 1.4), 14, true],
     [new THREE.Vector3(27.2, 3.45, 1.4), new THREE.Vector3(42.5, 3.45, 1.4), 11, true],
     [new THREE.Vector3(-30.5, 3.3, -24.5), new THREE.Vector3(-23.5, 3.3, -24.5), 7, true],
-    [new THREE.Vector3(-14.6, 3.1, 28.6), new THREE.Vector3(-11.4, 3.1, 28.6), 5, true],
-    [new THREE.Vector3(-5.2, 3.85, 62.6), new THREE.Vector3(5.2, 3.85, 62.6), 11, true],
-    [new THREE.Vector3(-5.2, 3.85, -54.6), new THREE.Vector3(5.2, 3.85, -54.6), 11, true],
-    [new THREE.Vector3(-8.2, 3.35, 17.0), new THREE.Vector3(-8.2, 3.35, 7.2), 9, true],
+    [new THREE.Vector3(-16.2, 3.3, 27.2), new THREE.Vector3(-10.4, 3.3, 27.2), 6, true],
+    [new THREE.Vector3(-7.4, 3.85, 62.6), new THREE.Vector3(7.4, 3.85, 62.6), 13, true],
+    [new THREE.Vector3(-7.4, 3.85, -54.6), new THREE.Vector3(7.4, 3.85, -54.6), 13, true],
+    [new THREE.Vector3(-10.0, 3.35, 17.0), new THREE.Vector3(-10.0, 3.35, 7.2), 9, true],
   ];
   for (const [startPt, endPt, count, poles] of sanctuaryGarlandSpecs) {
     const garland = createWavingPrayerFlagGarland(startPt, endPt, {

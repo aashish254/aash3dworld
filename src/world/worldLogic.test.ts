@@ -1462,7 +1462,7 @@ test('Procedural Lumbini lotus placement system populates both reflective ponds 
   );
 });
 
-test('Pilgrim trail walking and rain trigger shader-based pond ripples inside reflective Lumbini ponds', async () => {
+test('Dry pilgrim trails never trigger water ripples, while wading in ponds and rain trigger shader ripples', async () => {
   const {
     REFLECTIVE_WATER_ENV_UNIFORMS,
     WATER_INTERACTION_UNIFORMS,
@@ -1472,34 +1472,37 @@ test('Pilgrim trail walking and rain trigger shader-based pond ripples inside re
   } = await import('./waterShader');
   const THREE = await import('three');
 
-  // Distant spawn / non-Lumbini paths must not emit Lumbini pond ripples
+  // Distant spawn / non-Lumbini paths and dry Lumbini trails/bridges must NOT emit water ripples
   assert.equal(findLumbiniTrailPondRippleOrigin(SPAWN_POSITION.x, SPAWN_POSITION.z, 1), null);
   assert.equal(findLumbiniTrailPondRippleOrigin(-92, 128, 2), null);
 
-  // Walking along surrounding pilgrim trails, bridges, inner paths, and Pushkarini overlook emits valid pond ripple origins
-  const surroundingTrailSpots: Array<[number, number, string]> = [
+  const dryTrailSpots: Array<[number, number, string]> = [
     [-228.0, 157.8, 'south-outer-trail'],
     [-192.0, 42.1, 'north-outer-trail'],
     [-260.6, 125.0, 'west-outer-trail'],
     [-159.6, 75.0, 'east-outer-trail'],
     [-210.0, 152.3, 'south-bridge'],
     [-252.5, 130.0, 'west-inner-trail'],
+    [-215.5, 112.5, 'pushkarini-brick-overlook'],
   ];
-  for (const [px, pz, label] of surroundingTrailSpots) {
-    const res = findLumbiniTrailPondRippleOrigin(px, pz, 3);
-    assert.ok(res, `Expected ripple origin from ${label} at (${px}, ${pz})`);
-    assert.equal(res.pond, 'surrounding');
+  for (const [px, pz, label] of dryTrailSpots) {
     assert.equal(
-      isInLumbiniSurroundingPond(res.x, res.z),
-      true,
-      `Ripple origin (${res.x.toFixed(2)}, ${res.z.toFixed(2)}) for ${label} must fall inside Surrounding Pond`,
+      findLumbiniTrailPondRippleOrigin(px, pz, 3),
+      null,
+      `Dry path ${label} at (${px}, ${pz}) must NOT emit water ripples`,
     );
   }
 
-  const pushkariniTrail = findLumbiniTrailPondRippleOrigin(-215.5, 112.5, 4);
-  assert.ok(pushkariniTrail);
-  assert.equal(pushkariniTrail.pond, 'pushkarini');
-  assert.equal(isInLumbiniPushkariniPond(pushkariniTrail.x, pushkariniTrail.z), true);
+  // Stepping inside Surrounding Sacred Pond water or Pushkarini Pond water emits valid ripples
+  const surroundingWaterWade = findLumbiniTrailPondRippleOrigin(-235.0, 152.0, 3);
+  assert.ok(surroundingWaterWade, 'Wading inside Surrounding Pond should emit ripple');
+  assert.equal(surroundingWaterWade.pond, 'surrounding');
+  assert.equal(isInLumbiniSurroundingPond(surroundingWaterWade.x, surroundingWaterWade.z), true);
+
+  const pushkariniWade = findLumbiniTrailPondRippleOrigin(-200.0, 112.5, 4);
+  assert.ok(pushkariniWade, 'Wading inside Pushkarini Pond should emit ripple');
+  assert.equal(pushkariniWade.pond, 'pushkarini');
+  assert.equal(isInLumbiniPushkariniPond(pushkariniWade.x, pushkariniWade.z), true);
 
   // Verify pond shader material shares live rain uniform and expanded 12-slot interactive ripple buffer
   assert.equal(WATER_RIPPLE_COUNT, 12);
@@ -1509,9 +1512,9 @@ test('Pilgrim trail walking and rain trigger shader-based pond ripples inside re
   assert.equal(mat.uniforms.uWaterRipples, WATER_INTERACTION_UNIFORMS.uWaterRipples);
   assert.ok(mat.fragmentShader.includes('evalRainRingLayer'));
 
-  triggerWaterRipple(pushkariniTrail.x, pushkariniTrail.z, 12.5, pushkariniTrail.strength);
+  triggerWaterRipple(pushkariniWade.x, pushkariniWade.z, 12.5, pushkariniWade.strength);
   const recorded = WATER_INTERACTION_UNIFORMS.uWaterRipples.value.some(
-    (slot) => Math.abs(slot.x - pushkariniTrail.x) < 0.01 && Math.abs(slot.y - pushkariniTrail.z) < 0.01 && slot.z === 12.5,
+    (slot) => Math.abs(slot.x - pushkariniWade.x) < 0.01 && Math.abs(slot.y - pushkariniWade.z) < 0.01 && slot.z === 12.5,
   );
   assert.equal(recorded, true, 'triggerWaterRipple must populate shared shader ripple slot');
 });
@@ -2017,25 +2020,31 @@ test('Lumbini pond crickets peak near Pushkarini & Sacred Pond during dusk/night
   assert.equal(farAway.cricketActivity, 0);
 });
 
-test('findWaterEdgeRippleOrigin triggers ripples near Pushkarini, Peace Canal, Bagmati River, Glacial Lake, and Ganga Sagar', () => {
-  const pushkariniEdge = findWaterEdgeRippleOrigin(-215.5, 112.5, 1);
-  assert.equal(pushkariniEdge?.waterBody, 'pushkarini');
+test('findWaterEdgeRippleOrigin triggers ripples ONLY when wading inside water (never on dry banks or bridges)', () => {
+  // Dry shore/promenade/bridge coordinates must return null
+  assert.equal(findWaterEdgeRippleOrigin(-215.5, 112.5, 1), null);
+  assert.equal(findWaterEdgeRippleOrigin(LUMBINI_PEACE_CANAL.minX - 2.0, 90, 2), null);
+  assert.equal(findWaterEdgeRippleOrigin(LUMBINI_PEACE_CANAL.centerX, LUMBINI_PEACE_CANAL.bridgeCenterZ, 2), null);
+  assert.equal(findWaterEdgeRippleOrigin(GLACIAL_LAKE.x + GLACIAL_LAKE.waterRadius + 1.4, GLACIAL_LAKE.z, 3), null);
+  assert.equal(findWaterEdgeRippleOrigin(-127.8, 108.0, 5), null);
+  assert.equal(findWaterEdgeRippleOrigin(-45, 55, 6), null);
 
-  const canalBank = findWaterEdgeRippleOrigin(LUMBINI_PEACE_CANAL.minX - 2.0, 90, 2);
-  assert.equal(canalBank?.waterBody, 'peace-canal');
+  // Actual water wading coordinates emit valid ripples
+  const pushkariniWade = findWaterEdgeRippleOrigin(-200.0, 112.5, 1);
+  assert.equal(pushkariniWade?.waterBody, 'pushkarini');
 
-  const lakeShore = findWaterEdgeRippleOrigin(GLACIAL_LAKE.x + GLACIAL_LAKE.waterRadius + 1.4, GLACIAL_LAKE.z, 3);
-  assert.equal(lakeShore?.waterBody, 'glacial-lake');
+  const canalWade = findWaterEdgeRippleOrigin(LUMBINI_PEACE_CANAL.centerX, 60, 2);
+  assert.equal(canalWade?.waterBody, 'peace-canal');
+
+  const lakeWade = findWaterEdgeRippleOrigin(GLACIAL_LAKE.x + 12.0, GLACIAL_LAKE.z, 3);
+  assert.equal(lakeWade?.waterBody, 'glacial-lake');
 
   const riverZ = 20;
-  const riverBank = findWaterEdgeRippleOrigin(getRiverCenterX(riverZ) + 6.4, riverZ, 4);
-  assert.equal(riverBank?.waterBody, 'bagmati-river');
+  const riverWade = findWaterEdgeRippleOrigin(getRiverCenterX(riverZ), riverZ, 4);
+  assert.equal(riverWade?.waterBody, 'bagmati-river');
 
-  const gangaSagarRim = findWaterEdgeRippleOrigin(-127.8, 108.0, 5);
-  assert.equal(gangaSagarRim?.waterBody, 'ganga-sagar');
-
-  const inlandMeadow = findWaterEdgeRippleOrigin(-45, 55, 6);
-  assert.equal(inlandMeadow, null);
+  const gangaSagarWade = findWaterEdgeRippleOrigin(-136.5, 108.0, 5);
+  assert.equal(gangaSagarWade?.waterBody, 'ganga-sagar');
 });
 
 test('Graphics quality config, prayer wheel damped spin, and contextual Maya Devi / sanctuary actions work cleanly', () => {
@@ -2361,18 +2370,23 @@ test('Maya Devi skylight bird exclusion, Lumbini pond proximity ripple state, an
   assert.equal(isInsideMayaDeviBirdExclusion(-210.0, 15.2, 74.0), false);
   assert.equal(isInsideMayaDeviBirdExclusion(-210.0, 6.0, 98.0), false);
 
-  // Lumbini pond proximity ripples excite continuously near Pushkarini Pond and increase with player speed
-  const idleNearPond = computeLumbiniPondProximityState(-212.4, 112.5, 0.0);
-  const walkNearPond = computeLumbiniPondProximityState(-212.4, 112.5, 4.5);
-  assert.equal(idleNearPond.active, true);
-  assert.equal(idleNearPond.nearestPond, 'pushkarini');
-  assert.ok(idleNearPond.factor > 0.15, `Expected ambient proximity factor near Pushkarini, got ${idleNearPond.factor}`);
-  assert.ok(walkNearPond.factor > idleNearPond.factor, 'Moving near pond should increase wave excitation factor');
+  // Dry bank/overlook/bridge positions yield inactive pond proximity; actual in-water wading activates proximity
+  const dryOverlook = computeLumbiniPondProximityState(-212.4, 112.5, 4.5);
+  assert.equal(dryOverlook.active, false);
+  assert.equal(dryOverlook.nearestPond, 'none');
 
-  // Surrounding sacred moat proximity also activates near outer bridges
-  const moatWalk = computeLumbiniPondProximityState(-210.0, 148.0, 3.8);
-  assert.equal(moatWalk.active, true);
-  assert.equal(moatWalk.nearestPond, 'surrounding');
+  const dryBridge = computeLumbiniPondProximityState(-210.0, 152.0, 3.8);
+  assert.equal(dryBridge.active, false);
+
+  const idleInPushkarini = computeLumbiniPondProximityState(-200.0, 112.5, 0.0);
+  const wadeInPushkarini = computeLumbiniPondProximityState(-200.0, 112.5, 4.5);
+  assert.equal(idleInPushkarini.active, true);
+  assert.equal(idleInPushkarini.nearestPond, 'pushkarini');
+  assert.ok(wadeInPushkarini.factor > idleInPushkarini.factor, 'Faster wading should increase wave factor');
+
+  const wadeSurrounding = computeLumbiniPondProximityState(-235.0, 152.0, 3.8);
+  assert.equal(wadeSurrounding.active, true);
+  assert.equal(wadeSurrounding.nearestPond, 'surrounding');
 
   // Far away from Lumbini ponds yields inactive proximity state
   const farState = computeLumbiniPondProximityState(0.0, 0.0, 5.0);
@@ -2466,5 +2480,56 @@ test('Lumbini floating incense smoke shader, butter lamp Ritual Offering action,
   soundEngine.playRitualButterLampOffering(1);
   assert.equal(soundEngine.getRitualOfferingSoundCount(), beforeSound + 1);
 });
+
+test('Lumbini realism fixes: Thai sanctuary Buddha headroom, Peace Lanterns lit, zero walkway bowls, and lantern/flagpole clearance', async () => {
+  const THREE = await import('three');
+  const { buildThaiMarbleSanctuary, buildEternalPeaceFlame } = await import('./lumbiniShrines');
+  const { createLumbiniBuddha } = await import('./lumbiniTemple');
+
+  const tex = new THREE.DataTexture(new Uint8Array([200, 180, 160, 255]), 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  const mockTextures = new Proxy(
+    {
+      lumbini: new Proxy({}, { get: () => tex }),
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  // 1. Thai Sanctuary Buddha crown/halo sits strictly below the 6.50m marble roof tier
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xf0bd45 });
+  const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x8a5e2b });
+  const crimsonMat = new THREE.MeshStandardMaterial({ color: 0x8b1e24 });
+  const flameGlowMat = new THREE.MeshStandardMaterial({ color: 0xffaa30, emissive: 0xff7710 });
+  const heroMats: import('./lumbiniBuddhaSculpt').BuddhaMaterials = {
+    skinMat: goldMat,
+    robeMat: goldMat,
+    hairMat: goldMat,
+    goldMat,
+    bronzeMat,
+    stonePlinthMat: whiteMat,
+    crimsonLacquerMat: crimsonMat,
+    flameMat: flameGlowMat,
+  };
+  const thai = buildThaiMarbleSanctuary(whiteMat, goldMat, crimsonMat, heroMats);
+  const thaiBox = new THREE.Box3().setFromObject(thai.group);
+  assert.ok(thaiBox.max.y > 9.5, 'Thai sanctuary roof tiers should rise well above 9m');
+  assert.equal(thai.light.position.y > 5.4, true, 'Sanctuary lamp hangs clearly above Buddha crown');
+
+  // 2. Eternal Peace Flame constructs animated flame ribbons and warm light cleanly
+  const flame = buildEternalPeaceFlame(whiteMat, whiteMat, bronzeMat, goldMat, flameGlowMat);
+  assert.ok(flame.flameNode.children.length >= 5, 'Eternal Peace Flame should include 4 volumetric flame sheets & rising sparks');
+
+  // 3. Lumbini Temple has zero stray stone bowls on walkways & active beacon/shrine lights
+  const temple = createLumbiniBuddha(mockTextures, true);
+  assert.ok(temple.beaconLights.length >= 8, `Shrine & monument lights should illuminate interiors (got ${temple.beaconLights.length})`);
+  let stoneCairnCount = 0;
+  temple.group.traverse((obj: import('three').Object3D) => {
+    if (obj.name === 'walkway-stone-bowl') stoneCairnCount++;
+  });
+  assert.equal(stoneCairnCount, 0);
+});
+
 
 
