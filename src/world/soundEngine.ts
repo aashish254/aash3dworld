@@ -1586,6 +1586,65 @@ class SoundEngine {
     }
   }
 
+  private ritualOfferingSoundCount = 0;
+
+  public getRitualOfferingSoundCount(): number {
+    return this.ritualOfferingSoundCount;
+  }
+
+  public playRitualButterLampOffering(litCount = 1): void {
+    this.ritualOfferingSoundCount += 1;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+
+    // 1. Soft warm ghee-wick ignition breath (filtered pink noise sweep)
+    const puffBuf = this.createPinkNoiseBuffer(ctx, 0.28);
+    const puffSrc = ctx.createBufferSource();
+    puffSrc.buffer = puffBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(580, t);
+    bp.frequency.exponentialRampToValueAtTime(1480, t + 0.16);
+    bp.Q.value = 1.4;
+    const puffGain = ctx.createGain();
+    puffGain.gain.setValueAtTime(0.001, t);
+    puffGain.gain.linearRampToValueAtTime(0.036, t + 0.04);
+    puffGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.26);
+    puffSrc.connect(bp);
+    bp.connect(puffGain);
+    puffGain.connect(ctx.destination);
+    puffSrc.start(t);
+    puffSrc.stop(t + 0.28);
+
+    // 2. Deep healing singing-bowl & harmonic bell meditation chord (174 Hz Solfeggio + C4/G4/C5/G5)
+    // Gentle ascending pentatonic shimmer as additional lamps are lit (0..7)
+    const stepRatio = Math.pow(2, ((Math.max(0, litCount - 1) % 8) * 1.0) / 24);
+    const partials: Array<{ freq: number; gain: number; decay: number; delay: number }> = [
+      { freq: 174.0, gain: 0.042, decay: 3.6, delay: 0.02 },
+      { freq: 175.35, gain: 0.030, decay: 3.5, delay: 0.02 }, // 1.35 Hz warm acoustic beating
+      { freq: 261.63 * stepRatio, gain: 0.026, decay: 3.1, delay: 0.05 },
+      { freq: 392.0 * stepRatio, gain: 0.019, decay: 2.7, delay: 0.08 },
+      { freq: 523.25 * stepRatio, gain: 0.014, decay: 2.2, delay: 0.11 },
+      { freq: 783.99 * stepRatio, gain: 0.008, decay: 1.55, delay: 0.14 },
+    ];
+
+    for (const p of partials) {
+      const startAt = t + p.delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(p.freq, startAt);
+      gain.gain.setValueAtTime(0.0004, startAt);
+      gain.gain.linearRampToValueAtTime(p.gain, startAt + 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.0003, startAt + p.decay);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + p.decay + 0.05);
+    }
+  }
+
   public playClick(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;

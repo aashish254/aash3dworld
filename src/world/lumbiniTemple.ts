@@ -957,6 +957,8 @@ export function createLumbiniBuddha(
 
   group.userData.templeBells = templeBells;
   group.userData.prayerWheelSpinners = prayerWheelSpinners;
+  group.userData.babyButterLamps = babyBuddha.userData.butterLamps ?? [];
+  group.userData.babyRitualLampLight = babyBuddha.userData.ritualLampLight ?? null;
   group.userData.mayaDeviHighlights = mayaDevi.group.userData.mayaDeviHighlights;
   group.userData.mayaDeviPlaqueHitTargets = mayaDevi.plaqueHitTargets;
   group.userData.pebbleSpots = localPebbleSpecs.map(([px, pz, pondX, pondZ, label]) => ({

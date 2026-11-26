@@ -38,6 +38,7 @@ import {
   computeLumbiniPondProximityState,
   computeSpatialAmbienceMix,
   computeTimeLightingState,
+  computeButterLampFlameState,
   createFootprintDecalPool,
   createMeditationButterflyStates,
   dampCameraValue,
@@ -63,6 +64,7 @@ import {
   stepPrayerWheelSpin,
 } from './worldLogic';
 import { LumbiniFireflySystem } from './lumbiniFireflies';
+import { LumbiniIncenseSmokeSystem } from './lumbiniIncenseSmoke';
 import { WeatherParticleSystem } from './weatherParticles';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
 import {
@@ -188,6 +190,15 @@ interface PrayerWheelEntry {
   cooldownUntil: number;
 }
 
+interface ButterLampEntry {
+  lampIndex: number;
+  flameGroup: THREE.Group;
+  haloMesh: THREE.Mesh;
+  worldPos: THREE.Vector3;
+  isLit: boolean;
+  litAtElapsed: number;
+}
+
 interface TossedPebbleEntry {
   mesh: THREE.Mesh;
   startPos: THREE.Vector3;
@@ -222,6 +233,7 @@ export class WorldEngine {
   private atmosphereMat!: THREE.ShaderMaterial;
   private weatherParticles!: WeatherParticleSystem;
   private lumbiniFireflies!: LumbiniFireflySystem;
+  private lumbiniIncenseSmoke!: LumbiniIncenseSmokeSystem;
   private sakuraPetalsMat: THREE.ShaderMaterial | null = null;
   private sakuraPetalsPoints: THREE.Points | null = null;
   private riverController!: AnimatedWaterController;
@@ -255,6 +267,11 @@ export class WorldEngine {
   private prayerWheelHitTargets: THREE.Mesh[] = [];
   private prayerWheelSpinsCount = 0;
   private prayerWheelParticleBursts = 0;
+  private butterLampEntries: ButterLampEntry[] = [];
+  private butterLampHitTargets: THREE.Mesh[] = [];
+  private babyRitualLampLight: THREE.PointLight | null = null;
+  private ritualOfferingsCount = 0;
+  private ritualEmberAccum = 0;
   private pebbleSpots: Array<{ x: number; z: number; pondX: number; pondZ: number; label: string }> = [];
   private meditationSpots: Array<{ x: number; z: number; lookX: number; lookZ: number; label: string }> = [];
   private mayaDeviHighlights: {
@@ -439,6 +456,8 @@ export class WorldEngine {
     this.scene.add(this.weatherParticles.points);
     this.lumbiniFireflies = new LumbiniFireflySystem();
     this.scene.add(this.lumbiniFireflies.points);
+    this.lumbiniIncenseSmoke = new LumbiniIncenseSmokeSystem();
+    this.scene.add(this.lumbiniIncenseSmoke.points);
     this.buildFootstepParticles();
     this.buildFootprintDecals();
     this.buildMeditationButterflies();
@@ -977,6 +996,36 @@ export class WorldEngine {
         }
         if (Array.isArray(built.group.userData.meditationSpots)) {
           this.meditationSpots = built.group.userData.meditationSpots;
+        }
+        const rawButterLamps = built.group.userData.babyButterLamps as
+          | Array<{ lampIndex: number; flameGroup: THREE.Group; haloMesh: THREE.Mesh }>
+          | undefined;
+        if (rawButterLamps && rawButterLamps.length > 0) {
+          built.group.updateMatrixWorld(true);
+          const lampHitGeo = new THREE.SphereGeometry(0.68, 8, 8);
+          const lampHitMat = new THREE.MeshBasicMaterial({ visible: false });
+          for (const lamp of rawButterLamps) {
+            const worldPos = new THREE.Vector3();
+            lamp.flameGroup.getWorldPosition(worldPos);
+            const idx = this.butterLampEntries.length;
+            this.butterLampEntries.push({
+              lampIndex: lamp.lampIndex,
+              flameGroup: lamp.flameGroup,
+              haloMesh: lamp.haloMesh,
+              worldPos,
+              isLit: false,
+              litAtElapsed: -1,
+            });
+            const hitSphere = new THREE.Mesh(lampHitGeo, lampHitMat);
+            hitSphere.position.copy(worldPos);
+            hitSphere.userData.butterLampIndex = idx;
+            hitSphere.layers.set(2);
+            this.scene.add(hitSphere);
+            this.butterLampHitTargets.push(hitSphere);
+          }
+        }
+        if (built.group.userData.babyRitualLampLight instanceof THREE.PointLight) {
+          this.babyRitualLampLight = built.group.userData.babyRitualLampLight;
         }
         if (built.group.userData.mayaDeviHighlights) {
           this.mayaDeviHighlights = built.group.userData.mayaDeviHighlights;
@@ -2236,6 +2285,32 @@ export class WorldEngine {
     }
   }
 
+  private spawnButterLampOfferingParticles(x: number, y: number, z: number): void {
+    const count = 34;
+    for (let k = 0; k < count; k++) {
+      const ang = (k / count) * Math.PI * 2 + Math.random() * 0.35;
+      const rad = 0.06 + Math.random() * 0.24;
+      const swirl = 0.68 + Math.random() * 0.55;
+      const radialOut = 0.22 + Math.random() * 0.42;
+      const isWarmWhiteCore = k % 4 === 0;
+      const isLotusPetalSpark = k % 7 === 0;
+      this.pushBurstParticle(
+        x + Math.cos(ang) * rad,
+        y + Math.random() * 0.14,
+        z + Math.sin(ang) * rad,
+        Math.cos(ang) * radialOut - Math.sin(ang) * swirl,
+        0.95 + Math.random() * 1.45,
+        Math.sin(ang) * radialOut + Math.cos(ang) * swirl,
+        isWarmWhiteCore ? 1.0 : isLotusPetalSpark ? 0.99 : 0.99,
+        isWarmWhiteCore ? 0.95 : isLotusPetalSpark ? 0.62 : 0.76 + Math.random() * 0.14,
+        isWarmWhiteCore ? 0.72 : isLotusPetalSpark ? 0.74 : 0.22 + Math.random() * 0.14,
+        isWarmWhiteCore ? 26 + Math.random() * 14 : 20 + Math.random() * 14,
+        1.05 + Math.random() * 0.65,
+        1,
+      );
+    }
+  }
+
   private spawnImpactDust(x: number, y: number, z: number, intensity = 1.0): void {
     const count = Math.round(6 + 5 * Math.min(1.3, intensity));
     for (let k = 0; k < count; k++) {
@@ -2505,6 +2580,7 @@ export class WorldEngine {
     if (this.atmospherePoints) exclude.add(this.atmospherePoints);
     if (this.weatherParticles?.points) exclude.add(this.weatherParticles.points);
     if (this.lumbiniFireflies?.points) exclude.add(this.lumbiniFireflies.points);
+    if (this.lumbiniIncenseSmoke?.points) exclude.add(this.lumbiniIncenseSmoke.points);
     if (this.sakuraPetalsPoints) exclude.add(this.sakuraPetalsPoints);
     if (this.footstepPoints) exclude.add(this.footstepPoints);
     if (this.worldBurstPoints) exclude.add(this.worldBurstPoints);
@@ -2514,6 +2590,7 @@ export class WorldEngine {
     for (const hit of this.landmarkHitTargets) exclude.add(hit);
     for (const hit of this.bellHitTargets) exclude.add(hit);
     for (const hit of this.prayerWheelHitTargets) exclude.add(hit);
+    for (const hit of this.butterLampHitTargets) exclude.add(hit);
     for (const prop of this.interactiveProps) exclude.add(prop.mesh);
     return exclude;
   }
@@ -2977,6 +3054,9 @@ export class WorldEngine {
       if (this.lumbiniFireflies) {
         this.lumbiniFireflies.material.uniforms.uPixelScale.value = this.getPixelScale();
       }
+      if (this.lumbiniIncenseSmoke) {
+        this.lumbiniIncenseSmoke.material.uniforms.uPixelScale.value = this.getPixelScale();
+      }
       this.renderScene();
     };
 
@@ -3026,10 +3106,21 @@ export class WorldEngine {
     if (
       this.bellHitTargets.length > 0 ||
       this.prayerWheelHitTargets.length > 0 ||
+      this.butterLampHitTargets.length > 0 ||
       this.mayaDeviPlaqueHitTargets.length > 0
     ) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
+      if (this.butterLampHitTargets.length > 0) {
+        const lampHits = this.raycaster.intersectObjects(this.butterLampHitTargets, false);
+        if (lampHits.length > 0) {
+          const lampIndex = lampHits[0].object.userData.butterLampIndex as number | undefined;
+          if (typeof lampIndex === 'number') {
+            this.lightButterLamp(lampIndex);
+            return;
+          }
+        }
+      }
       if (this.mayaDeviPlaqueHitTargets.length > 0) {
         const plaqueHits = this.raycaster.intersectObjects(this.mayaDeviPlaqueHitTargets, false);
         if (plaqueHits.length > 0) {
@@ -3284,6 +3375,45 @@ export class WorldEngine {
     this.emitHud(true);
   }
 
+  public lightButterLamp(index?: number): void {
+    if (this.butterLampEntries.length === 0) return;
+    const elapsed = (performance.now() - this.startTimeMs) / 1000;
+    const chosen =
+      typeof index === 'number' && this.butterLampEntries[index]
+        ? this.butterLampEntries[index]
+        : this.butterLampEntries.find((l) => !l.isLit) ?? this.butterLampEntries[0];
+    if (!chosen) return;
+
+    chosen.isLit = true;
+    chosen.litAtElapsed = elapsed;
+    chosen.flameGroup.visible = true;
+    chosen.flameGroup.scale.setScalar(0.32);
+
+    this.ritualOfferingsCount += 1;
+    let litCount = 0;
+    for (const lamp of this.butterLampEntries) {
+      if (lamp.isLit) litCount++;
+    }
+
+    this.spawnButterLampOfferingParticles(
+      chosen.worldPos.x,
+      chosen.worldPos.y + 0.05,
+      chosen.worldPos.z,
+    );
+    soundEngine.playRitualButterLampOffering(litCount);
+
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.dataset.butterLampsLit = String(litCount);
+      this.renderer.domElement.dataset.ritualOfferings = String(this.ritualOfferingsCount);
+      this.renderer.domElement.dataset.ritualOfferingSounds = String(
+        soundEngine.getRitualOfferingSoundCount(),
+      );
+    }
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
     const wheelSpots = this.prayerWheelEntries.map((w) => ({
@@ -3294,6 +3424,11 @@ export class WorldEngine {
       x: b.worldPos.x,
       z: b.worldPos.z,
     }));
+    const lampSpots = this.butterLampEntries.map((l) => ({
+      x: l.worldPos.x,
+      z: l.worldPos.z,
+      isLit: l.isLit,
+    }));
     return computeContextualWorldAction(
       this.playerPos.x,
       this.playerPos.z,
@@ -3302,6 +3437,7 @@ export class WorldEngine {
       bellSpots,
       this.pebbleSpots,
       this.meditationSpots,
+      lampSpots,
     );
   }
 
@@ -3327,6 +3463,10 @@ export class WorldEngine {
     if (action.kind === 'inspect-nativity-relief' && this.mayaDeviHighlights?.nativityRelief) {
       soundEngine.playBellChime();
       this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.nativityRelief);
+      return;
+    }
+    if (action.kind === 'light-butter-lamp') {
+      this.lightButterLamp(action.index);
       return;
     }
     if (action.kind === 'spin-prayer-wheel' && typeof action.index === 'number') {
@@ -3828,6 +3968,20 @@ export class WorldEngine {
     );
     const pixelScale = this.getPixelScale();
     this.lumbiniFireflies?.update(elapsed, fireflyIntensity, pixelScale);
+    let litLampCount = 0;
+    for (let i = 0; i < this.butterLampEntries.length; i++) {
+      if (this.butterLampEntries[i].isLit) litLampCount++;
+    }
+    const ritualGlow =
+      this.butterLampEntries.length > 0 ? litLampCount / this.butterLampEntries.length : 0;
+    this.lumbiniIncenseSmoke?.update(
+      elapsed,
+      this.birdEnvState.windX,
+      this.birdEnvState.windZ,
+      pixelScale,
+      state.sunColor,
+      ritualGlow,
+    );
     if (this.atmospherePoints) {
       this.atmospherePoints.visible = this.weather === 'mist' || this.weather === 'foggy';
     }
@@ -3845,6 +3999,11 @@ export class WorldEngine {
       canvas.dataset.weatherParticleCount = String(this.weatherParticles?.count ?? 0);
       canvas.dataset.lumbiniFireflyIntensity = fireflyIntensity.toFixed(2);
       canvas.dataset.lumbiniFireflyCount = String(this.lumbiniFireflies?.count ?? 0);
+      canvas.dataset.incenseSmokeCount = String(this.lumbiniIncenseSmoke?.count ?? 0);
+      canvas.dataset.butterLampsLit = String(litLampCount);
+      canvas.dataset.butterLampsTotal = String(this.butterLampEntries.length);
+      canvas.dataset.ritualOfferings = String(this.ritualOfferingsCount);
+      canvas.dataset.ritualOfferingSounds = String(soundEngine.getRitualOfferingSoundCount());
       canvas.dataset.lastApproachCueLandmark = this.lastApproachCueLandmarkId ?? 'none';
       canvas.dataset.approachCueCount = String(this.approachCueCount);
       canvas.dataset.cameraFar = String(Math.round(this.camera.far));
@@ -4228,6 +4387,49 @@ export class WorldEngine {
           0.62 + Math.random() * 0.35,
           1,
         );
+      }
+    }
+
+    let litLightSum = 0;
+    let litCountForEmber = 0;
+    for (let i = 0; i < this.butterLampEntries.length; i++) {
+      const lamp = this.butterLampEntries[i];
+      if (!lamp.isLit) continue;
+      litCountForEmber++;
+      const fState = computeButterLampFlameState(elapsed, lamp.litAtElapsed, lamp.lampIndex + 1.37);
+      lamp.flameGroup.visible = fState.scaleY > 0.01;
+      lamp.flameGroup.scale.set(fState.scaleX, fState.scaleY, fState.scaleX);
+      const haloMat = lamp.haloMesh.material as THREE.MeshBasicMaterial;
+      haloMat.opacity = fState.haloOpacity;
+      lamp.haloMesh.scale.setScalar(fState.haloScale);
+      litLightSum += fState.lightIntensity;
+    }
+    if (this.babyRitualLampLight) {
+      this.babyRitualLampLight.intensity = litCountForEmber > 0 ? Math.min(3.6, litLightSum * 0.55) : 0;
+    }
+    if (litCountForEmber > 0) {
+      this.ritualEmberAccum += dt * Math.min(8.5, 1.8 + litCountForEmber * 0.75);
+      while (this.ritualEmberAccum >= 1) {
+        this.ritualEmberAccum -= 1;
+        const pick = this.butterLampEntries.filter((l) => l.isLit);
+        const chosen = pick[Math.floor(Math.random() * pick.length)];
+        if (chosen) {
+          const ang = Math.random() * Math.PI * 2;
+          this.pushBurstParticle(
+            chosen.worldPos.x + Math.cos(ang) * 0.04,
+            chosen.worldPos.y + 0.06,
+            chosen.worldPos.z + Math.sin(ang) * 0.04,
+            Math.cos(ang) * 0.14 + this.birdEnvState.windX * 0.25,
+            0.55 + Math.random() * 0.55,
+            Math.sin(ang) * 0.14 + this.birdEnvState.windZ * 0.25,
+            1.0,
+            0.82,
+            0.34,
+            15 + Math.random() * 10,
+            0.78 + Math.random() * 0.45,
+            1,
+          );
+        }
       }
     }
 
@@ -5032,6 +5234,7 @@ export class WorldEngine {
     this.tossedPebbleMat?.dispose();
     this.weatherParticles?.dispose();
     this.lumbiniFireflies?.dispose();
+    this.lumbiniIncenseSmoke?.dispose();
     this.textures?.dispose();
     this.gtaoPass?.dispose();
     this.composerDepthTex?.dispose();

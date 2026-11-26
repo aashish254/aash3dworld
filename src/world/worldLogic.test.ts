@@ -2385,3 +2385,86 @@ test('Maya Devi skylight bird exclusion, Lumbini pond proximity ripple state, an
   assert.equal(isWalkablePosition(-210.0, 97.8), true, 'Central South Forecourt avenue remains open');
 });
 
+test('Lumbini floating incense smoke shader, butter lamp Ritual Offering action, and flame kinematics work cleanly', async () => {
+  const {
+    BABY_BUDDHA_MONUMENT_ORIGIN,
+    computeButterLampFlameState,
+    computeContextualWorldAction,
+    generateLumbiniIncenseSmokePlacements,
+  } = await import('./worldLogic');
+  const { LumbiniIncenseSmokeSystem } = await import('./lumbiniIncenseSmoke');
+  const { soundEngine } = await import('./soundEngine');
+
+  // 1. Deterministic incense smoke placements anchored around Baby Buddha statue base
+  const plumesA = generateLumbiniIncenseSmokePlacements(240, 202618);
+  const plumesB = generateLumbiniIncenseSmokePlacements(240, 202618);
+  assert.deepEqual(plumesA, plumesB, 'Incense smoke generator must be deterministic');
+  assert.equal(plumesA.length, 240);
+
+  const brazierCounts = [0, 0, 0, 0];
+  for (const p of plumesA) {
+    const dist = Math.hypot(p.x - BABY_BUDDHA_MONUMENT_ORIGIN.x, p.z - BABY_BUDDHA_MONUMENT_ORIGIN.z);
+    assert.ok(dist >= 1.1 && dist <= 4.6, `Smoke plume must stay around Buddha base, got dist=${dist.toFixed(2)}`);
+    assert.ok(p.y >= 0.6 && p.y <= 1.25, `Smoke plume base sits at brazier/basin height, got y=${p.y.toFixed(2)}`);
+    assert.ok(p.riseHeight >= 1.8 && p.speed > 0.08);
+    if (p.brazierIndex >= 0) brazierCounts[p.brazierIndex]++;
+  }
+  assert.ok(brazierCounts.every((c) => c >= 36), 'Every bronze incense brazier must emit a dense rising plume');
+
+  const smokeSys = new LumbiniIncenseSmokeSystem(240, 202618);
+  smokeSys.update(2.4, 0.35, 0.12, 1.0, '#ffd8a4', 0.5);
+  assert.equal(smokeSys.material.uniforms.uTime.value, 2.4);
+  assert.equal(smokeSys.material.uniforms.uRitualGlow.value, 0.5);
+  smokeSys.dispose();
+
+  // 2. Butter lamp flame kinematics: unlit stays 0, lit springs upward and dances smoothly
+  const unlit = computeButterLampFlameState(5.0, -1, 1);
+  assert.equal(unlit.scaleY, 0);
+  assert.equal(unlit.haloOpacity, 0);
+  const igniting = computeButterLampFlameState(5.18, 5.0, 1);
+  assert.ok(igniting.scaleY > 0.5 && igniting.haloOpacity > 0.25);
+  const steadyA = computeButterLampFlameState(8.0, 5.0, 1);
+  const steadyB = computeButterLampFlameState(8.2, 5.0, 1);
+  assert.ok(steadyA.scaleY > 0.7 && steadyB.scaleY > 0.7);
+  assert.notEqual(steadyA.scaleY, steadyB.scaleY, 'Lit butter lamp flame should flicker continuously');
+
+  // 3. Contextual Ritual Offering prioritizes nearest unlit butter lamp around Baby Buddha base
+  const lamps = Array.from({ length: 8 }, (_, i) => {
+    const a = (i / 8) * Math.PI * 2;
+    return {
+      x: -210.0 + Math.sin(a) * 2.98 * 1.28,
+      z: 135.0 + Math.cos(a) * 2.98 * 1.28,
+      isLit: false,
+    };
+  });
+  const prayerWheels = [
+    { x: -217.4, z: 135.0 },
+    { x: -202.6, z: 135.0 },
+  ];
+  const pebbles = [{ x: -212.5, z: 148.8, pondX: -218.5, pondZ: 151.0, label: 'Sacred Pond' }];
+
+  const nearSouthLamp = computeContextualWorldAction(-210.0, 140.4, null, prayerWheels, [], pebbles, [], lamps);
+  assert.equal(nearSouthLamp?.kind, 'light-butter-lamp');
+  assert.equal(nearSouthLamp?.index, 0);
+  assert.ok(nearSouthLamp?.label.includes('Ritual Offering') && nearSouthLamp?.label.includes('(0/8)'));
+
+  // After lighting lamp #0, next [E] targets next unlit lamp and increments count
+  lamps[0].isLit = true;
+  const secondOffer = computeContextualWorldAction(-210.0, 140.4, null, prayerWheels, [], pebbles, [], lamps);
+  assert.equal(secondOffer?.kind, 'light-butter-lamp');
+  assert.ok(secondOffer?.index === 1 || secondOffer?.index === 7);
+  assert.ok(secondOffer?.label.includes('(1/8)'));
+
+  // Nearby Prayer Wheels & Sacred Pond Pebble cairns retain their distinct actions
+  const nearWheel = computeContextualWorldAction(-217.4, 135.5, null, prayerWheels, [], pebbles, [], lamps);
+  assert.equal(nearWheel?.kind, 'spin-prayer-wheel');
+  const nearPond = computeContextualWorldAction(-212.5, 148.5, null, prayerWheels, [], pebbles, [], lamps);
+  assert.equal(nearPond?.kind, 'toss-pebble');
+
+  // 4. Unique meditation sound synthesis counter increments on Ritual Offering trigger
+  const beforeSound = soundEngine.getRitualOfferingSoundCount();
+  soundEngine.playRitualButterLampOffering(1);
+  assert.equal(soundEngine.getRitualOfferingSoundCount(), beforeSound + 1);
+});
+
+

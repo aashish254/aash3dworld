@@ -377,13 +377,15 @@ export const WorldHud: React.FC<WorldHudProps> = ({
             >
               {isMeditating
                 ? 'Stand'
-                : contextualAction?.kind === 'toss-pebble'
-                  ? 'Toss'
-                  : contextualAction?.kind === 'spin-prayer-wheel'
-                    ? 'Spin'
-                    : contextualAction?.kind === 'sit-meditate'
-                      ? 'Meditate'
-                      : 'Inspect'}
+                : contextualAction?.kind === 'light-butter-lamp'
+                  ? 'Light Lamp'
+                  : contextualAction?.kind === 'toss-pebble'
+                    ? 'Toss'
+                    : contextualAction?.kind === 'spin-prayer-wheel'
+                      ? 'Spin'
+                      : contextualAction?.kind === 'sit-meditate'
+                        ? 'Meditate'
+                        : 'Inspect'}
             </button>
           )}
           <button

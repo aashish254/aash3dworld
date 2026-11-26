@@ -301,18 +301,56 @@ test('createMonumentalBabyBuddhaMonument builds realistic Golden Baby Buddha, ba
       instCount += im.count;
       const pos = im.geometry.getAttribute('position');
       if (pos) totalVerts += pos.count;
+      assertFiniteGeometry(im.geometry, im.name || 'BabyBuddhaInstanced');
     } else if ((obj as THREE.Mesh).isMesh) {
       meshCount++;
-      const pos = (obj as THREE.Mesh).geometry.getAttribute('position');
+      const mesh = obj as THREE.Mesh;
+      const pos = mesh.geometry.getAttribute('position');
       if (pos) totalVerts += pos.count;
+      assertFiniteGeometry(mesh.geometry, mesh.name || 'BabyBuddhaMesh');
     }
   });
   const bb = new THREE.Box3().setFromObject(monument);
-  assert.ok(meshCount >= 40, `Expected high-detail multi-part Baby Buddha & lotus pool (>=40 meshes), got ${meshCount}`);
-  assert.ok(instCount >= 550, `Expected >=550 instanced curls/marigolds/shrub sprigs/petals, got ${instCount}`);
-  assert.ok(totalVerts >= 15000, `Expected rich curved sculpture geometry (>=15000 unique verts), got ${totalVerts}`);
+  assert.ok(meshCount >= 35, `Expected high-detail multi-part Baby Buddha & lotus pool (>=35 meshes), got ${meshCount}`);
+  assert.ok(instCount >= 650, `Expected >=650 instanced spiral curls/marigolds/shrub sprigs/petals, got ${instCount}`);
+  assert.ok(totalVerts >= 20000, `Expected rich curved sculpture geometry (>=20000 unique verts), got ${totalVerts}`);
   assert.ok(bb.min.y >= -0.02 && bb.min.y <= 0.05, `Monument should sit grounded near y=0, got ${bb.min.y}`);
   assert.ok(bb.max.y >= 4.2, `Baby Buddha monument should rise >4.2m, got ${bb.max.y}`);
+
+  const fig = monument.getObjectByName('BabyBuddhaFigure');
+  const head = monument.getObjectByName('BabyBuddhaHead');
+  const rightHand = monument.getObjectByName('RightHandSkyward');
+  const leftHand = monument.getObjectByName('LeftHandEarthward');
+  assert.ok(fig && head && rightHand && leftHand, 'Expected named figure, head, and left/right hand groups');
+
+  monument.updateMatrixWorld(true);
+  const figBox = new THREE.Box3().setFromObject(fig);
+  const headBox = new THREE.Box3().setFromObject(head);
+  const ratio = (figBox.max.y - figBox.min.y) / (headBox.max.y - headBox.min.y);
+  assert.ok(ratio >= 3.7, `Expected realistic statue-to-head ratio (>=3.7), got ${ratio.toFixed(2)}`);
+
+  const rHandBox = new THREE.Box3().setFromObject(rightHand);
+  const lHandBox = new THREE.Box3().setFromObject(leftHand);
+  assert.ok(rHandBox.max.x < 0, `Right arm/hand should be on -X side for +Z facing statue, got max.x=${rHandBox.max.x}`);
+  assert.ok(lHandBox.min.x > 0, `Left arm/hand should be on +X side for +Z facing statue, got min.x=${lHandBox.min.x}`);
+  assert.ok(
+    rHandBox.max.y - lHandBox.max.y > 0.65,
+    `Right hand must point skyward clearly above lowered left hand (diff=${(rHandBox.max.y - lHandBox.max.y).toFixed(2)})`,
+  );
+
+  const lamps = monument.userData.butterLamps as
+    | Array<{ lampIndex: number; flameGroup: THREE.Group; haloMesh: THREE.Mesh }>
+    | undefined;
+  assert.ok(Array.isArray(lamps) && lamps.length === 8, 'Expected 8 interactive butter lamps around lotus basin');
+  for (const lamp of lamps!) {
+    assert.equal(lamp.flameGroup.visible, false, 'Unlit butter lamp flame starts hidden');
+    assert.equal(lamp.flameGroup.scale.y, 0, 'Unlit butter lamp flame starts at scale 0');
+  }
+  const ritualLight = monument.userData.ritualLampLight as THREE.PointLight | undefined;
+  assert.ok(ritualLight instanceof THREE.PointLight && ritualLight.intensity === 0, 'Ritual lamp PointLight starts at 0');
+  for (let b = 0; b < 4; b++) {
+    assert.ok(monument.getObjectByName(`DhupaIncenseBrazier_${b}`), `Expected bronze incense brazier #${b}`);
+  }
 });
 
 test('buildDetailedLumbiniBollards and buildDetailedOverlookBalustrade construct intricate carved granite & bronze details', () => {

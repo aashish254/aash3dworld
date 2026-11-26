@@ -4742,6 +4742,7 @@ export type ContextualWorldActionKind =
   | 'inspect-marker-stone'
   | 'inspect-mauryan-chambers'
   | 'inspect-nativity-relief'
+  | 'light-butter-lamp'
   | 'spin-prayer-wheel'
   | 'ring-temple-bell'
   | 'toss-pebble'
@@ -4754,6 +4755,8 @@ export interface ContextualWorldAction {
   targetX: number;
   targetZ: number;
   index?: number;
+  litCount?: number;
+  totalCount?: number;
   landmark?: (typeof LANDMARKS)[number];
 }
 
@@ -4796,6 +4799,7 @@ export function computeContextualWorldAction(
   bellSpots: ReadonlyArray<{ x: number; z: number }>,
   pebbleSpots: ReadonlyArray<{ x: number; z: number; pondX: number; pondZ: number; label: string }>,
   meditationSpots: ReadonlyArray<{ x: number; z: number; lookX: number; lookZ: number; label: string }>,
+  butterLampSpots: ReadonlyArray<{ x: number; z: number; isLit?: boolean }> = [],
 ): ContextualWorldAction | null {
   // 1. Inside Maya Devi Sanctuary boardwalk -> pick nearest of the 3 museum plaques (Marker Stone, Mauryan Chambers, Nativity Sculpture)
   const inMayaDeviBoardwalk =
@@ -4846,7 +4850,49 @@ export function computeContextualWorldAction(
     };
   }
 
-  // 3. Nearest Temple Bell within reach
+  // 3. Nearest Digital Butter Lamp Ritual Offering near the Golden Baby Buddha Monument
+  if (butterLampSpots.length > 0) {
+    let bestUnlitIdx = -1;
+    let bestUnlitDist = Infinity;
+    let bestAnyIdx = -1;
+    let bestAnyDist = 3.25;
+    let litCount = 0;
+
+    for (let i = 0; i < butterLampSpots.length; i++) {
+      const spot = butterLampSpots[i];
+      if (spot.isLit) litCount++;
+      const d = Math.hypot(playerX - spot.x, playerZ - spot.z);
+      if (d < bestAnyDist) {
+        bestAnyDist = d;
+        bestAnyIdx = i;
+      }
+      if (!spot.isLit && d < 6.4 && d < bestUnlitDist) {
+        bestUnlitDist = d;
+        bestUnlitIdx = i;
+      }
+    }
+
+    if (bestAnyIdx >= 0) {
+      const chosenIdx = bestUnlitIdx >= 0 ? bestUnlitIdx : bestAnyIdx;
+      const chosen = butterLampSpots[chosenIdx];
+      const totalCount = butterLampSpots.length;
+      const label =
+        litCount < totalCount
+          ? `Ritual Offering · Light Butter Lamp (${litCount}/${totalCount})`
+          : `Ritual Offering · Offer Flame Blessing (${litCount}/${totalCount})`;
+      return {
+        kind: 'light-butter-lamp',
+        label,
+        targetX: chosen.x,
+        targetZ: chosen.z,
+        index: chosenIdx,
+        litCount,
+        totalCount,
+      };
+    }
+  }
+
+  // 4. Nearest Temple Bell within reach
   let bestBellIdx = -1;
   let bestBellDist = 3.6;
   for (let i = 0; i < bellSpots.length; i++) {
@@ -5183,5 +5229,159 @@ export function computeLumbiniPondProximityState(
     nearestPond: usePushkarini ? 'pushkarini' : 'surrounding',
   };
 }
+
+export interface LumbiniIncenseSmokePlacement {
+  id: number;
+  brazierIndex: number;
+  x: number;
+  y: number;
+  z: number;
+  phase: number;
+  speed: number;
+  riseHeight: number;
+  swirlRadius: number;
+  swirlFreq: number;
+  scale: number;
+  warmShift: number;
+}
+
+export const BABY_BUDDHA_MONUMENT_ORIGIN = {
+  x: -210.0,
+  y: 0.1,
+  z: 135.0,
+  scale: 1.28,
+} as const;
+
+export const BABY_BUDDHA_BRAZIER_LOCAL_ANGLES = [
+  Math.PI * 0.25,
+  Math.PI * 0.75,
+  Math.PI * 1.25,
+  Math.PI * 1.75,
+] as const;
+
+/**
+ * Generates deterministic floating incense smoke plumes rising around the
+ * Golden Baby Buddha monument base: 4 dense curling plumes anchored to the
+ * 4 sculpted bronze Dhupa braziers plus gentle ambient lotus-basin wisps.
+ */
+export function generateLumbiniIncenseSmokePlacements(
+  count = 240,
+  seed = 202618,
+): LumbiniIncenseSmokePlacement[] {
+  const rand = createMulberry32(seed);
+  const out: LumbiniIncenseSmokePlacement[] = [];
+  const { x: ox, y: oy, z: oz, scale } = BABY_BUDDHA_MONUMENT_ORIGIN;
+  const brazierLocalR = 1.06;
+  const brazierTipLocalY = 0.66;
+
+  const brazierParticles = Math.round(count * 0.72);
+  for (let i = 0; i < count; i++) {
+    const isBrazierPlume = i < brazierParticles;
+    const brazierIdx = isBrazierPlume ? i % 4 : -1;
+    let x: number;
+    let y: number;
+    let z: number;
+    let riseHeight: number;
+    let swirlRadius: number;
+    let speed: number;
+    let pScale: number;
+
+    if (isBrazierPlume) {
+      const a = BABY_BUDDHA_BRAZIER_LOCAL_ANGLES[brazierIdx];
+      const bx = ox + Math.sin(a) * brazierLocalR * scale;
+      const bz = oz + Math.cos(a) * brazierLocalR * scale;
+      const stickJitterAngle = rand() * Math.PI * 2;
+      const stickSpread = rand() * 0.09;
+      x = bx + Math.cos(stickJitterAngle) * stickSpread;
+      y = oy + brazierTipLocalY * scale + rand() * 0.06;
+      z = bz + Math.sin(stickJitterAngle) * stickSpread;
+      riseHeight = 2.6 + rand() * 1.65;
+      swirlRadius = 0.22 + rand() * 0.34;
+      speed = 0.14 + rand() * 0.11;
+      pScale = 0.85 + rand() * 0.65;
+    } else {
+      const a = rand() * Math.PI * 2;
+      const ringR = lerp(1.85, 3.85, rand()) * scale * 0.85;
+      x = ox + Math.sin(a) * ringR;
+      y = oy + (0.48 + rand() * 0.32) * scale;
+      z = oz + Math.cos(a) * ringR;
+      riseHeight = 1.9 + rand() * 1.5;
+      swirlRadius = 0.36 + rand() * 0.42;
+      speed = 0.10 + rand() * 0.08;
+      pScale = 1.0 + rand() * 0.72;
+    }
+
+    out.push({
+      id: i,
+      brazierIndex: brazierIdx,
+      x,
+      y,
+      z,
+      phase: rand(),
+      speed,
+      riseHeight,
+      swirlRadius,
+      swirlFreq: 1.8 + rand() * 2.2,
+      scale: pScale,
+      warmShift: rand(),
+    });
+  }
+
+  return out;
+}
+
+export interface ButterLampFlameState {
+  scaleX: number;
+  scaleY: number;
+  haloScale: number;
+  haloOpacity: number;
+  lightIntensity: number;
+  ignitionBurstProgress: number;
+}
+
+/**
+ * Pure kinematic flame envelope for digital butter lamps: unlit lamps stay dark (0),
+ * while newly lit lamps spring outward smoothly with subtle breathing flicker.
+ */
+export function computeButterLampFlameState(
+  elapsed: number,
+  litAtElapsed: number,
+  seed: number,
+): ButterLampFlameState {
+  if (!Number.isFinite(litAtElapsed) || litAtElapsed < 0 || elapsed < litAtElapsed) {
+    return {
+      scaleX: 0,
+      scaleY: 0,
+      haloScale: 0,
+      haloOpacity: 0,
+      lightIntensity: 0,
+      ignitionBurstProgress: 0,
+    };
+  }
+
+  const age = Math.max(0, elapsed - litAtElapsed);
+  // Underdamped spring rise on ignition (0 -> 1.38 overshoot -> settles to 1.0 by ~0.75s)
+  const rise = 1 - Math.exp(-9.0 * age);
+  const overshoot = Math.exp(-5.5 * age) * Math.sin(age * 11.5) * 0.34;
+  const envelope = Math.max(0, rise + overshoot);
+
+  // Multi-harmonic candle / ghee-wick dance
+  const waveA = Math.sin(elapsed * 7.8 + seed * 2.7);
+  const waveB = Math.cos(elapsed * 12.6 + seed * 4.1);
+  const waveC = Math.sin(elapsed * 3.4 + seed * 1.3);
+
+  const flickerY = 1.0 + 0.12 * waveA + 0.06 * waveB;
+  const flickerXZ = 1.0 + 0.07 * waveC - 0.05 * waveA;
+
+  return {
+    scaleX: envelope * flickerXZ,
+    scaleY: envelope * flickerY,
+    haloScale: envelope * (1.0 + 0.14 * waveA + 0.06 * waveC),
+    haloOpacity: Math.min(1, envelope * (0.42 + 0.08 * waveA)),
+    lightIntensity: envelope * (0.9 + 0.16 * waveA + 0.08 * waveB),
+    ignitionBurstProgress: Math.min(1, age / 1.15),
+  };
+}
+
 
 
