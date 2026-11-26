@@ -194,16 +194,16 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
-  // Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Torana Gate (-210, 148.0)
-  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 163.5], [-155, 163.5], [-190, 162.5], [-210, 159.0], [-210, 154.0], [-210, 148.0]],
-  // Park Corridor spur from South Boulevard -> Lumbini East Cross Gate (-166.0, 100.0)
-  [[-156.5, 163.5], [-157.5, 134.0], [-157.5, 106.0], [-161.5, 100.0], [-166.0, 100.0]],
-  // Boudhanath Stupa (-108, 4) -> Lumbini North Torana Gate (-210, 52.0)
-  [[-108, 4], [-136, 14], [-172, 26], [-204, 38], [-210, 45.0], [-210, 52.0]],
+  // Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Outer Threshold Apron (-210, 160.8)
+  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 164.0], [-160, 164.5], [-196, 163.5], [-210, 162.8], [-210, 160.8]],
+  // Park Corridor spur from South Boulevard -> Lumbini East Outer Threshold Apron (-158.5, 100.0)
+  [[-156.5, 164.5], [-156.8, 134.0], [-156.8, 108.0], [-157.4, 100.0], [-158.6, 100.0]],
+  // Boudhanath Stupa (-108, 4) -> Lumbini North Outer Threshold Apron (-210, 39.2)
+  [[-108, 4], [-136, 14], [-172, 26], [-200, 35.5], [-210, 37.8], [-210, 39.2]],
   // Expanded Lumbini Western Sacred Parkland & Peace Canal South Promenade
-  [[-210, 159.0], [-240, 166.0], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
+  [[-210, 162.8], [-240, 166.5], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
   // Expanded Lumbini Western Sacred Parkland & Peace Canal North Promenade
-  [[-210, 43.0], [-240, 31.0], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
+  [[-210, 37.8], [-240, 31.0], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -890,7 +890,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
           (ldx >= -27.0 && ldx <= -22.4 && ldz >= -22.8 && ldz <= -19.2) ||
           (Math.abs(ldx) <= 20.4 && ldz >= -36.8 && ldz <= -34.2) ||
           (ldx >= -27.5 && ldx <= -8.5 && ldz >= 37.2 && ldz <= 40.8) ||
-          (ldx >= -19.2 && ldx <= -8.5 && ldz >= 28.8 && ldz <= 32.2) ||
+          (ldx >= -19.2 && ldx <= -8.5 && ldz >= 28.8 && ldz <= 32.6) ||
           (ldx >= -25.6 && ldx <= -22.4 && ldz >= 14.8 && ldz <= 18.2) ||
           (ldx >= 27.2 && ldx <= 32.4 && ldz >= 22.4 && ldz <= 25.6) ||
           (ldx >= 27.2 && ldx <= 30.0 && ldz >= -23.8 && ldz <= -20.2);
@@ -1181,8 +1181,8 @@ export function isWalkablePosition(x: number, z: number): boolean {
         [-4.2, -1.2], [4.2, -1.2],
         [-18.0, 0.8], [22.8, 0.8],
         [-20.8, -36.5], [25.7, -36.5],
-        [23.2, 28.5], [-8.5, 28.5],
-        [-8.2, 17.0], [-8.2, 7.2],
+        [22.2, 26.25], [-2.2, 26.25],
+        [-8.95, 17.0], [-8.95, 7.2],
         [-5.2, 62.6], [5.2, 62.6],
         [-5.2, -54.6], [5.2, -54.6],
       ] as Array<[number, number]>) {
@@ -5147,7 +5147,7 @@ export function generateLumbiniIncenseSmokePlacements(
   const brazierLocalR = 1.06;
   const brazierTipLocalY = 0.66;
 
-  const brazierParticles = Math.round(count * 0.72);
+  const brazierParticles = Math.round(count * 0.90);
   for (let i = 0; i < count; i++) {
     const isBrazierPlume = i < brazierParticles;
     const brazierIdx = isBrazierPlume ? i % 4 : -1;
@@ -5164,24 +5164,24 @@ export function generateLumbiniIncenseSmokePlacements(
       const bx = ox + Math.sin(a) * brazierLocalR * scale;
       const bz = oz + Math.cos(a) * brazierLocalR * scale;
       const stickJitterAngle = rand() * Math.PI * 2;
-      const stickSpread = rand() * 0.09;
+      const stickSpread = rand() * 0.042;
       x = bx + Math.cos(stickJitterAngle) * stickSpread;
-      y = oy + brazierTipLocalY * scale + rand() * 0.06;
+      y = oy + brazierTipLocalY * scale + rand() * 0.04;
       z = bz + Math.sin(stickJitterAngle) * stickSpread;
-      riseHeight = 2.6 + rand() * 1.65;
-      swirlRadius = 0.22 + rand() * 0.34;
-      speed = 0.14 + rand() * 0.11;
-      pScale = 0.85 + rand() * 0.65;
+      riseHeight = 2.0 + rand() * 1.25;
+      swirlRadius = 0.14 + rand() * 0.18;
+      speed = 0.16 + rand() * 0.10;
+      pScale = 0.44 + rand() * 0.34;
     } else {
       const a = rand() * Math.PI * 2;
-      const ringR = lerp(1.85, 3.85, rand()) * scale * 0.85;
+      const ringR = lerp(1.18, 1.85, rand()) * scale;
       x = ox + Math.sin(a) * ringR;
-      y = oy + (0.48 + rand() * 0.32) * scale;
+      y = oy + (0.62 + rand() * 0.18) * scale;
       z = oz + Math.cos(a) * ringR;
-      riseHeight = 1.9 + rand() * 1.5;
-      swirlRadius = 0.36 + rand() * 0.42;
-      speed = 0.10 + rand() * 0.08;
-      pScale = 1.0 + rand() * 0.72;
+      riseHeight = 1.9 + rand() * 1.05;
+      swirlRadius = 0.22 + rand() * 0.22;
+      speed = 0.12 + rand() * 0.07;
+      pScale = 0.48 + rand() * 0.32;
     }
 
     out.push({

@@ -1954,26 +1954,43 @@ export function buildMayaDeviTemple(
       attribute float aSeed;
       uniform float uTime;
       varying float vAlpha;
+      varying float vLife;
+      varying float vRot;
       void main() {
-        float life = fract(aSeed * 0.19 + uTime * 0.16);
+        float life = fract(aSeed * 0.19 + uTime * 0.18);
+        vLife = life;
+        vRot = aSeed + life * 1.9;
         vec3 p = position;
-        p.y = ${(walkY + 1.12).toFixed(2)} + life * 2.25;
-        p.x += sin(life * 5.2 + uTime * 0.9 + aSeed) * (0.04 + life * 0.22);
-        p.z += cos(life * 4.4 + uTime * 0.75 + aSeed) * (0.04 + life * 0.18);
+        p.y = ${(walkY + 1.12).toFixed(2)} + pow(life, 0.88) * 2.25;
+        float swirlT = uTime * 1.2 + aSeed + life * 5.0;
+        float spread = 0.02 + pow(life, 1.1) * 0.22;
+        p.x += (sin(swirlT) + 0.42 * sin(swirlT * 1.85)) * spread;
+        p.z += (cos(swirlT * 0.92) + 0.42 * cos(swirlT * 1.7)) * spread;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp((18.0 + life * 38.0) / max(1.0, -mv.z), 4.0, 22.0);
-        vAlpha = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.55, 1.0, life)) * 0.24;
+        gl_PointSize = clamp((38.0 + pow(life, 0.78) * 86.0) / max(1.0, -mv.z), 4.0, 34.0);
+        vAlpha = smoothstep(0.0, 0.14, life) * pow(1.0 - smoothstep(0.22, 1.0, life), 1.32) * 0.28;
         gl_Position = projectionMatrix * mv;
       }
     `,
     fragmentShader: `
       varying float vAlpha;
+      varying float vLife;
+      varying float vRot;
       void main() {
-        vec2 c = gl_PointCoord - 0.5;
-        float r2 = dot(c, c);
-        if (r2 > 0.25) discard;
-        float soft = exp(-r2 * 10.0);
-        gl_FragColor = vec4(0.88, 0.87, 0.85, soft * vAlpha);
+        vec2 uv = gl_PointCoord - 0.5;
+        float c = cos(vRot);
+        float s = sin(vRot);
+        vec2 rotUv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+        vec2 q = vec2(rotUv.x * 1.35, rotUv.y * 0.84);
+        q += 0.095 * vec2(sin(q.y * 8.5 + vLife * 6.0), cos(q.x * 7.5 - vLife * 5.0));
+        float dist = length(q) * 2.0;
+        if (dist > 0.95) discard;
+        float radial = pow(smoothstep(0.94, 0.06, dist), 1.4);
+        float filament = 0.65 + 0.35 * sin(q.x * 10.5 + q.y * 7.0 + vLife * 5.2) * cos(q.y * 9.0 - q.x * 5.5 - vLife * 4.1);
+        vec3 col = mix(vec3(0.76, 0.81, 0.87), vec3(0.98, 0.88, 0.68), (1.0 - smoothstep(0.0, 0.5, vLife)) * 0.65);
+        float alpha = radial * filament * vAlpha;
+        if (alpha < 0.005) discard;
+        gl_FragColor = vec4(col, alpha);
       }
     `,
   });

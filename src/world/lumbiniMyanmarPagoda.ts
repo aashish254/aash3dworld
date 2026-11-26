@@ -429,17 +429,22 @@ export function buildMyanmarGoldenPagoda(
     [-7.62, -1.42, 1.56, 0.11],
     [-7.62, 1.42, 1.56, 0.11],
   ] as Array<[number, number, number, number]>) {
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.025, sz), darkSlateStoneMat);
-    curb.position.set(cx, 0.072, cz);
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.026, sz), darkSlateStoneMat);
+    curb.position.set(cx, 0.081, cz);
     curb.receiveShadow = true;
     curb.userData.nonCollidable = true;
     g.add(curb);
   }
 
-  // Inlaid 8-point compass-star medallions at the plaza corners & gate axes
-  const medRingGeo = new THREE.RingGeometry(0.42, 0.64, 24);
-  medRingGeo.rotateX(-Math.PI / 2);
-  const medStarBarGeo = new THREE.BoxGeometry(1.06, 0.012, 0.11);
+  // Sculpted 3D inlaid slate & bronze Dharmachakra medallions at plaza corners & gate axes
+  const medBaseGeo = new THREE.CylinderGeometry(0.66, 0.70, 0.018, 24);
+  const medInnerDiscGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.020, 24);
+  const medRimGeo = new THREE.TorusGeometry(0.47, 0.026, 8, 24);
+  medRimGeo.rotateX(Math.PI / 2);
+  const medSpokeGeo = new THREE.BoxGeometry(0.90, 0.016, 0.058);
+  const medPetalGeo = new THREE.BoxGeometry(0.11, 0.015, 0.16);
+  const medBossGeo = new THREE.SphereGeometry(0.13, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  medBossGeo.scale(1, 0.42, 1);
   for (const [mx, mz] of [
     [-6.65, 7.72],
     [6.65, 7.72],
@@ -449,16 +454,36 @@ export function buildMyanmarGoldenPagoda(
     [-7.78, 0],
     [7.78, 0],
   ] as Array<[number, number]>) {
-    const ring = new THREE.Mesh(medRingGeo, darkSlateStoneMat);
-    ring.position.set(mx, 0.074, mz);
-    ring.userData.nonCollidable = true;
-    g.add(ring);
+    const outerSlate = new THREE.Mesh(medBaseGeo, darkSlateStoneMat);
+    outerSlate.position.set(mx, 0.075, mz);
+    outerSlate.receiveShadow = true;
+    outerSlate.userData.nonCollidable = true;
+    const innerStone = new THREE.Mesh(medInnerDiscGeo, forecourtMat);
+    innerStone.position.set(mx, 0.076, mz);
+    innerStone.receiveShadow = true;
+    innerStone.userData.nonCollidable = true;
+    const rim = new THREE.Mesh(medRimGeo, bronzeMat);
+    rim.position.set(mx, 0.083, mz);
+    rim.userData.nonCollidable = true;
+    const boss = new THREE.Mesh(medBossGeo, brightGoldMat);
+    boss.position.set(mx, 0.086, mz);
+    boss.userData.nonCollidable = true;
+    g.add(outerSlate, innerStone, rim, boss);
     for (let k = 0; k < 4; k++) {
-      const ray = new THREE.Mesh(medStarBarGeo, bronzeMat);
-      ray.position.set(mx, 0.076, mz);
-      ray.rotation.y = (k * Math.PI) / 4;
+      const ang = (k * Math.PI) / 4;
+      const ray = new THREE.Mesh(medSpokeGeo, bronzeMat);
+      ray.position.set(mx, 0.083, mz);
+      ray.rotation.y = ang;
       ray.userData.nonCollidable = true;
       g.add(ray);
+      for (const dir of [-1, 1]) {
+        const pAng = ang + (dir > 0 ? 0 : Math.PI) + Math.PI / 8;
+        const petal = new THREE.Mesh(medPetalGeo, deepGoldMat);
+        petal.position.set(mx + Math.sin(pAng) * 0.54, 0.081, mz + Math.cos(pAng) * 0.54);
+        petal.rotation.y = pAng;
+        petal.userData.nonCollidable = true;
+        g.add(petal);
+      }
     }
   }
 
@@ -1216,22 +1241,93 @@ export function buildMyanmarGoldenPagoda(
   // =========================================================================
   // 8. AZURE OFFERING PEDESTALS, CRIMSON NOTICE POST, STREETLIGHT & MASTS
   // =========================================================================
+  // Shared Lathe profiles for hammered Kalash offering pots, fluted ceramic jars & mast collars
+  const kalashPotGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.095, 0.0),
+      new THREE.Vector2(0.075, 0.03),
+      new THREE.Vector2(0.148, 0.11),
+      new THREE.Vector2(0.155, 0.17),
+      new THREE.Vector2(0.088, 0.24),
+      new THREE.Vector2(0.112, 0.28),
+      new THREE.Vector2(0.048, 0.31),
+      new THREE.Vector2(0.0, 0.35),
+    ],
+    18,
+  );
+  const ceramicJarGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.11, 0.0),
+      new THREE.Vector2(0.15, 0.09),
+      new THREE.Vector2(0.168, 0.18),
+      new THREE.Vector2(0.125, 0.26),
+      new THREE.Vector2(0.142, 0.30),
+      new THREE.Vector2(0.118, 0.31),
+      new THREE.Vector2(0.0, 0.25),
+    ],
+    18,
+  );
+  const planterPotGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.12, 0.0),
+      new THREE.Vector2(0.15, 0.08),
+      new THREE.Vector2(0.18, 0.18),
+      new THREE.Vector2(0.195, 0.21),
+      new THREE.Vector2(0.165, 0.21),
+      new THREE.Vector2(0.0, 0.18),
+    ],
+    18,
+  );
+  const terracottaPotMat = new THREE.MeshStandardMaterial({
+    color: 0xb65d3f,
+    roughness: 0.78,
+    metalness: 0.04,
+  });
+
   for (const sx of [-2.25, 2.25]) {
     const ped = new THREE.Group();
     ped.position.set(sx, 0.07, 7.26);
 
-    const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.28, 0.98), azurePedestalMat);
-    b1.position.y = 0.14;
+    const slateBase = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.10, 1.10), darkSlateStoneMat);
+    slateBase.position.y = 0.05;
+    slateBase.receiveShadow = true;
+    const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.22, 0.98), azurePedestalMat);
+    b1.position.y = 0.21;
     b1.castShadow = true;
-    const bMid = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.10, 0.84), azurePaleTrimMat);
-    bMid.position.y = 0.33;
+    const bMid = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.08, 0.88), azurePaleTrimMat);
+    bMid.position.y = 0.36;
     const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.32, 0.76), azurePedestalMat);
-    b2.position.y = 0.54;
+    b2.position.y = 0.56;
     b2.castShadow = true;
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.09, 0.84), whiteStuccoMat);
-    cap.position.y = 0.74;
-    const lotusCushion = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.09, 14), brightGoldMat);
-    lotusCushion.position.set(0, 0.83, -0.04);
+    const b2InnerTrim = new THREE.Mesh(new THREE.BoxGeometry(0.80, 0.04, 0.80), brightGoldMat);
+    b2InnerTrim.position.y = 0.73;
+    const cap1 = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.06, 0.88), whiteStuccoMat);
+    cap1.position.y = 0.78;
+    const cap2 = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.045, 0.78), whiteStuccoMat);
+    cap2.position.y = 0.83;
+    const lotusCushion = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.29, 0.09, 16), brightGoldMat);
+    lotusCushion.position.set(0, 0.89, -0.04);
+    ped.add(slateBase, b1, bMid, b2, b2InnerTrim, cap1, cap2, lotusCushion);
+
+    // Corner white pilasters & recessed pale-azure side relief plaques on the pedestal torso
+    for (const px of [-0.36, 0.36]) {
+      for (const pz of [-0.36, 0.36]) {
+        const pil = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.08), whiteStuccoMat);
+        pil.position.set(px, 0.56, pz);
+        ped.add(pil);
+      }
+    }
+    for (const fz of [-0.385, 0.385]) {
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.18, 0.025), azurePaleTrimMat);
+      plaque.position.set(0, 0.56, fz);
+      const med = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.032, 12), brightGoldMat);
+      med.rotation.x = Math.PI / 2;
+      med.position.set(0, 0.56, fz);
+      ped.add(plaque, med);
+    }
 
     if (heroMats) {
       const guardian = createMonumentalSeatedBuddha(heroMats, {
@@ -1240,92 +1336,201 @@ export function buildMyanmarGoldenPagoda(
         withNagaCanopy: false,
         withOfferingLamps: false,
       });
-      guardian.position.set(0, 0.86, -0.04);
+      guardian.position.set(0, 0.92, -0.04);
       ped.add(guardian);
     }
 
-    // Brass offering pot beside each pedestal (+ yellow ceramic pot by West pedestal, moss tuft by East pedestal!)
-    const offeringBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.10, 0.20, 12), bronzeMat);
-    offeringBowl.position.set(sx < 0 ? -0.58 : 0.58, 0.14, 0.18);
-    ped.add(b1, bMid, b2, cap, lotusCushion, offeringBowl);
+    // Sculpted hammered-bronze Kalash offering pot completely clear of masonry plinth (on slate saucer)
+    const kalashX = sx < 0 ? -0.78 : 0.78;
+    const kalashSaucer = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.028, 16), darkSlateStoneMat);
+    kalashSaucer.position.set(kalashX, 0.014, 0.22);
+    const offeringBowl = new THREE.Mesh(kalashPotGeo, bronzeMat);
+    offeringBowl.position.set(kalashX, 0.028, 0.22);
+    offeringBowl.castShadow = true;
+    const bowlRing = new THREE.Mesh(new THREE.TorusGeometry(0.152, 0.014, 8, 18), brightGoldMat);
+    bowlRing.rotation.x = Math.PI / 2;
+    bowlRing.position.set(kalashX, 0.18, 0.22);
+    ped.add(kalashSaucer, offeringBowl, bowlRing);
 
     if (sx < 0) {
-      const yellowPot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.26, 12), ceramicYellowMat);
-      yellowPot.position.set(-0.92, 0.13, 0.22);
-      ped.add(yellowPot);
+      const jarSaucer = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.028, 16), darkSlateStoneMat);
+      jarSaucer.position.set(-1.16, 0.014, 0.24);
+      const yellowPot = new THREE.Mesh(ceramicJarGeo, ceramicYellowMat);
+      yellowPot.position.set(-1.16, 0.028, 0.24);
+      yellowPot.castShadow = true;
+      ped.add(jarSaucer, yellowPot);
     } else {
-      const mossTuft = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), mossTuftMat);
-      mossTuft.scale.set(1.2, 0.75, 1.0);
-      mossTuft.position.set(0.76, 0.08, -0.14);
-      ped.add(mossTuft);
+      // Sculpted fluted terracotta lotus planter holding lush arched leaves (replaces block green dodecahedron)
+      const pX = 0.78;
+      const pZ = -0.22;
+      const pSaucer = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.21, 0.028, 16), darkSlateStoneMat);
+      pSaucer.position.set(pX, 0.014, pZ);
+      const planter = new THREE.Mesh(planterPotGeo, terracottaPotMat);
+      planter.position.set(pX, 0.028, pZ);
+      planter.castShadow = true;
+      const pRim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.016, 8, 18), brightGoldMat);
+      pRim.rotation.x = Math.PI / 2;
+      pRim.position.set(pX, 0.22, pZ);
+      ped.add(pSaucer, planter, pRim);
+      for (let lf = 0; lf < 7; lf++) {
+        const ang = (lf / 7) * Math.PI * 2;
+        const frond = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.28, 5), mossTuftMat);
+        frond.position.set(pX + Math.sin(ang) * 0.09, 0.28, pZ + Math.cos(ang) * 0.09);
+        frond.rotation.y = ang;
+        frond.rotation.x = 0.55;
+        ped.add(frond);
+      }
+      const centerBud = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), crimsonMat);
+      centerBud.scale.set(0.85, 1.35, 0.85);
+      centerBud.position.set(pX, 0.31, pZ);
+      ped.add(centerBud);
     }
 
     g.add(ped);
   }
 
-  // Tall White Steel Solar/Floodlight Masts flanking South Plaza Corners (6.8m tall, stepped blue-white plinth & banners!)
+  // Tall Heritage White Steel Floodlight Masts flanking South Plaza Corners (6.8m tall, detailed azure pedestal, fluted shaft & filigree scrollwork brackets!)
+  const mastBaseSleeveGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.24, 0.0),
+      new THREE.Vector2(0.22, 0.08),
+      new THREE.Vector2(0.16, 0.16),
+      new THREE.Vector2(0.18, 0.28),
+      new THREE.Vector2(0.13, 0.42),
+      new THREE.Vector2(0.11, 0.56),
+      new THREE.Vector2(0.0, 0.56),
+    ],
+    16,
+  );
+  const scrollCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.09, 0.0, 0),
+    new THREE.Vector3(0.32, 0.12, 0),
+    new THREE.Vector3(0.38, 0.44, 0),
+    new THREE.Vector3(0.22, 0.72, 0),
+    new THREE.Vector3(0.09, 0.82, 0),
+  ]);
+  const scrollGeo = new THREE.TubeGeometry(scrollCurve, 14, 0.024, 6, false);
+
   for (const [mx, mz] of [
     [-7.48, 6.72],
     [7.48, 6.72],
   ] as Array<[number, number]>) {
     const mast = new THREE.Group();
     mast.position.set(mx, 0.07, mz);
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.26, 0.68), azurePedestalMat);
-    plinth.position.y = 0.13;
-    const mastBase = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.24, 0.38, 12), whiteStuccoMat);
-    mastBase.position.y = 0.44;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.105, 6.25, 12), whiteSteelGateMat);
-    pole.position.y = 3.55;
+
+    // Multi-tiered dark slate, azure & white molded corner pedestal
+    const slateFoot = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.12, 0.86), darkSlateStoneMat);
+    slateFoot.position.y = 0.06;
+    slateFoot.receiveShadow = true;
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.30, 0.72), azurePedestalMat);
+    plinth.position.y = 0.27;
+    plinth.castShadow = true;
+    for (const px of [-0.34, 0.34]) {
+      for (const pz of [-0.34, 0.34]) {
+        const cPil = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.31, 0.08), whiteStuccoMat);
+        cPil.position.set(px, 0.27, pz);
+        mast.add(cPil);
+      }
+    }
+    const plinthCap = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.08, 0.78), whiteStuccoMat);
+    plinthCap.position.y = 0.46;
+    const bronzeSleeve = new THREE.Mesh(mastBaseSleeveGeo, bronzeMat);
+    bronzeSleeve.position.y = 0.50;
+    bronzeSleeve.castShadow = true;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.106, 6.08, 16), whiteSteelGateMat);
+    pole.position.y = 3.66;
     pole.castShadow = true;
+    mast.add(slateFoot, plinth, plinthCap, bronzeSleeve, pole);
 
-    // Vertical green & white decorative lamp-post brackets seen on left floodlight tower in photo
-    for (const dy of [4.85, 5.45]) {
-      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 0.06), bannerGreenMat);
-      brace.position.y = dy;
-      mast.add(brace);
+    // Ornamental bronze collar rings along tapered fluted pole
+    for (const ry of [1.85, 3.65, 5.88]) {
+      const rRing = THREE.MathUtils.lerp(0.106, 0.068, (ry - 0.62) / 6.08) + 0.015;
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(rRing, 0.022, 8, 18), bronzeMat);
+      collar.rotation.x = Math.PI / 2;
+      collar.position.y = ry;
+      mast.add(collar);
     }
 
-    const crossArm = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.065, 0.09), whiteSteelGateMat);
-    crossArm.position.y = 6.42;
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.65, 8), whiteSteelGateMat);
-    rod.position.y = 6.95;
-    const capFinial = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), brightGoldMat);
-    capFinial.position.y = 6.70;
-    for (const fx of [-0.36, 0.36]) {
-      const lampHead = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.26), ironMat);
-      lampHead.position.set(fx, 6.32, 0.06);
+    // Dual curved emerald & gold filigree scrollwork brackets flanking upper shaft
+    for (const side of [-1, 1]) {
+      const scrollArm = new THREE.Mesh(scrollGeo, bannerGreenMat);
+      scrollArm.position.set(0, 4.78, 0);
+      scrollArm.scale.x = side;
+      const innerVolute = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 6, 14), brightGoldMat);
+      innerVolute.position.set(side * 0.24, 5.18, 0);
+      const collarPin = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.045, 0.14), brightGoldMat);
+      collarPin.position.set(side * 0.12, 4.78, 0);
+      mast.add(scrollArm, innerVolute, collarPin);
+    }
+
+    // Crosshead luminaire yoke beam, finned floodlight housings with glare visors & lotus-trident spire
+    const crossArm = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.075, 0.11), whiteSteelGateMat);
+    crossArm.position.y = 6.52;
+    const armTrim = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.028, 0.13), brightGoldMat);
+    armTrim.position.y = 6.56;
+    const crownCup = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.11, 0.14, 14), brightGoldMat);
+    crownCup.position.y = 6.72;
+    const crownOrb = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 10), brightGoldMat);
+    crownOrb.position.y = 6.86;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.026, 0.68, 10), brightGoldMat);
+    rod.position.y = 7.22;
+    for (const fx of [-0.42, 0.42]) {
+      const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.05), bronzeMat);
+      yoke.position.set(fx, 6.42, 0);
+      const lampHead = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.28), ironMat);
+      lampHead.position.set(fx, 6.36, 0.06);
       lampHead.rotation.x = 0.45;
-      const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.18), lampGlowMat);
-      lens.position.set(fx, 6.26, 0.12);
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.025, 0.12), bronzeMat);
+      visor.position.set(fx, 6.41, 0.18);
+      visor.rotation.x = 0.45;
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.20), lampGlowMat);
+      lens.position.set(fx, 6.30, 0.13);
       lens.rotation.x = Math.PI / 2 + 0.45;
-      const tipKnob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), brightGoldMat);
-      tipKnob.position.set(fx, 6.50, 0);
-      mast.add(lampHead, lens, tipKnob);
+      const tipKnob = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.14, 10), brightGoldMat);
+      tipKnob.position.set(fx, 6.64, 0);
+      mast.add(yoke, lampHead, visor, lens, tipKnob);
     }
-    mast.add(plinth, mastBase, pole, crossArm, rod, capFinial);
+    mast.add(crossArm, armTrim, crownCup, crownOrb, rod);
     g.add(mast);
   }
 
-  // Slim Crimson Notice Stand beside East South Pedestal + Tall Curved Gooseneck Streetlight behind it
+  // Ornate Crimson Notice Stand beside East South Pedestal + Tall Curved Gooseneck Streetlight behind it
   const redPost = new THREE.Group();
   redPost.position.set(2.38, 0.07, 7.72);
-  const rpPole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 2.38, 8), crimsonMat);
-  rpPole.position.y = 1.19;
-  const rpSign = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.34, 0.05), crimsonMat);
-  rpSign.position.y = 2.16;
-  redPost.add(rpPole, rpSign);
+  const rpFoot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.26), darkSlateStoneMat);
+  rpFoot.position.y = 0.05;
+  const rpPole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 2.38, 10), crimsonMat);
+  rpPole.position.y = 1.24;
+  const rpFrame = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.40, 0.045), brightGoldMat);
+  rpFrame.position.y = 2.18;
+  const rpSign = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.32, 0.055), crimsonMat);
+  rpSign.position.y = 2.18;
+  const rpHood = new THREE.Mesh(new THREE.ConeGeometry(0.46, 0.16, 4), bronzeMat);
+  rpHood.rotation.y = Math.PI / 4;
+  rpHood.position.y = 2.46;
+  redPost.add(rpFoot, rpPole, rpFrame, rpSign, rpHood);
   g.add(redPost);
 
   const streetMast = new THREE.Group();
   streetMast.position.set(2.58, 0.07, 6.82);
-  const sPole = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.055, 7.4, 8), ironMat);
-  sPole.position.y = 3.7;
-  const sArm = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.045, 0.05), ironMat);
-  sArm.position.set(-0.45, 7.42, 0);
-  sArm.rotation.z = -0.08;
-  const sHead = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.16), ironMat);
-  sHead.position.set(-0.88, 7.36, 0);
-  streetMast.add(sPole, sArm, sHead);
+  const sFoot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.24, 12), darkSlateStoneMat);
+  sFoot.position.y = 0.12;
+  const sPole = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.058, 7.15, 10), ironMat);
+  sPole.position.y = 3.70;
+  const gooseCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 7.22, 0),
+    new THREE.Vector3(-0.32, 7.56, 0),
+    new THREE.Vector3(-0.78, 7.52, 0),
+    new THREE.Vector3(-0.96, 7.36, 0),
+  ]);
+  const sArm = new THREE.Mesh(new THREE.TubeGeometry(gooseCurve, 12, 0.028, 8, false), ironMat);
+  const sHead = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.20, 0.11, 12), ironMat);
+  sHead.position.set(-0.96, 7.33, 0);
+  const sLens = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), lampGlowMat);
+  sLens.scale.set(1.2, 0.45, 1.0);
+  sLens.position.set(-0.96, 7.27, 0);
+  streetMast.add(sFoot, sPole, sArm, sHead, sLens);
   g.add(streetMast);
 
   // 3 West-flank white concrete garden bollards with crimson-painted pyramid caps (visible on far left of photo!)

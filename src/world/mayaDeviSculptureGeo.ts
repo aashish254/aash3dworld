@@ -224,7 +224,7 @@ export function createTaperedLimbGeometry(
       const b = (i + 1) * stride + j;
       const c = (i + 1) * stride + (j + 1);
       const d = i * stride + (j + 1);
-      indices.push(a, b, d, b, c, d);
+      indices.push(a, d, b, b, d, c);
     }
   }
 

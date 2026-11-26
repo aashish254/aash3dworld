@@ -619,20 +619,38 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   const stuccoWhiteRough = toTex(stuccoR, false, 2, 2);
   const stuccoWhiteAo = toTex(heightCanvasToAo(stuccoH, 2, 1.2, 122), false, 2, 2);
 
-  // 7. Weathered Pink-Buff Chunar Sandstone (Ashoka Pillar, Marker Stone, Toranas & Peace Flame)
+  // 7. Weathered Pale Pink-Buff Chunar Sandstone (Ashoka Pillar, Marker Stone, Toranas & Bridges)
   const [chuC, chuCtx] = makeCanvas(512, 512);
   const [chuH, chuHCtx] = makeCanvas(512, 512);
   const [chuR, chuRCtx] = makeCanvas(512, 512);
   const chuGrad = chuCtx.createRadialGradient(256, 256, 40, 256, 256, 360);
-  chuGrad.addColorStop(0, '#cbb08e');
-  chuGrad.addColorStop(0.55, '#bfa27f');
-  chuGrad.addColorStop(1, '#c6a885');
+  chuGrad.addColorStop(0, '#eadcc6');
+  chuGrad.addColorStop(0.55, '#dfd0b6');
+  chuGrad.addColorStop(1, '#e5d7be');
   chuCtx.fillStyle = chuGrad;
   chuCtx.fillRect(0, 0, 512, 512);
-  chuHCtx.fillStyle = '#c8c8c8';
+  chuHCtx.fillStyle = '#d4d4d4';
   chuHCtx.fillRect(0, 0, 512, 512);
-  chuRCtx.fillStyle = '#bababa';
+  chuRCtx.fillStyle = '#c4c4c4';
   chuRCtx.fillRect(0, 0, 512, 512);
+
+  // Subtle ashlar dressed-stone joint lines (subtle chisel relief so surfaces read as stonework, not wood)
+  const courseRows = 4;
+  const rowH = 512 / courseRows;
+  for (let row = 0; row < courseRows; row++) {
+    const y = Math.round(row * rowH);
+    chuCtx.fillStyle = 'rgba(138, 118, 94, 0.16)';
+    chuCtx.fillRect(0, y, 512, 2);
+    chuHCtx.fillStyle = '#9c9c9c';
+    chuHCtx.fillRect(0, y, 512, 2);
+    const colOffset = row % 2 === 0 ? 0 : 128;
+    for (let x = colOffset; x < 512; x += 256) {
+      chuCtx.fillStyle = 'rgba(138, 118, 94, 0.14)';
+      chuCtx.fillRect(x, y, 2, rowH);
+      chuHCtx.fillStyle = '#9c9c9c';
+      chuHCtx.fillRect(x, y, 2, rowH);
+    }
+  }
 
   // Soft cloudy mineral patina patches (isotropic, no horizontal streaks)
   for (let i = 0; i < 420; i++) {
@@ -643,14 +661,14 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     const tone = seededNoise(i, 31, 53);
     const rg = chuCtx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
     if (tone > 0.54) {
-      rg.addColorStop(0, 'rgba(232, 212, 186, 0.08)');
-      rg.addColorStop(1, 'rgba(232, 212, 186, 0)');
+      rg.addColorStop(0, 'rgba(250, 240, 224, 0.09)');
+      rg.addColorStop(1, 'rgba(250, 240, 224, 0)');
     } else if (tone > 0.16) {
-      rg.addColorStop(0, 'rgba(136, 108, 78, 0.08)');
-      rg.addColorStop(1, 'rgba(136, 108, 78, 0)');
+      rg.addColorStop(0, 'rgba(176, 152, 124, 0.06)');
+      rg.addColorStop(1, 'rgba(176, 152, 124, 0)');
     } else {
-      rg.addColorStop(0, 'rgba(98, 96, 74, 0.06)');
-      rg.addColorStop(1, 'rgba(98, 96, 74, 0)');
+      rg.addColorStop(0, 'rgba(136, 132, 112, 0.045)');
+      rg.addColorStop(1, 'rgba(136, 132, 112, 0)');
     }
     chuCtx.fillStyle = rg;
     chuCtx.beginPath();
@@ -662,32 +680,32 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   for (let i = 0; i < 6500; i++) {
     const x = seededNoise(i, 11, 5) * 512;
     const y = seededNoise(i, 22, 9) * 512;
-    const rad = 0.7 + seededNoise(i, 33, 15) * 1.9;
+    const rad = 0.65 + seededNoise(i, 33, 15) * 1.65;
     const tone = seededNoise(i, 55, 29);
     chuCtx.fillStyle =
       tone > 0.62
-        ? 'rgba(245, 228, 204, 0.14)'
+        ? 'rgba(252, 244, 230, 0.16)'
         : tone < 0.25
-          ? 'rgba(96, 72, 48, 0.14)'
-          : 'rgba(176, 146, 114, 0.10)';
+          ? 'rgba(128, 108, 84, 0.11)'
+          : 'rgba(196, 174, 146, 0.09)';
     chuCtx.beginPath();
     chuCtx.arc(x, y, rad, 0, Math.PI * 2);
     chuCtx.fill();
-    const hv = Math.round(166 + tone * 58);
-    chuHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.22)`;
+    const hv = Math.round(176 + tone * 52);
+    chuHCtx.fillStyle = `rgba(${hv},${hv},${hv},0.20)`;
     chuHCtx.beginPath();
     chuHCtx.arc(x, y, rad, 0, Math.PI * 2);
     chuHCtx.fill();
-    const rv = Math.round(165 + (1 - tone) * 55);
+    const rv = Math.round(174 + (1 - tone) * 50);
     chuRCtx.fillStyle = `rgba(${rv},${rv},${rv},0.22)`;
     chuRCtx.beginPath();
     chuRCtx.arc(x, y, rad * 1.15, 0, Math.PI * 2);
     chuRCtx.fill();
   }
-  const chunarStoneMap = toTex(chuC, true, 1, 2);
-  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.35), false, 1, 2);
-  const chunarStoneRough = toTex(chuR, false, 1, 2);
-  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.2, 124), false, 1, 2);
+  const chunarStoneMap = toTex(chuC, true, 1, 1);
+  const chunarStoneNormal = toTex(heightCanvasToNormal(chuH, 1.25), false, 1, 1);
+  const chunarStoneRough = toTex(chuR, false, 1, 1);
+  const chunarStoneAo = toTex(heightCanvasToAo(chuH, 2, 1.1, 134), false, 1, 1);
 
   // 8. Antique Gilded Bronze Patina (Statues, Golden Gajur Spire, Myanmar Stupa, Baby Buddha)
   const [giltC, giltCtx] = makeCanvas(512, 512);
@@ -930,26 +948,64 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   // 12. Heritage Shilalekh Monument Plaque (LUMBINI · MAYA DEVI TEMPLE · UNESCO WORLD HERITAGE)
   const [sgC, sgCtx] = makeCanvas(1024, 512);
   const sgBg = sgCtx.createLinearGradient(0, 0, 0, 512);
-  sgBg.addColorStop(0, '#131d26');
-  sgBg.addColorStop(1, '#0b1218');
+  sgBg.addColorStop(0, '#17232e');
+  sgBg.addColorStop(0.5, '#101922');
+  sgBg.addColorStop(1, '#091016');
   sgCtx.fillStyle = sgBg;
   sgCtx.fillRect(0, 0, 1024, 512);
-  sgCtx.strokeStyle = '#d4a342';
+  sgCtx.strokeStyle = '#dfb04f';
   sgCtx.lineWidth = 14;
   sgCtx.strokeRect(20, 20, 984, 472);
   sgCtx.strokeStyle = '#b93c2d';
   sgCtx.lineWidth = 4;
   sgCtx.strokeRect(38, 38, 948, 436);
-  sgCtx.fillStyle = '#f8dfa6';
-  sgCtx.font = 'bold 58px Georgia, serif';
+  sgCtx.strokeStyle = 'rgba(223, 176, 79, 0.45)';
+  sgCtx.lineWidth = 2;
+  sgCtx.strokeRect(50, 50, 924, 412);
+  // Corner carved brass lotus bosses & Dharmachakra emblem header
+  for (const [cx, cy] of [
+    [66, 66],
+    [958, 66],
+    [66, 446],
+    [958, 446],
+  ]) {
+    sgCtx.fillStyle = '#dfb04f';
+    sgCtx.beginPath();
+    sgCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+    sgCtx.fill();
+    sgCtx.fillStyle = '#8f221d';
+    sgCtx.beginPath();
+    sgCtx.arc(cx, cy, 5, 0, Math.PI * 2);
+    sgCtx.fill();
+  }
+  sgCtx.strokeStyle = '#dfb04f';
+  sgCtx.lineWidth = 3;
+  sgCtx.beginPath();
+  sgCtx.arc(512, 92, 22, 0, Math.PI * 2);
+  sgCtx.stroke();
+  for (let sp = 0; sp < 8; sp++) {
+    const sa = (sp / 8) * Math.PI * 2;
+    sgCtx.beginPath();
+    sgCtx.moveTo(512, 92);
+    sgCtx.lineTo(512 + Math.cos(sa) * 21, 92 + Math.sin(sa) * 21);
+    sgCtx.stroke();
+  }
+  sgCtx.fillStyle = '#fbe4ae';
+  sgCtx.font = 'bold 54px Georgia, serif';
   sgCtx.textAlign = 'center';
   sgCtx.fillText('LUMBINI · MAYA DEVI TEMPLE', 512, 194);
-  sgCtx.fillStyle = '#d1fae5';
-  sgCtx.font = '32px Georgia, serif';
-  sgCtx.fillText('Birthplace of Lord Gautama Buddha · UNESCO World Heritage', 512, 282);
-  sgCtx.fillStyle = '#e5b95c';
-  sgCtx.font = '25px Georgia, serif';
-  sgCtx.fillText('Marker Stone · Ashoka Pillar (249 BCE) · Pushkarini Sacred Pond', 512, 358);
+  sgCtx.strokeStyle = 'rgba(223, 176, 79, 0.58)';
+  sgCtx.lineWidth = 2;
+  sgCtx.beginPath();
+  sgCtx.moveTo(190, 224);
+  sgCtx.lineTo(834, 224);
+  sgCtx.stroke();
+  sgCtx.fillStyle = '#d8f3dc';
+  sgCtx.font = '31px Georgia, serif';
+  sgCtx.fillText('Birthplace of Lord Gautama Buddha · UNESCO World Heritage', 512, 286);
+  sgCtx.fillStyle = '#eac268';
+  sgCtx.font = '24px Georgia, serif';
+  sgCtx.fillText('Sacred Marker Stone · Ashoka Pillar (249 BCE) · Pushkarini Pond', 512, 362);
   const shilalekhSignMap = toTex(sgC, true, 1, 1, true);
 
   const allTex = [

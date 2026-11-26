@@ -65,6 +65,8 @@ import {
 } from './worldLogic';
 import { LumbiniFireflySystem } from './lumbiniFireflies';
 import { LumbiniIncenseSmokeSystem } from './lumbiniIncenseSmoke';
+import { createRoundedSpoonLotusPetalGeo } from './lumbiniBuddhaSculpt';
+import { getLungtaDrapeMaterials } from './prayerFlags';
 import { WeatherParticleSystem } from './weatherParticles';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
 import {
@@ -478,7 +480,9 @@ export class WorldEngine {
 
     this.syncLighting(0);
     this.emitHud(true);
-    this.renderScene();
+    if (!this.isSoftwareGl) {
+      this.renderScene();
+    }
     this.startLoop();
   }
 
@@ -1188,13 +1192,29 @@ export class WorldEngine {
         }),
     );
 
-    // Ornate Makrana White Marble & Hammered Brass Urli Sacred Lotus Basin geometries (deep 0.82m footing so slopes never hover)
-    const urliFootingGeo = new THREE.CylinderGeometry(0.55, 0.64, 0.82, 8);
-    const urliPlinthGeo = new THREE.CylinderGeometry(0.48, 0.54, 0.12, 8);
-    const urliSteppedGeo = new THREE.CylinderGeometry(0.39, 0.45, 0.12, 8);
-    const urliTealCollarGeo = new THREE.CylinderGeometry(0.33, 0.36, 0.08, 16);
-    const urliNeckGeo = new THREE.CylinderGeometry(0.24, 0.3, 0.14, 16);
-    const urliLotusBaseGeo = new THREE.ConeGeometry(0.11, 0.18, 8);
+    const lungtaDrapeMats = getLungtaDrapeMaterials();
+    const outerFlagMats = lungtaDrapeMats.length >= 5 ? lungtaDrapeMats : flagMats;
+
+    // Ornate Makrana White Marble & Hammered Brass Urli Sacred Lotus Basin geometries (smooth 24-seg pedestals!)
+    const urliFootingGeo = new THREE.CylinderGeometry(0.55, 0.64, 0.82, 24);
+    const urliPlinthGeo = new THREE.CylinderGeometry(0.48, 0.54, 0.12, 24);
+    const urliSteppedGeo = new THREE.CylinderGeometry(0.39, 0.45, 0.12, 24);
+    const urliTealCollarGeo = new THREE.CylinderGeometry(0.33, 0.36, 0.08, 24);
+    const urliNeckGeo = new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0.0, 0.0),
+        new THREE.Vector2(0.32, 0.0),
+        new THREE.Vector2(0.27, 0.035),
+        new THREE.Vector2(0.22, 0.075),
+        new THREE.Vector2(0.25, 0.115),
+        new THREE.Vector2(0.31, 0.145),
+        new THREE.Vector2(0.0, 0.145),
+      ],
+      24,
+    );
+    const urliLotusBaseGeo = createRoundedSpoonLotusPetalGeo(0.115, 0.19, 0.026);
+    const urliCalyxCollarGeo = new THREE.TorusGeometry(0.245, 0.016, 10, 28);
+    urliCalyxCollarGeo.rotateX(Math.PI / 2);
     const urliLathePts = [
       new THREE.Vector2(0.0, 0.0),
       new THREE.Vector2(0.22, 0.015),
@@ -1208,24 +1228,26 @@ export class WorldEngine {
       new THREE.Vector2(0.24, 0.11),
       new THREE.Vector2(0.0, 0.095),
     ];
-    const bowlGeo = new THREE.LatheGeometry(urliLathePts, 28);
-    const bowlBandGeo = new THREE.TorusGeometry(0.525, 0.014, 8, 28);
+    const bowlGeo = new THREE.LatheGeometry(urliLathePts, 32);
+    const bowlBandGeo = new THREE.TorusGeometry(0.525, 0.014, 8, 32);
     bowlBandGeo.rotateX(Math.PI / 2);
+    const bowlRimCollarGeo = new THREE.TorusGeometry(0.562, 0.014, 8, 32);
+    bowlRimCollarGeo.rotateX(Math.PI / 2);
     const bowlHandleGeo = new THREE.TorusGeometry(0.055, 0.014, 8, 16);
     const bowlWaterGeo = new THREE.CircleGeometry(0.445, 24);
     bowlWaterGeo.rotateX(-Math.PI / 2);
     const lilyGeo = new THREE.CircleGeometry(0.095, 14, 0.2, Math.PI * 1.82);
     lilyGeo.rotateX(-Math.PI / 2);
-    const lotusPetalGeo = new THREE.ConeGeometry(0.04, 0.11, 6);
+    const lotusPetalGeo = createRoundedSpoonLotusPetalGeo(0.052, 0.088, 0.016);
     const centerDiyaStemGeo = new THREE.CylinderGeometry(0.025, 0.045, 0.13, 12);
     const diyaCupGeo = new THREE.CylinderGeometry(0.055, 0.025, 0.036, 12);
     const flameGeo = new THREE.ConeGeometry(0.026, 0.092, 8);
 
-    // Makrana Marble Pedestal + Cast-Bronze Newari Tripod Dhupauro Censer geometries (deep 0.82m footing)
-    const censerFootingGeo = new THREE.CylinderGeometry(0.44, 0.52, 0.82, 8);
-    const censerBase1Geo = new THREE.CylinderGeometry(0.38, 0.43, 0.12, 8);
-    const censerBase2Geo = new THREE.CylinderGeometry(0.29, 0.34, 0.14, 8);
-    const censerTealRingGeo = new THREE.CylinderGeometry(0.26, 0.28, 0.06, 16);
+    // Makrana Marble Pedestal + Cast-Bronze Newari Tripod Dhupauro Censer geometries (smooth 24-seg pedestals!)
+    const censerFootingGeo = new THREE.CylinderGeometry(0.44, 0.52, 0.82, 24);
+    const censerBase1Geo = new THREE.CylinderGeometry(0.38, 0.43, 0.12, 24);
+    const censerBase2Geo = new THREE.CylinderGeometry(0.29, 0.34, 0.14, 24);
+    const censerTealRingGeo = new THREE.CylinderGeometry(0.26, 0.28, 0.06, 24);
     const censerLegGeo = new THREE.CylinderGeometry(0.026, 0.02, 0.36, 10);
     const censerBowlPts = [
       new THREE.Vector2(0.0, 0.0),
@@ -1244,10 +1266,24 @@ export class WorldEngine {
     const stickGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.28, 6);
     const stickTipGeo = new THREE.SphereGeometry(0.012, 6, 6);
 
-    const flagPoleGeo = new THREE.CylinderGeometry(0.045, 0.06, 3.15, 8);
-    const flagAnchorGeo = new THREE.BoxGeometry(0.40, 0.92, 0.40);
-    const flagRockGeo = new THREE.DodecahedronGeometry(0.19, 0);
-    const flagClothGeo = new THREE.PlaneGeometry(0.28, 0.22);
+    const bambooPoleMat = new THREE.MeshStandardMaterial({ color: 0x9b7142, roughness: 0.72, metalness: 0.08 });
+    const flagPoleGeo = new THREE.CylinderGeometry(0.036, 0.054, 3.15, 12);
+    const flagAnchorGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.92, 8);
+    const flagCollarGeo = new THREE.CylinderGeometry(0.17, 0.21, 0.14, 8);
+    const flagFinialGeo = new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0.0, 0.0),
+        new THREE.Vector2(0.055, 0.0),
+        new THREE.Vector2(0.068, 0.045),
+        new THREE.Vector2(0.032, 0.09),
+        new THREE.Vector2(0.048, 0.135),
+        new THREE.Vector2(0.012, 0.21),
+        new THREE.Vector2(0.0, 0.24),
+      ],
+      12,
+    );
+    const flagRockGeo = new THREE.IcosahedronGeometry(0.18, 1);
+    const flagClothGeo = new THREE.PlaneGeometry(0.28, 0.30, 5, 4);
     const cordMat = new THREE.MeshStandardMaterial({ color: 0xd6cfc2, roughness: 0.9 });
 
     for (const spot of OUTER_TEMPLE_ARTIFACT_SPOTS) {
@@ -1273,16 +1309,29 @@ export class WorldEngine {
         const collar = new THREE.Mesh(urliTealCollarGeo, tealMarbleMat);
         collar.position.y = 0.28;
         const neck = new THREE.Mesh(urliNeckGeo, whiteMarbleMat);
-        neck.position.y = 0.38;
+        neck.position.y = 0.31;
         neck.castShadow = true;
-        artifact.add(p1, p2, collar, neck);
+        const calyxRing = new THREE.Mesh(urliCalyxCollarGeo, brightBrassMat);
+        calyxRing.position.y = 0.335;
+        artifact.add(p1, p2, collar, neck, calyxRing);
 
-        // Carved marble lotus petals ringing the neck under the brass Urli
-        for (let lp = 0; lp < 10; lp++) {
-          const ang = (lp / 10) * Math.PI * 2;
+        // Two tightly cupped carved Makrana marble spoon-lotus calyx rings hugging the bronze Urli underside
+        for (let lp = 0; lp < 12; lp++) {
+          const ang = (lp / 12) * Math.PI * 2;
           const petal = new THREE.Mesh(urliLotusBaseGeo, whiteMarbleMat);
-          petal.position.set(Math.cos(ang) * 0.26, 0.38, Math.sin(ang) * 0.26);
-          petal.rotation.set(0.55, -ang, 0);
+          petal.position.set(Math.sin(ang) * 0.24, 0.345, Math.cos(ang) * 0.24);
+          petal.rotation.y = ang;
+          petal.rotation.x = 0.34;
+          petal.castShadow = true;
+          artifact.add(petal);
+        }
+        for (let lp = 0; lp < 12; lp++) {
+          const ang = ((lp + 0.5) / 12) * Math.PI * 2;
+          const petal = new THREE.Mesh(urliLotusBaseGeo, whiteMarbleMat);
+          petal.scale.setScalar(0.84);
+          petal.position.set(Math.sin(ang) * 0.215, 0.372, Math.cos(ang) * 0.215);
+          petal.rotation.y = ang;
+          petal.rotation.x = 0.24;
           artifact.add(petal);
         }
 
@@ -1291,7 +1340,9 @@ export class WorldEngine {
         bowl.castShadow = true;
         const band = new THREE.Mesh(bowlBandGeo, brightBrassMat);
         band.position.y = 0.69;
-        artifact.add(bowl, band);
+        const rimCollar = new THREE.Mesh(bowlRimCollarGeo, brightBrassMat);
+        rimCollar.position.y = 0.775;
+        artifact.add(bowl, band, rimCollar);
 
         for (const side of [-1, 1]) {
           const handle = new THREE.Mesh(bowlHandleGeo, brightBrassMat);
@@ -1326,12 +1377,14 @@ export class WorldEngine {
           for (let k = 0; k < 6; k++) {
             const ang = (k / 6) * Math.PI * 2;
             const outerP = new THREE.Mesh(lotusPetalGeo, lotusOuterMat);
-            outerP.position.set(lx + Math.cos(ang) * 0.04, 0.735, lz + Math.sin(ang) * 0.04);
-            outerP.rotation.set(0.75, -ang, 0);
+            outerP.position.set(lx + Math.sin(ang) * 0.028, 0.722, lz + Math.cos(ang) * 0.028);
+            outerP.rotation.y = ang;
+            outerP.rotation.x = 0.78;
             const innerP = new THREE.Mesh(lotusPetalGeo, lotusInnerMat);
             innerP.scale.setScalar(0.72);
-            innerP.position.set(lx + Math.cos(ang + 0.5) * 0.025, 0.745, lz + Math.sin(ang + 0.5) * 0.025);
-            innerP.rotation.set(0.45, -ang - 0.5, 0);
+            innerP.position.set(lx + Math.sin(ang + 0.5) * 0.018, 0.730, lz + Math.cos(ang + 0.5) * 0.018);
+            innerP.rotation.y = ang + 0.5;
+            innerP.rotation.x = 0.42;
             artifact.add(outerP, innerP);
           }
         }
@@ -1402,29 +1455,38 @@ export class WorldEngine {
         anchor1.position.y = -0.34;
         anchor1.castShadow = true;
         anchor1.receiveShadow = true;
+        const collar1 = new THREE.Mesh(flagCollarGeo, weatheredStoneMat);
+        collar1.position.y = 0.16;
         const anchor2 = new THREE.Mesh(flagAnchorGeo, whiteMarbleMat);
         anchor2.position.set(1.4, -0.34 + a2LocalOffset, 0);
         anchor2.scale.set(0.88, 1 + a2LocalDrop * 1.4, 0.88);
         anchor2.castShadow = true;
         anchor2.receiveShadow = true;
-        artifact.add(anchor1, anchor2);
+        const collar2 = new THREE.Mesh(flagCollarGeo, weatheredStoneMat);
+        collar2.position.set(1.4, 0.14 + a2LocalOffset, 0);
+        artifact.add(anchor1, collar1, anchor2, collar2);
 
-        const pole = new THREE.Mesh(flagPoleGeo, timberMat);
+        const pole = new THREE.Mesh(flagPoleGeo, bambooPoleMat);
         pole.position.y = 1.325;
         pole.castShadow = true;
-        artifact.add(pole);
+        const finial1 = new THREE.Mesh(flagFinialGeo, brightBrassMat);
+        finial1.position.y = 2.88;
+        artifact.add(pole, finial1);
 
-        const pole2 = new THREE.Mesh(flagPoleGeo, timberMat);
+        const pole2 = new THREE.Mesh(flagPoleGeo, bambooPoleMat);
         pole2.position.set(1.4, 1.195 + a2LocalOffset * 0.5, 0);
         pole2.scale.set(0.85, 0.9 + Math.abs(a2LocalOffset) * 0.45, 0.85);
         pole2.castShadow = true;
-        artifact.add(pole2);
+        const finial2 = new THREE.Mesh(flagFinialGeo, brightBrassMat);
+        finial2.scale.setScalar(0.86);
+        finial2.position.set(1.4, 2.60 + a2LocalOffset * 0.35, 0);
+        artifact.add(pole2, finial2);
 
-        for (let r = 0; r < 5; r++) {
-          const ang = (r / 5) * Math.PI * 2;
+        for (let r = 0; r < 6; r++) {
+          const ang = (r / 6) * Math.PI * 2;
           const rock = new THREE.Mesh(flagRockGeo, weatheredStoneMat);
-          rock.position.set(Math.cos(ang) * 0.24, 0.01, Math.sin(ang) * 0.24);
-          rock.scale.set(1.1, 0.65, 0.9);
+          rock.position.set(Math.cos(ang) * 0.24, 0.02, Math.sin(ang) * 0.24);
+          rock.scale.set(1.05, 0.58, 0.9);
           rock.castShadow = true;
           artifact.add(rock);
         }
@@ -1442,11 +1504,10 @@ export class WorldEngine {
 
         for (let f = 0; f < 5; f++) {
           const t = (f + 0.5) / 5;
-          const flag = new THREE.Mesh(flagClothGeo, flagMats[f % flagMats.length]);
-          flag.position.set(t * 1.4, 2.51 + spanDy * t, 0);
+          const flag = new THREE.Mesh(flagClothGeo, outerFlagMats[f % outerFlagMats.length]);
+          flag.position.set(t * 1.4, 2.47 + spanDy * t, 0);
           flag.userData.nonCollidable = true;
           artifact.add(flag);
-          this.prayerFlags.push(flag);
         }
       }
 
@@ -3760,6 +3821,16 @@ export class WorldEngine {
       }
     }
 
+    // Enforce solid Bodhi trunk radial clearance so third-person camera never enters trunk or saffron cloth
+    const bodhiDx = camPos.x - -239.0;
+    const bodhiDz = camPos.z - 112.5;
+    const bodhiR = Math.hypot(bodhiDx, bodhiDz);
+    if (bodhiR < 1.38 && camPos.y >= 0.45 && camPos.y <= 5.4) {
+      const pushScale = 1.38 / Math.max(0.05, bodhiR);
+      camPos.x = -239.0 + bodhiDx * pushScale;
+      camPos.z = 112.5 + bodhiDz * pushScale;
+    }
+
     const cleared = resolveThirdPersonCameraFloorClearance(
       lookAt.x,
       lookAt.y,
@@ -4164,6 +4235,11 @@ export class WorldEngine {
   private startLoop(): void {
     const tick = () => {
       if (this.disposed) return;
+      if (this.isSoftwareGl && this.gameState === 'paused') {
+        this.isTimeoutFrame = true;
+        this.frameId = window.setTimeout(tick, 240);
+        return;
+      }
       const now = performance.now();
       const rawDt = (now - this.lastFrameMs) / 1000;
       this.lastFrameMs = now;
@@ -4191,7 +4267,8 @@ export class WorldEngine {
     };
 
     if (this.isSoftwareGl) {
-      this.afterDraw(tick);
+      this.isTimeoutFrame = true;
+      this.frameId = window.setTimeout(tick, 900);
     } else {
       this.frameId = requestAnimationFrame(tick);
     }

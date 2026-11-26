@@ -448,32 +448,53 @@ export function buildAuthenticAshokaPillar(
 ): THREE.Group {
   const g = new THREE.Group();
 
-  // Stepped brick & sandstone fenced enclosure (3.8m x 3.8m)
-  const brickBase = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.28, 3.8), brickMat);
+  // Stepped brick & Chunar sandstone fenced enclosure (3.9m x 3.9m)
+  const brickBase = new THREE.Mesh(new THREE.BoxGeometry(3.92, 0.28, 3.92), brickMat);
   brickBase.position.y = 0.14;
   brickBase.castShadow = true;
   brickBase.receiveShadow = true;
 
-  const stoneDeck = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.16, 3.2), stoneMat);
-  stoneDeck.position.y = 0.36;
+  const stoneDeck = new THREE.Mesh(new THREE.BoxGeometry(3.32, 0.18, 3.32), stoneMat);
+  stoneDeck.position.y = 0.37;
   stoneDeck.castShadow = true;
   stoneDeck.receiveShadow = true;
-  g.add(brickBase, stoneDeck);
+  const innerCurb = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.10, 2.04), brickMat);
+  innerCurb.position.y = 0.49;
+  innerCurb.receiveShadow = true;
+  g.add(brickBase, stoneDeck, innerCurb);
 
-  // Golden-brass protective perimeter fence (authentic Lumbini brass railing)
-  for (const sx of [-1.68, 1.68]) {
-    for (const sz of [-1.68, 1.68]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.92, 0.14), stoneMat);
-      post.position.set(sx, 0.72, sz);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), brassMat);
-      cap.position.set(sx, 1.22, sz);
-      g.add(post, cap);
+  // Turned brass Kalash urn finials & octagonal chamfered fence corner posts
+  const fenceUrnGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.075, 0.0),
+      new THREE.Vector2(0.055, 0.03),
+      new THREE.Vector2(0.088, 0.075),
+      new THREE.Vector2(0.042, 0.125),
+      new THREE.Vector2(0.056, 0.155),
+      new THREE.Vector2(0.014, 0.21),
+      new THREE.Vector2(0.0, 0.24),
+    ],
+    14,
+  );
+  for (const sx of [-1.70, 1.70]) {
+    for (const sz of [-1.70, 1.70]) {
+      const pFoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.24), stoneMat);
+      pFoot.position.set(sx, 0.34, sz);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.86, 0.16), stoneMat);
+      post.position.set(sx, 0.82, sz);
+      post.castShadow = true;
+      const pCap = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.08, 0.22), stoneMat);
+      pCap.position.set(sx, 1.26, sz);
+      const cap = new THREE.Mesh(fenceUrnGeo, brassMat);
+      cap.position.set(sx, 1.30, sz);
+      g.add(pFoot, post, pCap, cap);
     }
   }
-  const railGeoX = new THREE.BoxGeometry(3.36, 0.055, 0.055);
-  const railGeoZ = new THREE.BoxGeometry(0.055, 0.055, 3.36);
-  for (const ry of [0.56, 1.06]) {
-    for (const side of [-1.68, 1.68]) {
+  const railGeoX = new THREE.BoxGeometry(3.40, 0.058, 0.058);
+  const railGeoZ = new THREE.BoxGeometry(0.058, 0.058, 3.40);
+  for (const ry of [0.58, 1.12]) {
+    for (const side of [-1.70, 1.70]) {
       const rx = new THREE.Mesh(railGeoX, brassMat);
       rx.position.set(0, ry, side);
       const rz = new THREE.Mesh(railGeoZ, brassMat);
@@ -483,12 +504,12 @@ export function buildAuthenticAshokaPillar(
   }
   const picketCoords: Array<[number, number]> = [];
   for (let i = -4; i <= 4; i++) {
-    picketCoords.push([i * 0.34, -1.68], [i * 0.34, 1.68], [-1.68, i * 0.34], [1.68, i * 0.34]);
+    picketCoords.push([i * 0.34, -1.70], [i * 0.34, 1.70], [-1.70, i * 0.34], [1.70, i * 0.34]);
   }
-  const picketGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.56, 6);
+  const picketGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.58, 8);
   const pickets = new THREE.InstancedMesh(picketGeo, brassMat, picketCoords.length);
   picketCoords.forEach(([px, pz], idx) => {
-    _v3.set(px, 0.81, pz);
+    _v3.set(px, 0.85, pz);
     _q.identity();
     _s.setScalar(1);
     _m4.compose(_v3, _q, _s);
@@ -498,13 +519,28 @@ export function buildAuthenticAshokaPillar(
   pickets.computeBoundingSphere();
   g.add(pickets);
 
-  // Pillar square stone plinth with carved chamfer & Brahmi Edict engraving
-  const pedSquare = new THREE.Mesh(new THREE.BoxGeometry(1.54, 0.44, 1.54), stoneMat);
-  pedSquare.position.y = 0.66;
+  // Pillar stepped Mauryan plinth with carved chamfer & Brahmi Edict engraving
+  const pedLower = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.22, 1.74), stoneMat);
+  pedLower.position.y = 0.58;
+  pedLower.castShadow = true;
+  const pedSquare = new THREE.Mesh(new THREE.BoxGeometry(1.50, 0.32, 1.50), stoneMat);
+  pedSquare.position.y = 0.82;
   pedSquare.castShadow = true;
-  const shaftCollar = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.045, 10, 24), stoneMat);
-  shaftCollar.rotation.x = Math.PI / 2;
-  shaftCollar.position.y = 0.90;
+  const pedTop = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.10, 1.26), stoneMat);
+  pedTop.position.y = 1.00;
+  const shaftCollarGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.58, 0.0),
+      new THREE.Vector2(0.56, 0.06),
+      new THREE.Vector2(0.51, 0.12),
+      new THREE.Vector2(0.47, 0.18),
+      new THREE.Vector2(0.0, 0.18),
+    ],
+    28,
+  );
+  const shaftCollar = new THREE.Mesh(shaftCollarGeo, stoneMat);
+  shaftCollar.position.y = 1.05;
 
   const edictMat = new THREE.MeshStandardMaterial({
     map: edictMap,
@@ -512,58 +548,75 @@ export function buildAuthenticAshokaPillar(
     normalScale: new THREE.Vector2(1.0, 1.0),
     roughness: 0.72,
   });
-  const edictEastFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.38, 0.78), ironMat);
-  edictEastFrame.position.set(0.765, 0.66, 0);
-  const edictEast = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.32, 0.70), edictMat);
-  edictEast.position.set(0.77, 0.66, 0);
-  const edictSouthFrame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.38, 0.05), ironMat);
-  edictSouthFrame.position.set(0, 0.66, 0.765);
-  const edictSouth = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.32, 0.065), edictMat);
-  edictSouth.position.set(0, 0.66, 0.77);
-  g.add(pedSquare, shaftCollar, edictEastFrame, edictEast, edictSouthFrame, edictSouth);
+  const edictEastFrame = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.28, 0.78), brassMat);
+  edictEastFrame.position.set(0.755, 0.82, 0);
+  const edictEast = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.22, 0.70), edictMat);
+  edictEast.position.set(0.76, 0.82, 0);
+  const edictSouthFrame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.28, 0.04), brassMat);
+  edictSouthFrame.position.set(0, 0.82, 0.755);
+  const edictSouth = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.22, 0.055), edictMat);
+  edictSouth.position.set(0, 0.82, 0.76);
+  g.add(pedLower, pedSquare, pedTop, shaftCollar, edictEastFrame, edictEast, edictSouthFrame, edictSouth);
 
-  // Monolithic tapered Chunar sandstone shaft (6.2m above plinth -> ~7.1m total)
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.47, 6.2, 28), stoneMat);
-  shaft.position.y = 3.98;
+  // Monolithic tapered Chunar sandstone shaft (6.05m above Mauryan collar)
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.47, 6.05, 32), stoneMat);
+  shaft.position.y = 4.22;
   shaft.castShadow = true;
   shaft.receiveShadow = true;
   g.add(shaft);
 
-  // Carved Brahmi inscription band directly on lower pillar face with subtle framing bands
+  // Subtle horizontal Mauryan masonry stress hairline grooves & Brahmi inscription panel
   const shaftEdict = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.456, 0.464, 0.75, 28, 1, true, -0.58, 1.16),
+    new THREE.CylinderGeometry(0.456, 0.464, 0.76, 28, 1, true, -0.58, 1.16),
     edictMat,
   );
-  shaftEdict.position.y = 2.15;
+  shaftEdict.position.y = 2.32;
   g.add(shaftEdict);
 
-  // Historic dark iron/bronze structural clamp bands with forged rivets encircling the shaft
-  for (const cy of [3.2, 5.1, 6.65]) {
-    const rad = THREE.MathUtils.lerp(0.47, 0.35, (cy - 0.88) / 6.2) + 0.016;
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 0.085, 24, 1, true), ironMat);
+  // Historic conservation bronze/iron structural clamp bands with bolted side lugs & forged rivets
+  for (const cy of [3.35, 5.20, 6.75]) {
+    const rad = THREE.MathUtils.lerp(0.47, 0.35, (cy - 1.19) / 6.05) + 0.015;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 0.09, 28, 1, true), ironMat);
     band.position.y = cy;
     g.add(band);
+    for (const lx of [-1, 1]) {
+      const flange = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.06), ironMat);
+      flange.position.set(lx * (rad + 0.015), cy, 0);
+      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.09, 6), brassMat);
+      bolt.rotation.x = Math.PI / 2;
+      bolt.position.set(lx * (rad + 0.022), cy, 0);
+      g.add(flange, bolt);
+    }
     for (let rv = 0; rv < 8; rv++) {
-      const ra = (rv / 8) * Math.PI * 2;
-      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), brassMat);
+      const ra = (rv / 8) * Math.PI * 2 + 0.39;
+      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), brassMat);
       rivet.position.set(Math.cos(ra) * (rad + 0.008), cy, Math.sin(ra) * (rad + 0.008));
       g.add(rivet);
     }
   }
 
-  // Authentic weathered broken/stepped Mauryan crown with necking ring & protective cap
-  const neckRing = new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.028, 8, 24), stoneMat);
+  // Authentic weathered Mauryan Chunar sandstone stepped/fractured crown with flush bronze weather band (not a black iron mushroom cap)
+  const neckRing = new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.026, 10, 28), stoneMat);
   neckRing.rotation.x = Math.PI / 2;
-  neckRing.position.y = 7.06;
-  const brokenShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 0.24, 22), stoneMat);
-  brokenShoulder.position.y = 7.20;
-  brokenShoulder.castShadow = true;
-  const stoneCap = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.44),
-    ironMat,
-  );
-  stoneCap.position.y = 7.28;
-  g.add(neckRing, brokenShoulder, stoneCap);
+  neckRing.position.y = 7.23;
+  const bellCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.37, 0.18, 28), stoneMat);
+  bellCollar.position.y = 7.34;
+  bellCollar.castShadow = true;
+  const bronzeSealBand = new THREE.Mesh(new THREE.CylinderGeometry(0.315, 0.32, 0.045, 28), brassMat);
+  bronzeSealBand.position.y = 7.45;
+  const fracturedCrown1 = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.31, 0.16, 18), stoneMat);
+  fracturedCrown1.position.y = 7.54;
+  fracturedCrown1.castShadow = true;
+  const fracturedCrown2 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 0.14, 14), stoneMat);
+  fracturedCrown2.position.set(0.02, 7.68, -0.01);
+  fracturedCrown2.rotation.z = 0.08;
+  fracturedCrown2.castShadow = true;
+  const weatheredTip = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 1), stoneMat);
+  weatheredTip.scale.set(1.05, 0.52, 0.95);
+  weatheredTip.position.set(0.02, 7.75, -0.01);
+  g.add(neckRing, bellCollar, bronzeSealBand, fracturedCrown1, fracturedCrown2, weatheredTip);
+
+  g.userData.cameraOccluderMeshes = [brickBase, stoneDeck, pedSquare, shaft];
 
   return g;
 }
@@ -746,19 +799,41 @@ export function buildThaiMarbleSanctuary(
     g.add(plinth, baseRing, col, midBand, cap);
   }
 
-  // Perimeter cornice architrave beams + ornate golden Thai Khan Thuai eave brackets
+  // Perimeter cornice architrave beams + coffered soffit ceiling + gilded Thai Khan Thuai eave brackets
   for (const sz of [-3.15, 3.15]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.28, 0.44), whiteMarbleMat);
-    beam.position.set(0, 6.46, sz);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.26, 0.44), whiteMarbleMat);
+    beam.position.set(0, 6.38, sz);
     g.add(beam);
   }
   for (const sx of [-3.15, 3.15]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.28, 6.4), whiteMarbleMat);
-    beam.position.set(sx, 6.46, 0);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.26, 6.4), whiteMarbleMat);
+    beam.position.set(sx, 6.38, 0);
     g.add(beam);
   }
+  // Recessed white-marble & gold coffered soffit ceiling closing roof underside cleanly (zero clipping!)
+  const soffitOuter = new THREE.Mesh(new THREE.BoxGeometry(6.62, 0.06, 6.62), whiteMarbleMat);
+  soffitOuter.position.y = 6.53;
+  const soffitFrame = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.03, 4.4), goldMat);
+  soffitFrame.position.y = 6.495;
+  const soffitInner = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.035, 4.0), crimsonMat);
+  soffitInner.position.y = 6.49;
+  const soffitMandala = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.04, 24), goldMat);
+  soffitMandala.position.y = 6.485;
+  g.add(soffitOuter, soffitFrame, soffitInner, soffitMandala);
 
-  // Sweeping Multi-Tiered White & Gold Thai Chofah Roofs starting high at y = 6.50m (well above halo 5.23m)
+  // Diagonal gilded Thai Khan Thuai eave struts under the architraves
+  for (const [sx, sz] of colSpecs) {
+    if (sx === 0 || sz === 0) {
+      const ang = Math.atan2(sx, sz);
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.62, 0.14), goldMat);
+      strut.position.set(sx * 1.07, 6.18, sz * 1.07);
+      strut.rotation.y = ang;
+      strut.rotation.x = -0.58;
+      g.add(strut);
+    }
+  }
+
+  // Sweeping Multi-Tiered White & Gold Thai Chofah Roofs stacked strictly without slope clipping (above 6.56m soffit)
   const chofahCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 0, 0),
     new THREE.Vector3(0.06, 0.28, 0),
@@ -773,25 +848,25 @@ export function buildThaiMarbleSanctuary(
   );
 
   for (const [tier, rw, rh, ry] of [
-    [0, 8.8, 1.38, 6.50],
-    [1, 6.5, 1.28, 7.72],
-    [2, 4.1, 1.18, 8.82],
+    [0, 8.9, 1.36, 6.58],
+    [1, 6.55, 1.24, 7.94],
+    [2, 4.15, 1.16, 9.18],
   ] as Array<[number, number, number, number]>) {
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(rw + 0.14, 0.10, rw + 0.14), goldMat);
+    trim.position.y = ry + 0.05;
     const roof = new THREE.Mesh(createRectangularHipRoofGeometry(rw, rh, rw, 0.62), whiteMarbleMat);
-    roof.position.y = ry + rh * 0.5;
+    roof.position.y = ry + 0.08 + rh * 0.5;
     roof.castShadow = true;
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(rw + 0.14, 0.12, rw + 0.14), goldMat);
-    trim.position.y = ry + 0.06;
-    const ridgeBand = new THREE.Mesh(new THREE.BoxGeometry(rw * 0.72, 0.10, rw * 0.72), goldMat);
-    ridgeBand.position.y = ry + rh * 0.72;
-    g.add(roof, trim, ridgeBand);
+    const ridgeBand = new THREE.Mesh(new THREE.BoxGeometry(rw * 0.34, 0.09, rw * 0.34), goldMat);
+    ridgeBand.position.y = ry + 0.08 + rh - 0.01;
+    g.add(trim, roof, ridgeBand);
 
     // Sculpted curved golden Chofah sky-tassel finials at gable corners
     if (tier < 2) {
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
           const chofah = new THREE.Mesh(chofahGeo, goldMat);
-          chofah.position.set(sx * (rw * 0.45), ry + 0.08, sz * (rw * 0.45));
+          chofah.position.set(sx * (rw * 0.45), ry + 0.10, sz * (rw * 0.45));
           chofah.rotation.y = Math.atan2(sz, sx);
           g.add(chofah);
         }
@@ -799,10 +874,10 @@ export function buildThaiMarbleSanctuary(
     }
   }
   const spire = createDetailedGajurSpire(goldMat, crimsonMat, 0.92);
-  spire.position.y = 9.96;
+  spire.position.y = 10.36;
   g.add(spire);
 
-  // Monumental Golden Dhyana Buddha (scale 0.72 -> crown at ~4.60m, halo top ~5.23m, 1.27m clear headroom!)
+  // Monumental Golden Dhyana Buddha (scale 0.72 -> crown at ~4.60m, halo top ~5.23m, >1.20m clear headroom!)
   const buddha = createMonumentalSeatedBuddha(heroMats, {
     scale: 0.72,
     pose: 'dhyana',
@@ -816,8 +891,10 @@ export function buildThaiMarbleSanctuary(
 
   // Elevated forward sanctum canopy light (prevents harsh specular glare dot on chest)
   const light = new THREE.PointLight(0xffdfb0, 1.65, 16, 1.45);
-  light.position.set(0, 5.95, 2.75);
+  light.position.set(0, 5.88, 2.75);
   g.add(light);
+
+  g.userData.cameraOccluderMeshes = [base1, base2, soffitOuter];
 
   return { group: g, light };
 }
@@ -935,71 +1012,161 @@ export function buildSacredBodhiChautara(
   soil.position.y = 0.72;
   bodhi.add(tier1, tier2, soil);
 
-  // Flared, tapered Ficus religiosa trunk + twisting aerial-root tendrils
+  // Solid inner gnarled Ficus heartwood core + outer tapered trunk + 6 muscular bark ribs (zero see-through center!)
+  const corePts = [
+    new THREE.Vector2(0.0, 0.66),
+    new THREE.Vector2(0.62, 0.66),
+    new THREE.Vector2(0.50, 1.25),
+    new THREE.Vector2(0.45, 1.95),
+    new THREE.Vector2(0.41, 2.75),
+    new THREE.Vector2(0.35, 3.65),
+    new THREE.Vector2(0.24, 4.35),
+    new THREE.Vector2(0.0, 4.38),
+  ];
+  const trunkCore = new THREE.Mesh(new THREE.LatheGeometry(corePts, 18), barkMat);
+  trunkCore.position.set(0.03, 0, 0.02);
+  trunkCore.castShadow = true;
+  trunkCore.receiveShadow = true;
+  bodhi.add(trunkCore);
+
   const trunkCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 0.68, 0),
-    new THREE.Vector3(0.10, 1.85, 0.06),
-    new THREE.Vector3(-0.08, 3.15, -0.04),
-    new THREE.Vector3(0.04, 4.35, 0.04),
+    new THREE.Vector3(0.08, 1.85, 0.05),
+    new THREE.Vector3(-0.06, 3.15, -0.03),
+    new THREE.Vector3(0.03, 4.38, 0.02),
   ]);
   const trunk = new THREE.Mesh(
-    createTaperedLimbGeometry(trunkCurve, (t) => THREE.MathUtils.lerp(0.54, 0.27, Math.pow(t, 0.75)), 20, 14),
+    createTaperedLimbGeometry(trunkCurve, (t) => THREE.MathUtils.lerp(0.56, 0.28, Math.pow(t, 0.75)), 20, 16),
     barkMat,
   );
   trunk.castShadow = true;
   bodhi.add(trunk);
 
-  for (let ar = 0; ar < 3; ar++) {
-    const a0 = (ar / 3) * Math.PI * 2;
+  // Sculpted braided aerial roots & muscular fluted bark ribs hugging the solid trunk core
+  const aerialMeshes: THREE.Mesh[] = [];
+  for (let ar = 0; ar < 5; ar++) {
+    const a0 = (ar / 5) * Math.PI * 2 + 0.25;
     const ac = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(Math.cos(a0) * 0.24, 3.4, Math.sin(a0) * 0.24),
-      new THREE.Vector3(Math.cos(a0 + 0.7) * 0.38, 2.1, Math.sin(a0 + 0.7) * 0.38),
-      new THREE.Vector3(Math.cos(a0 + 1.3) * 0.52, 0.75, Math.sin(a0 + 1.3) * 0.52),
+      new THREE.Vector3(Math.cos(a0) * 0.24, 3.65, Math.sin(a0) * 0.24),
+      new THREE.Vector3(Math.cos(a0 + 0.36) * 0.40, 2.25, Math.sin(a0 + 0.36) * 0.40),
+      new THREE.Vector3(Math.cos(a0 + 0.72) * 0.56, 0.73, Math.sin(a0 + 0.72) * 0.56),
     ]);
     const am = new THREE.Mesh(
-      createTaperedLimbGeometry(ac, (t) => THREE.MathUtils.lerp(0.06, 0.11, t), 14, 8),
+      createTaperedLimbGeometry(ac, (t) => THREE.MathUtils.lerp(0.08, 0.14, t), 14, 9),
       barkMat,
     );
     am.castShadow = true;
     bodhi.add(am);
+    aerialMeshes.push(am);
   }
 
-  // Saffron ceremonial cloth tied cleanly around trunk
-  const scarf = new THREE.Mesh(
-    new THREE.TorusGeometry(0.41, 0.055, 8, 20),
-    new THREE.MeshStandardMaterial({ color: 0xdf7b1c, roughness: 0.72 }),
+  // Intricate pleated ceremonial saffron & gold-bordered sacred cloth sash tied tightly around the trunk
+  const saffronMat = new THREE.MeshStandardMaterial({ color: 0xe37817, roughness: 0.68, metalness: 0.04 });
+  const saffronGoldTrimMat = new THREE.MeshStandardMaterial({ color: 0xdfb13d, roughness: 0.36, metalness: 0.55 });
+  const clothBandGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.46, 0.0),
+      new THREE.Vector2(0.535, 0.04),
+      new THREE.Vector2(0.555, 0.09),
+      new THREE.Vector2(0.525, 0.14),
+      new THREE.Vector2(0.550, 0.19),
+      new THREE.Vector2(0.515, 0.24),
+      new THREE.Vector2(0.455, 0.27),
+    ],
+    28,
   );
-  scarf.rotation.x = Math.PI / 2;
-  scarf.position.set(0.06, 1.85, 0.04);
-  bodhi.add(scarf);
+  const clothBand = new THREE.Mesh(clothBandGeo, saffronMat);
+  clothBand.position.set(0.055, 1.72, 0.038);
+  clothBand.castShadow = true;
+  bodhi.add(clothBand);
+  for (const [ry, tiltX, tiltZ] of [
+    [1.75, 0.05, -0.04],
+    [1.96, -0.05, 0.04],
+  ]) {
+    const goldEdge = new THREE.Mesh(new THREE.TorusGeometry(0.532, 0.016, 8, 28), saffronGoldTrimMat);
+    goldEdge.rotation.set(Math.PI / 2 + tiltX, 0, tiltZ);
+    goldEdge.position.set(0.055, ry, 0.038);
+    bodhi.add(goldEdge);
+  }
+  const knotMesh = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 10), saffronMat);
+  knotMesh.scale.set(1.2, 0.9, 1.0);
+  knotMesh.position.set(0.24, 1.84, 0.52);
+  bodhi.add(knotMesh);
+  for (const [offX, lenY, twist] of [
+    [-0.06, 0.68, -0.14],
+    [0.08, 0.54, 0.18],
+  ]) {
+    const tailCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.22 + offX * 0.3, 1.80, 0.52),
+      new THREE.Vector3(0.26 + offX, 1.48, 0.58),
+      new THREE.Vector3(0.29 + offX * 1.4, 1.80 - lenY, 0.62 + twist * 0.15),
+    ]);
+    const tail = new THREE.Mesh(
+      createTaperedLimbGeometry(tailCurve, (t) => THREE.MathUtils.lerp(0.055, 0.082, t), 10, 8),
+      saffronMat,
+    );
+    tail.scale.set(1.0, 1.0, 0.42);
+    tail.castShadow = true;
+    bodhi.add(tail);
+  }
 
   const diyo = createDetailedBrassSukundaDiyo(goldMat, bronzeMat, flameMat, 0.75, true);
   diyo.position.set(1.05, 0.74, 1.78);
   bodhi.add(diyo);
 
   // Tapered sprawling buttress roots gripping the soil bed
-  for (let r = 0; r < 7; r++) {
-    const a = (r / 7) * Math.PI * 2 + 0.22;
+  for (let r = 0; r < 8; r++) {
+    const a = (r / 8) * Math.PI * 2 + 0.18;
     const rc = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(Math.cos(a) * 0.26, 1.72, Math.sin(a) * 0.26),
-      new THREE.Vector3(Math.cos(a + 0.08) * 0.72, 1.02, Math.sin(a + 0.08) * 0.72),
-      new THREE.Vector3(Math.cos(a) * 1.48, 0.73, Math.sin(a) * 1.48),
+      new THREE.Vector3(Math.cos(a) * 0.26, 1.78, Math.sin(a) * 0.26),
+      new THREE.Vector3(Math.cos(a + 0.08) * 0.74, 1.04, Math.sin(a + 0.08) * 0.74),
+      new THREE.Vector3(Math.cos(a) * 1.52, 0.73, Math.sin(a) * 1.52),
     ]);
     const rm = new THREE.Mesh(
-      createTaperedLimbGeometry(rc, (t) => THREE.MathUtils.lerp(0.18, 0.045, t), 12, 8),
+      createTaperedLimbGeometry(rc, (t) => THREE.MathUtils.lerp(0.19, 0.048, t), 12, 8),
       barkMat,
     );
     rm.castShadow = true;
     bodhi.add(rm);
   }
 
-  // Primary & secondary tapered branches forming natural Ficus crown
+  // Primary, central apical, secondary & tertiary branches forming a connected Ficus canopy (zero floating sky leaves!)
   const branchEndpoints: THREE.Vector3[] = [];
   const flagAnchors: THREE.Vector3[] = [];
+
+  // Central upright apical leader & upper crown boughs so crown top leaves grow cleanly from real branches
+  const apicalCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.03, 4.18, 0.02),
+    new THREE.Vector3(-0.04, 5.10, 0.05),
+    new THREE.Vector3(0.05, 5.98, -0.02),
+  ]);
+  const apicalMesh = new THREE.Mesh(
+    createTaperedLimbGeometry(apicalCurve, (t) => THREE.MathUtils.lerp(0.24, 0.075, t), 12, 9),
+    barkMat,
+  );
+  apicalMesh.castShadow = true;
+  bodhi.add(apicalMesh);
+  for (let up = 0; up < 4; up++) {
+    const ua = (up / 4) * Math.PI * 2 + 0.55;
+    const uOrigin = apicalCurve.getPoint(0.45 + (up % 2) * 0.25);
+    const uc = new THREE.CatmullRomCurve3([
+      uOrigin,
+      new THREE.Vector3(uOrigin.x + Math.cos(ua) * 0.78, uOrigin.y + 0.45, uOrigin.z + Math.sin(ua) * 0.78),
+      new THREE.Vector3(uOrigin.x + Math.cos(ua) * 1.45, uOrigin.y + 0.72, uOrigin.z + Math.sin(ua) * 1.45),
+    ]);
+    const um = new THREE.Mesh(
+      createTaperedLimbGeometry(uc, (t) => THREE.MathUtils.lerp(0.11, 0.028, t), 10, 7),
+      barkMat,
+    );
+    um.castShadow = true;
+    bodhi.add(um);
+    branchEndpoints.push(uc.getPoint(0.45), uc.getPoint(0.75), uc.getPoint(1.0));
+  }
+
   for (let b = 0; b < 6; b++) {
     const a = (b / 6) * Math.PI * 2 + 0.32;
     const reach = 2.65 + (b % 2) * 0.55;
-    const topY = 5.45 + (b % 3) * 0.50;
+    const topY = 5.45 + (b % 3) * 0.46;
     const bc = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0.03, 3.65 + (b % 2) * 0.25, 0.02),
       new THREE.Vector3(Math.cos(a) * reach * 0.52, 4.62, Math.sin(a) * reach * 0.52),
@@ -1014,10 +1181,10 @@ export function buildSacredBodhiChautara(
 
     const midPt = bc.getPoint(0.55);
     const tipPt = bc.getPoint(1.0);
-    branchEndpoints.push(midPt, tipPt);
+    branchEndpoints.push(bc.getPoint(0.48), midPt, bc.getPoint(0.78), tipPt);
     flagAnchors.push(bc.getPoint(0.62));
 
-    // Forking secondary twigs
+    // Forking secondary & tertiary twigs bridging canopy gaps seamlessly
     for (const side of [-1, 1]) {
       const sa = a + side * 0.44;
       const twigReach = reach * 0.58;
@@ -1025,12 +1192,12 @@ export function buildSacredBodhiChautara(
         midPt,
         new THREE.Vector3(
           midPt.x + Math.cos(sa) * twigReach * 0.55,
-          midPt.y + 0.58,
+          midPt.y + 0.54,
           midPt.z + Math.sin(sa) * twigReach * 0.55,
         ),
         new THREE.Vector3(
           midPt.x + Math.cos(sa) * twigReach,
-          midPt.y + 0.96 + (b % 2) * 0.28,
+          midPt.y + 0.92 + (b % 2) * 0.24,
           midPt.z + Math.sin(sa) * twigReach,
         ),
       ]);
@@ -1040,10 +1207,34 @@ export function buildSacredBodhiChautara(
       );
       tm.castShadow = true;
       bodhi.add(tm);
-      branchEndpoints.push(sc.getPoint(0.6), sc.getPoint(1.0));
+      const secMid = sc.getPoint(0.52);
+      const secTip = sc.getPoint(1.0);
+      branchEndpoints.push(secMid, sc.getPoint(0.78), secTip);
+
+      // Tertiary fine fork upward toward canopy rim
+      const ta = sa + side * 0.34;
+      const tc = new THREE.CatmullRomCurve3([
+        secMid,
+        new THREE.Vector3(
+          secMid.x + Math.cos(ta) * 0.55,
+          secMid.y + 0.36,
+          secMid.z + Math.sin(ta) * 0.55,
+        ),
+        new THREE.Vector3(
+          secMid.x + Math.cos(ta) * 0.96,
+          secMid.y + 0.58,
+          secMid.z + Math.sin(ta) * 0.96,
+        ),
+      ]);
+      const ttm = new THREE.Mesh(
+        createTaperedLimbGeometry(tc, (t) => THREE.MathUtils.lerp(0.055, 0.018, t), 8, 6),
+        barkMat,
+      );
+      ttm.castShadow = true;
+      bodhi.add(ttm);
+      branchEndpoints.push(tc.getPoint(0.55), tc.getPoint(1.0));
     }
   }
-  branchEndpoints.push(new THREE.Vector3(0, 6.25, 0), new THREE.Vector3(0.22, 6.55, -0.22));
 
   let pipalClusterMap: THREE.CanvasTexture | null = null;
   if (typeof document !== 'undefined') {
@@ -1170,7 +1361,7 @@ export function buildSacredBodhiChautara(
   };
 
   const leafPalette = [0x4c8339, 0x5c9443, 0x3b6c2c, 0x6ba24a, 0x7cb052];
-  const leafCount = 1150;
+  const leafCount = 1320;
   const leafInst = new THREE.InstancedMesh(sprigGeo, sprigMat, leafCount);
   leafInst.castShadow = true;
   leafInst.receiveShadow = true;
@@ -1178,15 +1369,16 @@ export function buildSacredBodhiChautara(
   for (let i = 0; i < leafCount; i++) {
     const center = branchEndpoints[i % branchEndpoints.length];
     const ga = i * 2.39996323;
-    const rad = Math.sqrt(((i * 19) % 100) / 100) * 1.18;
-    const hVar = (((i * 37) % 100) / 100 - 0.34) * 0.96;
+    // Keep every sprig closely clustered onto physical branches/twigs (zero leaves floating detached in the sky)
+    const rad = Math.sqrt(((i * 19) % 100) / 100) * 0.52;
+    const hVar = (((i * 37) % 100) / 100) * 0.64 - 0.24;
     _v3.set(
       center.x + Math.cos(ga) * rad,
-      Math.max(3.95, center.y + hVar),
+      Math.max(4.05, center.y + hVar),
       center.z + Math.sin(ga) * rad,
     );
     _q.setFromEuler(_e.set(((i * 7) % 10) * 0.12 - 0.55, ga, ((i * 11) % 10) * 0.10 - 0.45));
-    _s.setScalar(0.72 + ((i * 13) % 10) * 0.042);
+    _s.setScalar(0.76 + ((i * 13) % 10) * 0.044);
     _m4.compose(_v3, _q, _s);
     leafInst.setMatrixAt(i, _m4);
     _colorTmp.setHex(leafPalette[i % leafPalette.length]);
@@ -1196,6 +1388,7 @@ export function buildSacredBodhiChautara(
   if (leafInst.instanceColor) leafInst.instanceColor.needsUpdate = true;
   leafInst.computeBoundingSphere();
   bodhi.add(leafInst);
+  bodhi.userData.cameraOccluderMeshes = [tier1, tier2, soil, trunkCore, trunk, ...aerialMeshes];
 
   // Drifting golden-green falling Bodhi leaves circling down around the Chautara
   const fallingCount = 72;
@@ -1625,63 +1818,164 @@ export function buildToranaGate(
   bronzeMat: THREE.Material,
 ): THREE.Group {
   const g = new THREE.Group();
+  const deerFinialGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.11, 0.0),
+      new THREE.Vector2(0.08, 0.05),
+      new THREE.Vector2(0.14, 0.14),
+      new THREE.Vector2(0.07, 0.24),
+      new THREE.Vector2(0.095, 0.30),
+      new THREE.Vector2(0.02, 0.40),
+      new THREE.Vector2(0.0, 0.46),
+    ],
+    14,
+  );
+
   for (const side of [-1, 1]) {
     const px = side * 3.55;
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.44, 1.18), brickMat);
-    base.position.set(px, 0.22, 0);
+    // 3-stepped Mauryan brick & stone pier foundation
+    const baseBrick = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.30, 1.28), brickMat);
+    baseBrick.position.set(px, 0.15, 0);
+    baseBrick.castShadow = true;
+    baseBrick.receiveShadow = true;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.26, 1.10), stoneMat);
+    base.position.set(px, 0.43, 0);
     base.castShadow = true;
-    base.receiveShadow = true;
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.36, 0.96), stoneMat);
-    plinth.position.set(px, 0.62, 0);
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.26, 0.90), stoneMat);
+    plinth.position.set(px, 0.69, 0);
     plinth.castShadow = true;
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.68, 3.80, 0.68), stoneMat);
-    pillar.position.set(px, 2.70, 0);
+
+    // Chamfered sandstone column shaft with recessed relief frieze collars & corner beads
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.64, 3.68, 0.64), stoneMat);
+    pillar.position.set(px, 2.66, 0);
     pillar.castShadow = true;
     pillar.receiveShadow = true;
-    const capital = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.28, 0.96), stoneMat);
-    capital.position.set(px, 4.74, 0);
+    g.add(baseBrick, base, plinth, pillar);
+
+    for (const fy of [1.22, 2.35, 3.48, 4.38]) {
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.14, 0.74), stoneMat);
+      band.position.set(px, fy, 0);
+      band.castShadow = true;
+      const gBand = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.04, 0.76), bronzeMat);
+      gBand.position.set(px, fy, 0);
+      g.add(band, gBand);
+      for (const fz of [-0.39, 0.39]) {
+        const rosette = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 10), goldMat);
+        rosette.rotation.x = Math.PI / 2;
+        rosette.position.set(px, fy + 0.38, fz);
+        g.add(rosette);
+      }
+    }
+
+    // Stepped bracket capital & lotus necking supporting lower architrave
+    const capStep1 = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.16, 0.84), stoneMat);
+    capStep1.position.set(px, 4.52, 0);
+    const capital = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.24, 1.04), stoneMat);
+    capital.position.set(px, 4.70, 0);
     capital.castShadow = true;
-    const lotusCap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.24, 16), goldMat);
-    lotusCap.position.set(px, 5.00, 0);
-    const finial = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), goldMat);
-    finial.position.set(px, 5.21, 0);
-    g.add(base, plinth, pillar, capital, lotusCap, finial);
+    const lotusCap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.22, 16), goldMat);
+    lotusCap.position.set(px, 5.56, 0);
+    const finial = new THREE.Mesh(deerFinialGeo, goldMat);
+    finial.position.set(px, 5.67, 0);
+    g.add(capStep1, capital, lotusCap, finial);
+
+    // Ornate S-curved Sanchi Shalabhanjika stone brackets flanking inner & outer beam haunches
+    const innerBracketCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(px - side * 0.34, 3.76, 0),
+      new THREE.Vector3(px - side * 0.74, 4.18, 0),
+      new THREE.Vector3(px - side * 1.18, 4.54, 0),
+    ]);
+    const innerBracket = new THREE.Mesh(
+      createTaperedLimbGeometry(innerBracketCurve, (t) => 0.12 - t * 0.03, 10, 8),
+      stoneMat,
+    );
+    innerBracket.castShadow = true;
+    const outerBracketCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(px + side * 0.34, 4.02, 0),
+      new THREE.Vector3(px + side * 0.68, 4.32, 0),
+      new THREE.Vector3(px + side * 0.94, 4.56, 0),
+    ]);
+    const outerBracket = new THREE.Mesh(
+      createTaperedLimbGeometry(outerBracketCurve, (t) => 0.10 - t * 0.025, 8, 8),
+      stoneMat,
+    );
+    g.add(innerBracket, outerBracket);
   }
+
+  // Twin richly molded architraves with carved dentils, bronze frieze bars & gilded spiral Makara volutes
   for (const [by, bw, bh] of [
-    [4.70, 8.2, 0.34],
-    [5.27, 8.7, 0.30],
+    [4.74, 8.35, 0.36],
+    [5.32, 8.85, 0.32],
   ] as Array<[number, number, number]>) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.64), stoneMat);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.66), stoneMat);
     beam.position.set(0, by, 0);
     beam.castShadow = true;
     beam.receiveShadow = true;
-    g.add(beam);
+    const friezeBar = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.18, 0.09, 0.70), bronzeMat);
+    friezeBar.position.set(0, by, 0);
+    const cornice = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.14, 0.07, 0.76), stoneMat);
+    cornice.position.set(0, by + bh * 0.5 + 0.02, 0);
+    g.add(beam, friezeBar, cornice);
+
     for (const side of [-1, 1]) {
-      const volute = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.065, 8, 16), goldMat);
-      volute.position.set(side * (bw * 0.5 + 0.04), by + 0.06, 0);
-      g.add(volute);
+      const volute = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.065, 10, 20), goldMat);
+      volute.position.set(side * (bw * 0.5 + 0.06), by + 0.08, 0);
+      const scrollCore = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.24, 12), bronzeMat);
+      scrollCore.rotation.x = Math.PI / 2;
+      scrollCore.position.set(side * (bw * 0.5 + 0.06), by + 0.08, 0);
+      g.add(volute, scrollCore);
     }
   }
+
+  // Carved bronze & stone vertical triratna spacers between architraves
   for (const sx of [-1.85, 0, 1.85]) {
-    const spacer = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.44), bronzeMat);
-    spacer.position.set(sx, 4.99, 0);
-    g.add(spacer);
+    const spBase = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.52), stoneMat);
+    spBase.position.set(sx, 4.94, 0);
+    const spacer = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.24, 0.44), bronzeMat);
+    spacer.position.set(sx, 5.06, 0);
+    const spCap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.52), goldMat);
+    spCap.position.set(sx, 5.18, 0);
+    g.add(spBase, spacer, spCap);
   }
-  const wheelOuter = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.06, 10, 32), goldMat);
-  wheelOuter.position.set(0, 6.07, 0);
+
+  // Ornate 8-spoked gilded Dharmachakra wheel flanked by twin kneeling Golden Deer (Mrigadava)
+  const wheelStand = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.18, 0.42), stoneMat);
+  wheelStand.position.set(0, 5.56, 0);
+  const wheelNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 0.12, 16), goldMat);
+  wheelNeck.position.set(0, 5.70, 0);
+  const wheelOuter = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.065, 12, 32), goldMat);
+  wheelOuter.position.set(0, 6.30, 0);
   wheelOuter.castShadow = true;
-  const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.14, 16), goldMat);
+  const wheelInner = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.025, 8, 28), bronzeMat);
+  wheelInner.position.set(0, 6.30, 0);
+  const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.16, 16), goldMat);
   wheelHub.rotation.x = Math.PI / 2;
-  wheelHub.position.set(0, 6.07, 0);
-  const wheelStand = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.26, 0.36), stoneMat);
-  wheelStand.position.set(0, 5.51, 0);
-  g.add(wheelOuter, wheelHub, wheelStand);
-  const spokeGeo = new THREE.CylinderGeometry(0.022, 0.022, 1.06, 8);
+  wheelHub.position.set(0, 6.30, 0);
+  g.add(wheelStand, wheelNeck, wheelOuter, wheelInner, wheelHub);
+  const spokeGeo = new THREE.CylinderGeometry(0.022, 0.022, 1.08, 8);
   for (let i = 0; i < 4; i++) {
     const spoke = new THREE.Mesh(spokeGeo, goldMat);
-    spoke.position.set(0, 6.07, 0);
+    spoke.position.set(0, 6.30, 0);
     spoke.rotation.z = (i / 4) * Math.PI;
     g.add(spoke);
+  }
+  for (const side of [-1, 1]) {
+    const deer = new THREE.Group();
+    deer.position.set(side * 1.02, 5.50, 0);
+    const dPlinth = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.10, 0.30), stoneMat);
+    dPlinth.position.y = 0.05;
+    const dBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.10, 0.22, 6, 10), goldMat);
+    dBody.rotation.z = Math.PI / 2;
+    dBody.position.y = 0.20;
+    const dNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.075, 0.22, 8), goldMat);
+    dNeck.position.set(-side * 0.14, 0.34, 0);
+    dNeck.rotation.z = side * 0.32;
+    const dHead = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), goldMat);
+    dHead.scale.set(1.3, 0.9, 0.9);
+    dHead.position.set(-side * 0.18, 0.44, 0);
+    deer.add(dPlinth, dBody, dNeck, dHead);
+    g.add(deer);
   }
   return g;
 }
@@ -1846,13 +2140,23 @@ export function buildSacredGardenSurroundingPond(
   addPromenadeWalk(-51.2, -50.0, -52.2, 60.2); // West outer coping walk
   addPromenadeWalk(50.0, 50.7, -52.2, 60.2); // East outer coping trim
 
-  // Outer Chunar sandstone curb border rails along South & North outer trails (flush non-blocking)
-  for (const cz of [60.28, 63.52, -52.28, -55.52]) {
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(101.9, 0.16, 0.22), chunarMat);
-    curb.position.set(-0.25, 0.015, cz);
+  // Outer Chunar sandstone curb border rails cleanly split at cardinal bridges (top +0.112 local -> proud 2.2cm, zero Z-fighting)
+  const addCurbRun = (x0: number, x1: number, z0: number, z1: number) => {
+    const sx = x1 - x0;
+    const sz = z1 - z0;
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.044, sz), chunarMat);
+    curb.position.set((x0 + x1) * 0.5, 0.090, (z0 + z1) * 0.5);
     curb.receiveShadow = true;
     curb.userData.nonCollidable = true;
     g.add(curb);
+  };
+  for (const cz of [60.31, 63.49, -52.31, -55.49]) {
+    addCurbRun(-51.2, -3.45, cz - 0.11, cz + 0.11);
+    addCurbRun(3.45, 50.7, cz - 0.11, cz + 0.11);
+  }
+  for (const cx of [-51.09, 50.59]) {
+    addCurbRun(cx - 0.11, cx + 0.11, -52.2, 1.25);
+    addCurbRun(cx - 0.11, cx + 0.11, 6.75, 60.2);
   }
 
   // 4. Single Combined Real-Time Planar Reflector Water Surface across all 4 surrounding pond channels
@@ -1887,15 +2191,28 @@ export function buildSacredGardenSurroundingPond(
   // 5. Four Arched Pilgrim Causeway Bridges spanning South, North, East & West Pond Channels
   const turnedBalusterPts = [
     new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.09, 0.0),
+    new THREE.Vector2(0.092, 0.0),
     new THREE.Vector2(0.075, 0.08),
     new THREE.Vector2(0.048, 0.18),
-    new THREE.Vector2(0.076, 0.34),
+    new THREE.Vector2(0.078, 0.34),
     new THREE.Vector2(0.046, 0.52),
-    new THREE.Vector2(0.080, 0.64),
-    new THREE.Vector2(0.092, 0.72),
+    new THREE.Vector2(0.082, 0.64),
+    new THREE.Vector2(0.094, 0.72),
   ];
-  const turnedBalusterGeo = new THREE.LatheGeometry(turnedBalusterPts, 10);
+  const turnedBalusterGeo = new THREE.LatheGeometry(turnedBalusterPts, 12);
+  const bridgeFinialGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.105, 0.0),
+      new THREE.Vector2(0.078, 0.038),
+      new THREE.Vector2(0.118, 0.095),
+      new THREE.Vector2(0.056, 0.165),
+      new THREE.Vector2(0.072, 0.205),
+      new THREE.Vector2(0.018, 0.285),
+      new THREE.Vector2(0.0, 0.32),
+    ],
+    14,
+  );
 
   const buildCausewayBridge = (
     axis: 'z' | 'x',
@@ -1906,7 +2223,7 @@ export function buildSacredGardenSurroundingPond(
   ) => {
     const bg = new THREE.Group();
     bg.position.set(cx, 0, cz);
-    const segs = 12;
+    const segs = 18;
     const segLen = spanLen / segs;
     const baseDeckY = LUMBINI_SACRED_POND.bridgeBaseY - 0.25; // +0.10 local (+0.35 world)
     const archLift = LUMBINI_SACRED_POND.bridgeArchLift; // +0.26
@@ -1918,8 +2235,8 @@ export function buildSacredGardenSurroundingPond(
       const slope = Math.cos(t * Math.PI) * (Math.PI / spanLen) * archLift;
       const deckY = baseDeckY + lift;
 
-      const slabW = axis === 'z' ? width - 0.5 : segLen + 0.08;
-      const slabD = axis === 'z' ? segLen + 0.08 : width - 0.5;
+      const slabW = axis === 'z' ? width - 0.52 : segLen + 0.06;
+      const slabD = axis === 'z' ? segLen + 0.06 : width - 0.52;
       const deckSlab = new THREE.Mesh(new THREE.BoxGeometry(slabW, 0.24, slabD), terracottaMat);
       deckSlab.position.set(axis === 'x' ? u : 0, deckY - 0.12, axis === 'z' ? u : 0);
       if (axis === 'z') deckSlab.rotation.x = -slope;
@@ -1928,11 +2245,11 @@ export function buildSacredGardenSurroundingPond(
       deckSlab.castShadow = true;
       bg.add(deckSlab);
 
-      // Carved stone arched fascia spandrels + masonry voussoir arch rings + keystone
+      // Molded stone balustrade curb, outer cornice trim, spandrel fascia & arch voussoirs
       for (const side of [-1, 1]) {
         const edgeOff = side * (width * 0.5 - 0.18);
-        const trimW = axis === 'z' ? 0.34 : segLen + 0.08;
-        const trimD = axis === 'z' ? segLen + 0.08 : 0.34;
+        const trimW = axis === 'z' ? 0.36 : segLen + 0.06;
+        const trimD = axis === 'z' ? segLen + 0.06 : 0.36;
         const fascia = new THREE.Mesh(new THREE.BoxGeometry(trimW, 0.42, trimD), chunarMat);
         fascia.position.set(axis === 'x' ? u : edgeOff, deckY - 0.14, axis === 'z' ? u : edgeOff);
         if (axis === 'z') fascia.rotation.x = -slope;
@@ -1941,11 +2258,27 @@ export function buildSacredGardenSurroundingPond(
         fascia.receiveShadow = true;
         bg.add(fascia);
 
-        // Arched stone voussoir rib below deck edge curving down into abutments
+        // Continuous stepped stone balustrade base plinth rail along deck edges
+        const baseCurb = new THREE.Mesh(
+          new THREE.BoxGeometry(axis === 'z' ? 0.28 : segLen + 0.06, 0.09, axis === 'z' ? segLen + 0.06 : 0.28),
+          chunarMat,
+        );
+        baseCurb.position.set(axis === 'x' ? u : edgeOff, deckY + 0.045, axis === 'z' ? u : edgeOff);
+        if (axis === 'z') baseCurb.rotation.x = -slope;
+        else baseCurb.rotation.z = slope;
+        baseCurb.receiveShadow = true;
+        bg.add(baseCurb);
+
+        // Arched stone voussoir rib & central carved keystone below deck edge
         const archUnderY = deckY - 0.38 - (1 - Math.sin(t * Math.PI)) * 0.32;
+        const isKeystone = i === Math.floor(segs / 2) - 1 || i === Math.floor(segs / 2);
         const voussoir = new THREE.Mesh(
-          new THREE.BoxGeometry(axis === 'z' ? 0.38 : segLen * 0.88, 0.24, axis === 'z' ? segLen * 0.88 : 0.38),
-          i === Math.floor(segs / 2) - 1 || i === Math.floor(segs / 2) ? brickMat : chunarMat,
+          new THREE.BoxGeometry(
+            axis === 'z' ? (isKeystone ? 0.44 : 0.38) : segLen * 0.90,
+            isKeystone ? 0.30 : 0.24,
+            axis === 'z' ? segLen * 0.90 : isKeystone ? 0.44 : 0.38,
+          ),
+          isKeystone ? bronzeMat : chunarMat,
         );
         voussoir.position.set(axis === 'x' ? u : edgeOff, archUnderY, axis === 'z' ? u : edgeOff);
         if (axis === 'z') voussoir.rotation.x = -slope * 1.45;
@@ -1955,7 +2288,7 @@ export function buildSacredGardenSurroundingPond(
       }
     }
 
-    // Carved Chunar sandstone parapet newel piers, turned stone balusters, handrails & brass lotus finials
+    // Carved Chunar sandstone parapet newel piers, turned stone balusters, handrails & turned brass Kalash finials
     const postCount = 5;
     for (const side of [-1, 1]) {
       const edgeOff = side * (width * 0.5 - 0.18);
@@ -1964,51 +2297,66 @@ export function buildSacredGardenSurroundingPond(
         const u = (t - 0.5) * (spanLen - 0.7);
         const py = baseDeckY + Math.sin(t * Math.PI) * archLift;
         const isEnd = p === 0 || p === postCount - 1;
-        const post = new THREE.Mesh(
-          new THREE.BoxGeometry(isEnd ? 0.36 : 0.24, isEnd ? 0.96 : 0.80, isEnd ? 0.36 : 0.24),
+        const postW = isEnd ? 0.38 : 0.26;
+        const postH = isEnd ? 0.96 : 0.80;
+        const postPlinth = new THREE.Mesh(
+          new THREE.BoxGeometry(postW + 0.08, 0.12, postW + 0.08),
           chunarMat,
         );
-        post.position.set(axis === 'x' ? u : edgeOff, py + (isEnd ? 0.48 : 0.40), axis === 'z' ? u : edgeOff);
+        postPlinth.position.set(axis === 'x' ? u : edgeOff, py + 0.06, axis === 'z' ? u : edgeOff);
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(postW, postH, postW),
+          chunarMat,
+        );
+        post.position.set(axis === 'x' ? u : edgeOff, py + postH * 0.5, axis === 'z' ? u : edgeOff);
         post.castShadow = true;
-        bg.add(post);
 
         const capCollar = new THREE.Mesh(
-          new THREE.BoxGeometry(isEnd ? 0.42 : 0.28, 0.08, isEnd ? 0.42 : 0.28),
+          new THREE.BoxGeometry(postW + 0.08, 0.09, postW + 0.08),
           chunarMat,
         );
-        capCollar.position.set(axis === 'x' ? u : edgeOff, py + (isEnd ? 0.96 : 0.80), axis === 'z' ? u : edgeOff);
-        bg.add(capCollar);
+        capCollar.position.set(axis === 'x' ? u : edgeOff, py + postH, axis === 'z' ? u : edgeOff);
 
-        const finial = new THREE.Mesh(new THREE.SphereGeometry(isEnd ? 0.11 : 0.075, 10, 8), goldMat);
+        const finial = new THREE.Mesh(bridgeFinialGeo, goldMat);
+        finial.scale.setScalar(isEnd ? 1.0 : 0.72);
         finial.position.set(
           axis === 'x' ? u : edgeOff,
-          py + (isEnd ? 1.07 : 0.88),
+          py + postH + 0.04,
           axis === 'z' ? u : edgeOff,
         );
-        bg.add(finial);
+        bg.add(postPlinth, post, capCollar, finial);
+
+        if (isEnd) {
+          const plaque = new THREE.Mesh(
+            new THREE.BoxGeometry(axis === 'z' ? 0.40 : 0.24, 0.26, axis === 'z' ? 0.24 : 0.40),
+            bronzeMat,
+          );
+          plaque.position.set(axis === 'x' ? u : edgeOff, py + 0.52, axis === 'z' ? u : edgeOff);
+          bg.add(plaque);
+        }
       }
 
-      // Intermediate turned Lathe balusters & top coping rail between posts
-      for (let b = 0; b < 12; b++) {
-        const t = (b + 0.5) / 12;
-        if (Math.abs(t - 0.25) < 0.05 || Math.abs(t - 0.5) < 0.05 || Math.abs(t - 0.75) < 0.05) continue;
+      // Intermediate turned Lathe balusters sitting cleanly on the stone balustrade curb
+      for (let b = 0; b < 14; b++) {
+        const t = (b + 0.5) / 14;
+        if (Math.abs(t - 0.25) < 0.045 || Math.abs(t - 0.5) < 0.045 || Math.abs(t - 0.75) < 0.045) continue;
         const u = (t - 0.5) * (spanLen - 0.7);
         const py = baseDeckY + Math.sin(t * Math.PI) * archLift;
         const baluster = new THREE.Mesh(turnedBalusterGeo, chunarMat);
-        baluster.position.set(axis === 'x' ? u : edgeOff, py + 0.02, axis === 'z' ? u : edgeOff);
+        baluster.position.set(axis === 'x' ? u : edgeOff, py + 0.07, axis === 'z' ? u : edgeOff);
         baluster.castShadow = true;
         bg.add(baluster);
       }
 
-      // Top parapet handrail segments connecting posts
-      for (let s = 0; s < 6; s++) {
-        const t = (s + 0.5) / 6;
+      // Continuous multi-segment molded Chunar coping handrail
+      for (let s = 0; s < 10; s++) {
+        const t = (s + 0.5) / 10;
         const u = (t - 0.5) * (spanLen - 0.7);
-        const segL = (spanLen - 0.7) / 6 + 0.06;
-        const py = baseDeckY + Math.sin(t * Math.PI) * archLift + 0.74;
+        const segL = (spanLen - 0.7) / 10 + 0.05;
+        const py = baseDeckY + Math.sin(t * Math.PI) * archLift + 0.78;
         const slope = Math.cos(t * Math.PI) * (Math.PI / spanLen) * archLift;
         const rail = new THREE.Mesh(
-          new THREE.BoxGeometry(axis === 'z' ? 0.20 : segL, 0.10, axis === 'z' ? segL : 0.20),
+          new THREE.BoxGeometry(axis === 'z' ? 0.22 : segL, 0.10, axis === 'z' ? segL : 0.22),
           chunarMat,
         );
         rail.position.set(axis === 'x' ? u : edgeOff, py, axis === 'z' ? u : edgeOff);
@@ -2038,7 +2386,7 @@ export function buildSacredGardenSurroundingPond(
   buildCausewayBridge('x', 47.3, 4.0, 6.6, 5.6); // East Sacred Bridge (ldx 44.0..50.6)
   buildCausewayBridge('x', -47.3, 4.0, 6.6, 5.6); // West Sacred Bridge (ldx -50.6..-44.0)
 
-  // 6. Eight Stone Bridge Abutment Piers emerging from the pond for the 8 cardinal roadside lanterns
+  // 6. Eight Stepped Stone Bridge Abutment Piers emerging from the pond for the 8 cardinal roadside lanterns
   const pierCoords: Array<[number, number]> = [
     [3.8, 55.0],
     [-3.8, 55.0],
@@ -2050,15 +2398,17 @@ export function buildSacredGardenSurroundingPond(
     [-50.2, 7.6],
   ];
   for (const [px, pz] of pierCoords) {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.18, 1.06, 1.18), brickMat);
-    base.position.set(px, -0.50, pz);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.36, 1.06, 1.36), brickMat);
+    base.position.set(px, -0.54, pz);
     base.castShadow = true;
     base.receiveShadow = true;
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.14, 1.06), chunarMat);
-    cap.position.set(px, 0.02, pz); // top at +0.09 local (+0.34 world)
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.10, 1.42), chunarMat);
+    belt.position.set(px, -0.05, pz);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.12, 1.22), chunarMat);
+    cap.position.set(px, 0.03, pz); // top at +0.09 local (+0.34 world)
     cap.castShadow = true;
     cap.receiveShadow = true;
-    g.add(base, cap);
+    g.add(base, belt, cap);
   }
 
   // 7. Procedural Floating Lotus Pads & Blossoms in calm sheltered pond colonies (away from bridges & walls)
@@ -2074,14 +2424,46 @@ export function buildSacredGardenSurroundingPond(
   g.add(surroundingFlora);
   g.userData.lotusCount = surroundingLotuses.length;
 
-  // 8. Decorative Bronze Kalash Boundary Lamps at outer South & North Promenade corners
+  // 8. Ornate Tiered Granite & Bronze Kalash Corner Boundary Pillars at outer South & North Promenade corners
+  const cornerKalashGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(0.14, 0.0),
+      new THREE.Vector2(0.11, 0.05),
+      new THREE.Vector2(0.20, 0.14),
+      new THREE.Vector2(0.21, 0.22),
+      new THREE.Vector2(0.12, 0.30),
+      new THREE.Vector2(0.16, 0.35),
+      new THREE.Vector2(0.06, 0.42),
+      new THREE.Vector2(0.015, 0.52),
+      new THREE.Vector2(0.0, 0.56),
+    ],
+    18,
+  );
   for (const [bx, bz] of [[-50.5, 62.9], [50.2, 62.9], [-50.5, -54.9], [50.2, -54.9]] as Array<[number, number]>) {
-    const ped = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.46, 0.56), chunarMat);
-    ped.position.set(bx, 0.32, bz);
-    ped.castShadow = true;
-    const pot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bronzeMat);
-    pot.position.set(bx, 0.68, bz);
-    g.add(ped, pot);
+    const mon = new THREE.Group();
+    mon.position.set(bx, 0.09, bz);
+    const footBrick = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.18, 0.92), brickMat);
+    footBrick.position.y = 0.09;
+    footBrick.castShadow = true;
+    footBrick.receiveShadow = true;
+    const baseStone = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.16, 0.76), chunarMat);
+    baseStone.position.y = 0.26;
+    baseStone.castShadow = true;
+    const shaftBlock = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.52, 0.56), chunarMat);
+    shaftBlock.position.y = 0.60;
+    shaftBlock.castShadow = true;
+    const bronzeBand = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.07, 0.60), bronzeMat);
+    bronzeBand.position.y = 0.60;
+    const cornice = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.11, 0.70), chunarMat);
+    cornice.position.y = 0.91;
+    const lotusPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.30, 0.08, 16), bronzeMat);
+    lotusPlate.position.y = 1.00;
+    const pot = new THREE.Mesh(cornerKalashGeo, goldMat);
+    pot.position.y = 1.04;
+    pot.castShadow = true;
+    mon.add(footBrick, baseStone, shaftBlock, bronzeBand, cornice, lotusPlate, pot);
+    g.add(mon);
   }
 
   return g;

@@ -286,12 +286,14 @@ export default function App() {
       onWebglError: (msg) => callbacksRef.current.onWebglError(msg),
     });
     engineRef.current = engine;
+    (window as unknown as { __worldEngine?: WorldEngine }).__worldEngine = engine;
     engine.setInitialDistanceWalked(persisted.totalDistanceWalked);
     engine.setGameState(initialAutostart ? 'playing' : 'title');
     engine.syncCustomWaypoints(persisted.customWaypoints);
     engine.syncDiscoveredLandmarks(persisted.discoveredIds);
 
     return () => {
+      delete (window as unknown as { __worldEngine?: WorldEngine }).__worldEngine;
       engine.dispose();
       engineRef.current = null;
     };

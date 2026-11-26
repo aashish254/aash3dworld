@@ -11,11 +11,11 @@ import {
   createTaperedLimbGeometry,
 } from './mayaDeviSculptureGeo';
 
-function assertFiniteGeometry(geo: THREE.BufferGeometry, name: string) {
+function assertFiniteGeometry(geo: THREE.BufferGeometry, name: string, minVerts = 11) {
   const pos = geo.getAttribute('position');
   const norm = geo.getAttribute('normal');
   const uv = geo.getAttribute('uv');
-  assert.ok(pos && pos.count > 10, `${name} should have >10 vertices`);
+  assert.ok(pos && pos.count >= minVerts, `${name} should have >=${minVerts} vertices (got ${pos?.count ?? 0})`);
   assert.ok(norm && norm.count === pos.count, `${name} should have matching normals`);
   assert.ok(uv && uv.count === pos.count, `${name} should have matching uvs`);
   for (let i = 0; i < pos.count; i++) {
@@ -82,6 +82,28 @@ test('createTaperedLimbGeometry, lotus petals, and marigold florets build valid 
   assertFiniteGeometry(limb, 'Limb');
   assertFiniteGeometry(petal, 'LotusPetal');
   assertFiniteGeometry(marigold, 'Marigold');
+
+  // Verify limb side-wall normals point outward radially from the curve axis
+  const pos = limb.getAttribute('position');
+  const norm = limb.getAttribute('normal');
+  const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  let outwardChecks = 0;
+  for (let i = 0; i < pos.count - 2; i++) {
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+    n.set(norm.getX(i), norm.getY(i), norm.getZ(i));
+    const t = THREE.MathUtils.clamp(v.y / 0.4, 0, 1);
+    const center = curve.getPointAt(t);
+    const radial = v.clone().sub(center);
+    if (radial.lengthSq() > 1e-6) {
+      assert.ok(
+        radial.dot(n) > 0,
+        `Expected outward limb normal at vertex ${i}, dot=${radial.dot(n).toFixed(4)}`,
+      );
+      outwardChecks++;
+    }
+  }
+  assert.ok(outwardChecks > 100);
 });
 
 import { createLumbiniTextures } from './lumbiniTextures';
@@ -414,5 +436,130 @@ test('buildRealisticLumbiniHedges builds planter curbs, compact BVH core, and in
   assert.equal(collidableCoreCount, 2, 'Expected exact collidable core count matching hedge entries');
   assert.ok(sprigCount >= 90, `Expected dense 3D botanical sprig instances (>=90), got ${sprigCount}`);
 });
+
+import {
+  buildAuthenticAshokaPillar,
+  buildSacredBodhiChautara,
+  buildThaiMarbleSanctuary,
+  buildToranaGate,
+} from './lumbiniShrines';
+import { buildMyanmarGoldenPagoda } from './lumbiniMyanmarPagoda';
+
+test('buildAuthenticAshokaPillar constructs stepped enclosure, crown, and cameraOccluders', () => {
+  const tex = createLumbiniTextures(4);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd6c3a4 });
+  const pillar = buildAuthenticAshokaPillar(
+    mat,
+    mat,
+    mat,
+    mat,
+    tex.brahmiEdictMap,
+    tex.brahmiEdictNormal,
+  );
+  let meshCount = 0;
+  pillar.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      assertFiniteGeometry((obj as THREE.Mesh).geometry, obj.name || 'AshokaMesh', 3);
+    }
+  });
+  const occluders = pillar.userData.cameraOccluderMeshes as THREE.Object3D[] | undefined;
+  assert.ok(meshCount >= 20, `Expected >=20 meshes in Ashoka Pillar, got ${meshCount}`);
+  assert.ok(Array.isArray(occluders) && occluders.length >= 3, 'Expected >=3 cameraOccluderMeshes on Ashoka Pillar');
+  tex.dispose();
+});
+
+test('buildSacredBodhiChautara anchors dense heart-leaf canopy around solid trunk core without sky floaters', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc29e74 });
+  const bodhi = buildSacredBodhiChautara(mat, mat, mat, mat, mat, mat);
+  const occluders = bodhi.userData.cameraOccluderMeshes as THREE.Object3D[] | undefined;
+  assert.ok(Array.isArray(occluders) && occluders.length >= 5, 'Expected >=5 cameraOccluderMeshes including trunkCore');
+
+  const leafMeshes: THREE.InstancedMesh[] = [];
+  bodhi.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+      const im = obj as THREE.InstancedMesh;
+      if (im.count >= 1000) leafMeshes.push(im);
+    } else if ((obj as THREE.Mesh).isMesh) {
+      assertFiniteGeometry((obj as THREE.Mesh).geometry, obj.name || 'BodhiMesh', 3);
+    }
+  });
+  assert.ok(leafMeshes.length >= 1, 'Expected dense InstancedMesh Pipal canopy leaves (>=1000)');
+  const leafMesh = leafMeshes[0];
+
+  const dummy = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  let minY = Infinity;
+  let maxR = 0;
+  for (let i = 0; i < leafMesh.count; i++) {
+    leafMesh.getMatrixAt(i, dummy);
+    pos.setFromMatrixPosition(dummy);
+    minY = Math.min(minY, pos.y);
+    maxR = Math.max(maxR, Math.hypot(pos.x, pos.z));
+  }
+  assert.ok(minY >= 4.0, `Expected lowest Bodhi canopy sprig >=4.0m, got ${minY.toFixed(2)}`);
+  assert.ok(maxR <= 4.8, `Expected all Bodhi leaves tightly anchored within 4.8m of trunk, got ${maxR.toFixed(2)}`);
+});
+
+test('buildToranaGate and buildThaiMarbleSanctuary construct high-detail non-clipping architecture', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd9cdb8 });
+  const heroMats = {
+    skinMat: mat,
+    robeMat: mat,
+    hairMat: mat,
+    goldMat: mat,
+    bronzeMat: mat,
+    stonePlinthMat: mat,
+    crimsonLacquerMat: mat,
+    flameMat: mat,
+  };
+  const torana = buildToranaGate(mat, mat, mat, mat);
+  let tMeshes = 0;
+  let tVerts = 0;
+  torana.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      tMeshes++;
+      tVerts += (obj as THREE.Mesh).geometry.getAttribute('position').count;
+      assertFiniteGeometry((obj as THREE.Mesh).geometry, obj.name || 'ToranaMesh', 3);
+    }
+  });
+  assert.ok(tMeshes >= 25, `Expected >=25 Torana meshes, got ${tMeshes}`);
+  assert.ok(tVerts > 5000, `Expected >5000 Torana vertices, got ${tVerts}`);
+
+  const thai = buildThaiMarbleSanctuary(mat, mat, mat, heroMats);
+  const thaiBox = new THREE.Box3().setFromObject(thai.group);
+  const thaiOccluders = thai.group.userData.cameraOccluderMeshes as THREE.Object3D[] | undefined;
+  assert.ok(thaiBox.max.y > 9.5, `Expected Thai Sanctuary roof spire >9.5m, got ${thaiBox.max.y}`);
+  assert.ok(thai.light.position.y > 5.4, `Expected Thai Sanctuary light >5.4m, got ${thai.light.position.y}`);
+  assert.ok(Array.isArray(thaiOccluders) && thaiOccluders.length >= 3, 'Expected >=3 Thai Sanctuary cameraOccluders');
+});
+
+test('buildMyanmarGoldenPagoda builds ornate floodlight masts, blue pedestals, medallions, and pagoda spires', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xded6c8 });
+  const heroMats = {
+    skinMat: mat,
+    robeMat: mat,
+    hairMat: mat,
+    goldMat: mat,
+    bronzeMat: mat,
+    stonePlinthMat: mat,
+    crimsonLacquerMat: mat,
+    flameMat: mat,
+  };
+  const pagoda = buildMyanmarGoldenPagoda(mat, mat, mat, mat, mat, mat, mat, heroMats);
+  let meshCount = 0;
+  pagoda.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+      assertFiniteGeometry((obj as THREE.InstancedMesh).geometry, obj.name || 'MyanmarInst', 3);
+    } else if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      assertFiniteGeometry((obj as THREE.Mesh).geometry, obj.name || 'MyanmarMesh', 3);
+    }
+  });
+  const bb = new THREE.Box3().setFromObject(pagoda);
+  assert.ok(meshCount >= 40, `Expected >=40 Myanmar Pagoda meshes, got ${meshCount}`);
+  assert.ok(Number.isFinite(bb.min.y) && Number.isFinite(bb.max.y) && bb.max.y > 12, 'Expected full gilded Shwedagon-inspired spire');
+});
+
 
 

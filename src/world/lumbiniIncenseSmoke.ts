@@ -57,10 +57,11 @@ export class LumbiniIncenseSmokeSystem {
         uniform float uTime;
         uniform float uPixelScale;
         uniform vec2 uWind;
+        uniform float uRitualGlow;
 
         varying float vAlpha;
         varying float vWarmShift;
-        varying float vPhase;
+        varying float vRot;
         varying float vAge;
 
         void main() {
@@ -72,35 +73,39 @@ export class LumbiniIncenseSmokeSystem {
           float swirlFreq = aMotionB.x;
           float sizeScale = aMotionB.y;
           vWarmShift = aMotionB.z;
-          vPhase = phase * 6.283185;
 
           float t = fract(uTime * speed + phase);
           vAge = t;
+          float phaseRad = phase * 6.283185;
+          vRot = phaseRad + t * 2.15;
 
-          // Delicate rising ribbon near brazier -> gentle helical curl -> soft wispy dispersion aloft
-          float curlEnv = smoothstep(0.04, 0.88, t);
-          float angle = t * swirlFreq * 6.283185 + vPhase;
-          float driftX = cos(angle) * swirlRadius * curlEnv + sin(uTime * 0.42 + vPhase + t * 2.5) * 0.14 * curlEnv;
-          float driftZ = sin(angle * 0.92) * swirlRadius * curlEnv + cos(uTime * 0.37 + vPhase * 1.3 + t * 2.1) * 0.14 * curlEnv;
-          vec2 windOffset = uWind * pow(t, 1.35) * 1.18;
+          // Match Janaki Mandir's fine sinuous vertical ribbon rising from the bronze braziers
+          float spread = 0.025 + pow(t, 1.15) * swirlRadius;
+          float swirlT = uTime * 1.18 + phaseRad + t * swirlFreq * 3.14159;
+          vec2 curl = vec2(
+            sin(swirlT) + 0.44 * sin(swirlT * 1.9 + phaseRad),
+            cos(swirlT * 0.92 + 0.7) + 0.44 * cos(swirlT * 1.7 - phaseRad * 0.65)
+          ) * spread * 0.56;
+          vec2 windOffset = uWind * pow(t, 1.32) * 0.92;
 
           vec3 worldPos = vec3(
-            position.x + driftX + windOffset.x,
-            position.y + t * riseHeight,
-            position.z + driftZ + windOffset.y
+            position.x + curl.x + windOffset.x,
+            position.y + pow(t, 0.86) * riseHeight,
+            position.z + curl.y + windOffset.y
           );
 
           vec4 mvPosition = modelViewMatrix * vec4(worldPos, 1.0);
           float camDist = -mvPosition.z;
 
-          float lifeFade = smoothstep(0.0, 0.16, t) * pow(1.0 - smoothstep(0.32, 1.0, t), 1.35);
-          float distFade = (1.0 - smoothstep(40.0, 92.0, camDist)) * smoothstep(0.55, 1.6, camDist);
-          vAlpha = lifeFade * distFade * 0.34;
+          float fadeIn = smoothstep(0.0, 0.12, t);
+          float fadeOut = pow(1.0 - smoothstep(0.18, 1.0, t), 1.38);
+          float nearFade = smoothstep(0.75, 2.0, camDist);
+          float farFade = 1.0 - smoothstep(30.0, 68.0, camDist);
+          vAlpha = fadeIn * fadeOut * nearFade * farFade * (0.16 + 0.12 * uRitualGlow);
 
           gl_Position = projectionMatrix * mvPosition;
-          float expand = mix(72.0, 290.0, pow(t, 0.78));
-          float pointSz = (expand * sizeScale * uPixelScale) / max(camDist, 1.0);
-          gl_PointSize = clamp(pointSz, 3.0, 42.0 * uPixelScale);
+          float worldPx = mix(54.0, 168.0, pow(t, 0.78)) * sizeScale * uPixelScale;
+          gl_PointSize = clamp(worldPx / max(camDist, 1.0), 2.0, 44.0 * uPixelScale);
         }
       `,
       fragmentShader: `
@@ -109,59 +114,36 @@ export class LumbiniIncenseSmokeSystem {
 
         varying float vAlpha;
         varying float vWarmShift;
-        varying float vPhase;
+        varying float vRot;
         varying float vAge;
-
-        float smokeHash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float smokeNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          return mix(
-            mix(smokeHash(i), smokeHash(i + vec2(1.0, 0.0)), u.x),
-            mix(smokeHash(i + vec2(0.0, 1.0)), smokeHash(i + vec2(1.0, 1.0)), u.x),
-            u.y
-          );
-        }
-
-        float smokeFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.52;
-          mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
-          for (int i = 0; i < 3; i++) {
-            v += a * smokeNoise(p);
-            p = rot * p * 2.08 + vec2(1.7, 3.1);
-            a *= 0.48;
-          }
-          return v;
-        }
 
         void main() {
           if (vAlpha <= 0.004) discard;
           vec2 uv = gl_PointCoord - vec2(0.5);
-          float r = length(uv) * 2.0;
-          if (r > 1.0) discard;
+          float c = cos(vRot);
+          float s = sin(vRot);
+          vec2 rotUv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
 
-          // Curl-like wispy distortion so smoke trails look organic and feathery, never star-shaped
-          float ca = cos(vPhase + vAge * 1.4);
-          float sa = sin(vPhase + vAge * 1.4);
-          vec2 p = mat2(ca, -sa, sa, ca) * (uv * 3.6) + vec2(vPhase * 0.85, -vAge * 1.65);
-          float qx = smokeFbm(p + vec2(0.4, 1.2));
-          float qy = smokeFbm(p + vec2(3.7, 2.1));
-          float wispNoise = smokeFbm(p + vec2(qx, qy) * 1.45);
+          // Fine sinuous ribbon tendril with domain warp matching Janaki Temple incense shader
+          vec2 q = vec2(rotUv.x * 1.54, rotUv.y * 0.74);
+          q += 0.11 * vec2(
+            sin(q.y * 9.5 + vAge * 6.5),
+            cos(q.x * 8.2 - vAge * 5.2)
+          );
 
-          float radialMask = pow(smoothstep(1.0, 0.08, r), 1.85);
-          float wispDensity = smoothstep(0.24, 0.82, wispNoise * 0.88 + (1.0 - r) * 0.28);
-          float alpha = clamp(radialMask * wispDensity * vAlpha, 0.0, 0.56);
-          if (alpha <= 0.004) discard;
+          float dist = length(q) * 2.0;
+          if (dist > 0.94) discard;
+          float radial = pow(smoothstep(0.92, 0.05, dist), 1.55);
+          float filament = 0.56 + 0.44 * sin(q.x * 11.5 + q.y * 7.5 + vAge * 5.4) * cos(q.y * 9.5 - q.x * 6.0 - vAge * 4.3);
 
-          vec3 sandalMist = vec3(0.85, 0.84, 0.82);
-          vec3 warmAmberMist = vec3(0.95, 0.88, 0.77);
-          vec3 baseSmoke = mix(sandalMist, warmAmberMist, vWarmShift * 0.65 + uRitualGlow * 0.35);
-          vec3 litSmoke = baseSmoke * mix(vec3(0.84), uLightTint, 0.45);
+          vec3 coolWisp = vec3(0.74, 0.80, 0.87);
+          vec3 warmWisp = vec3(1.0, 0.86, 0.64);
+          float warmth = (1.0 - smoothstep(0.0, 0.55, vAge)) * (0.35 + uRitualGlow * 0.65);
+          vec3 baseSmoke = mix(coolWisp, warmWisp, clamp(warmth * 0.78 + vWarmShift * 0.22, 0.0, 1.0));
+          vec3 litSmoke = baseSmoke * mix(vec3(0.86), uLightTint, 0.35);
+
+          float alpha = clamp(radial * filament * vAlpha, 0.0, 0.24);
+          if (alpha < 0.004) discard;
           gl_FragColor = vec4(litSmoke, alpha);
         }
       `,
