@@ -2714,6 +2714,7 @@ export function createMonumentalBabyBuddhaMonument(
     flameGroup.scale.setScalar(0);
     flameGroup.visible = false;
     flameGroup.userData.nonCollidable = true;
+    flameGroup.userData.noMerge = true;
 
     const outerFl = new THREE.Mesh(outerFlameGeo, outerFlameMat);
     const innerFl = new THREE.Mesh(innerFlameGeo, innerFlameMat);

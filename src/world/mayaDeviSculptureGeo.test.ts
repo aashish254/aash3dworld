@@ -525,6 +525,8 @@ test('buildToranaGate and buildThaiMarbleSanctuary construct high-detail non-cli
   });
   assert.ok(tMeshes >= 25, `Expected >=25 Torana meshes, got ${tMeshes}`);
   assert.ok(tVerts > 5000, `Expected >5000 Torana vertices, got ${tVerts}`);
+  const toranaBox = new THREE.Box3().setFromObject(torana);
+  assert.ok(toranaBox.max.y > 7.2, `Expected ornate 3-tier Torana Dharmachakra >7.2m, got ${toranaBox.max.y.toFixed(2)}`);
 
   const thai = buildThaiMarbleSanctuary(mat, mat, mat, heroMats);
   const thaiBox = new THREE.Box3().setFromObject(thai.group);
@@ -532,6 +534,30 @@ test('buildToranaGate and buildThaiMarbleSanctuary construct high-detail non-cli
   assert.ok(thaiBox.max.y > 9.5, `Expected Thai Sanctuary roof spire >9.5m, got ${thaiBox.max.y}`);
   assert.ok(thai.light.position.y > 5.4, `Expected Thai Sanctuary light >5.4m, got ${thai.light.position.y}`);
   assert.ok(Array.isArray(thaiOccluders) && thaiOccluders.length >= 3, 'Expected >=3 Thai Sanctuary cameraOccluders');
+});
+
+test('buildMuseumCausewayBridge builds vaulted arch, radial voussoirs, and turned balustrades cleanly', async () => {
+  const { buildMuseumCausewayBridge } = await import('./lumbiniBridgeAndToranaCraft');
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd9cdb8 });
+  const bridge = buildMuseumCausewayBridge('z', 0, 56.3, 8.6, 6.8, {
+    terracottaMat: mat,
+    brickMat: mat,
+    chunarMat: mat,
+    bronzeMat: mat,
+  });
+  let meshCount = 0;
+  let vertCount = 0;
+  bridge.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      vertCount += (obj as THREE.Mesh).geometry.getAttribute('position').count;
+      assertFiniteGeometry((obj as THREE.Mesh).geometry, obj.name || 'BridgeMesh', 3);
+    }
+  });
+  const bb = new THREE.Box3().setFromObject(bridge);
+  assert.ok(meshCount >= 90, `Expected >=90 detailed bridge parts, got ${meshCount}`);
+  assert.ok(vertCount > 12000, `Expected >12000 bridge vertices, got ${vertCount}`);
+  assert.ok(bb.min.y < -0.7 && bb.max.y > 1.4, `Expected submerged cutwaters & elevated stone balusters, got [${bb.min.y.toFixed(2)}, ${bb.max.y.toFixed(2)}]`);
 });
 
 test('buildMyanmarGoldenPagoda builds ornate floodlight masts, blue pedestals, medallions, and pagoda spires', () => {

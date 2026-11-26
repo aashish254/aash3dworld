@@ -194,16 +194,12 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
-  // Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Outer Threshold Apron (-210, 160.8)
-  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 164.0], [-160, 164.5], [-196, 163.5], [-210, 162.8], [-210, 160.8]],
-  // Park Corridor spur from South Boulevard -> Lumbini East Outer Threshold Apron (-158.5, 100.0)
-  [[-156.5, 164.5], [-156.8, 134.0], [-156.8, 108.0], [-157.4, 100.0], [-158.6, 100.0]],
-  // Boudhanath Stupa (-108, 4) -> Lumbini North Outer Threshold Apron (-210, 39.2)
-  [[-108, 4], [-136, 14], [-172, 26], [-200, 35.5], [-210, 37.8], [-210, 39.2]],
-  // Expanded Lumbini Western Sacred Parkland & Peace Canal South Promenade
-  [[-210, 162.8], [-240, 166.5], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
-  // Expanded Lumbini Western Sacred Parkland & Peace Canal North Promenade
-  [[-210, 37.8], [-240, 31.0], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
+  // Continuous Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Gate -> Western Peace Parkland (zero overlapping road ribbons!)
+  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 164.0], [-160, 164.5], [-192, 164.4], [-210, 164.4], [-235, 165.4], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
+  // Park Corridor spur starting cleanly at South Boulevard edge -> Lumbini East Outer Threshold Apron (-158.6, 100.0)
+  [[-156.5, 162.3], [-156.8, 134.0], [-156.8, 108.0], [-157.4, 100.0], [-158.6, 100.0]],
+  // Continuous Boudhanath Stupa (-108, 4) -> Lumbini North Gate -> Western Peace Parkland (zero overlapping road ribbons!)
+  [[-108, 4], [-136, 14], [-172, 26], [-194, 34.4], [-210, 35.2], [-234, 32.8], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -224,18 +220,10 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-48.5, 124.8],
   [-88.2, 154.5],
   [-95.8, 154.5],
-  [-206.2, 151.0],
-  [-213.8, 151.0],
-  [-206.2, 48.0],
-  [-213.8, 48.0],
-  [-162.5, 96.4],
-  [-162.5, 103.6],
   [-155.0, 160.0],
   [-182.0, 160.0],
   [-172.0, 30.0],
-  // Expanded Lumbini Peace Canal & Western Peace Stupa lanterns
-  [-260.2, 96.4],
-  [-260.2, 103.6],
+  // Expanded Lumbini Peace Canal & Western Peace Stupa lanterns (all seated cleanly on dry ground)
   [-283.6, 96.4],
   [-283.6, 103.6],
   [-285.5, 163.0],
@@ -569,20 +557,8 @@ export function getLumbiniSacredBridgeDeckY(x: number, z: number): number {
   return bridgeBaseY;
 }
 
-export function isOnLumbiniBridgeAbutmentPier(x: number, z: number): boolean {
-  const piers: Array<[number, number]> = [
-    [-206.2, 151.0],
-    [-213.8, 151.0],
-    [-206.2, 48.0],
-    [-213.8, 48.0],
-    [-162.5, 96.4],
-    [-162.5, 103.6],
-    [-260.2, 96.4],
-    [-260.2, 103.6],
-  ];
-  for (let i = 0; i < piers.length; i++) {
-    if (Math.hypot(x - piers[i][0], z - piers[i][1]) <= 1.05) return true;
-  }
+export function isOnLumbiniBridgeAbutmentPier(_x: number, _z: number): boolean {
+  // In-pond bridge abutment piers were removed so the pond moat stays clean and unobstructed.
   return false;
 }
 
@@ -1201,8 +1177,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
       ] as Array<[number, number, number, number]>) {
         if (Math.abs(ldx - bx) <= hw && Math.abs(ldz - bz) <= hd) return false;
       }
-      // Exterior pilgrim welcome milepost steles flanking South Bridge approach
-      if (Math.abs(Math.abs(ldx) - 5.2) <= 0.72 && Math.abs(ldz - 64.2) <= 0.52) return false;
+      // (South Bridge entry steles removed)
 
       for (const [hx, hz, hsx, hsz] of [
         [-22.8, -9.2, 0.68, 17.5],

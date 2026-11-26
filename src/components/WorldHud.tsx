@@ -22,6 +22,8 @@ interface WorldHudProps {
   unlockedAchievementsCount: number;
   totalAchievementsCount: number;
   distanceWalked: number;
+  distanceTextRef?: React.RefObject<HTMLSpanElement | null>;
+  clockTextRef?: React.RefObject<HTMLSpanElement | null>;
   timeState: TimeLightingState;
   weatherInfo: LiveWeatherInfo;
   activeWeather: WeatherKind;
@@ -62,6 +64,8 @@ export const WorldHud: React.FC<WorldHudProps> = ({
   unlockedAchievementsCount,
   totalAchievementsCount,
   distanceWalked,
+  distanceTextRef,
+  clockTextRef,
   timeState,
   weatherInfo,
   activeWeather,
@@ -143,11 +147,13 @@ export const WorldHud: React.FC<WorldHudProps> = ({
             <span className="hidden sm:inline" aria-hidden="true">
               ·
             </span>
-            <span className="hidden sm:inline whitespace-nowrap">{Math.round(distanceWalked)}m walked</span>
+            <span ref={distanceTextRef} className="hidden sm:inline whitespace-nowrap">
+              {Math.round(distanceWalked)}m walked
+            </span>
             <span className="hidden sm:inline" aria-hidden="true">
               ·
             </span>
-            <span className="hidden sm:inline whitespace-nowrap">
+            <span ref={clockTextRef} className="hidden sm:inline whitespace-nowrap">
               {formattedHour} ({timeState.phaseLabel})
             </span>
             <span className="hidden sm:inline" aria-hidden="true">
@@ -242,8 +248,8 @@ export const WorldHud: React.FC<WorldHudProps> = ({
               e.currentTarget.blur();
               onPause();
             }}
-            aria-label="Pause Menu (P)"
-            title="Pause Menu (P)"
+            aria-label="Pause Menu (Esc)"
+            title="Pause Menu (Esc)"
             className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg border border-slate-300/15 text-slate-100 hover:border-amber-400/60 hover:text-amber-300 flex items-center justify-center transition-colors cursor-pointer"
             style={{ backgroundColor: 'rgba(13, 20, 34, 0.90)' }}
           >

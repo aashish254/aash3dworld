@@ -32,6 +32,7 @@ import {
   isOnLumbiniSacredBridge,
 } from './worldLogic';
 import { applyRealisticWaterShader } from './waterShader';
+import { getCachedMaterial, getCachedTexture, mergeStaticMeshesByMaterial } from './meshOptimization';
 
 export const WORLD_HAZE_UNIFORMS = {
   uHazeColor: { value: new THREE.Color('#c9dfef') },
@@ -368,6 +369,7 @@ export interface MountainCloudController {
 
 export interface RoadAndLanternsResult {
   group: THREE.Group;
+  lanternGroup: THREE.Group;
   lanternLights: THREE.PointLight[];
 }
 
@@ -645,25 +647,28 @@ export function createMountainClouds(): MountainCloudController {
   const group = new THREE.Group();
   group.userData.nonCollidable = true;
 
-  const cCanvas = document.createElement('canvas');
-  cCanvas.width = 256;
-  cCanvas.height = 128;
-  const ctx = cCanvas.getContext('2d')!;
-  ctx.clearRect(0, 0, 256, 128);
-  ctx.save();
-  ctx.translate(128, 64);
-  ctx.scale(2, 1);
-  const g = ctx.createRadialGradient(0, 0, 6, 0, 0, 60);
-  g.addColorStop(0, 'rgba(220, 226, 234, 0.68)');
-  g.addColorStop(0.45, 'rgba(208, 216, 228, 0.32)');
-  g.addColorStop(1, 'rgba(196, 208, 224, 0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, 0, 62, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  const mistTex = new THREE.CanvasTexture(cCanvas);
-  mistTex.colorSpace = THREE.SRGBColorSpace;
+  const mistTex = getCachedTexture('mountain-mist-tex', () => {
+    const cCanvas = document.createElement('canvas');
+    cCanvas.width = 256;
+    cCanvas.height = 128;
+    const ctx = cCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 256, 128);
+    ctx.save();
+    ctx.translate(128, 64);
+    ctx.scale(2, 1);
+    const g = ctx.createRadialGradient(0, 0, 6, 0, 0, 60);
+    g.addColorStop(0, 'rgba(220, 226, 234, 0.68)');
+    g.addColorStop(0.45, 'rgba(208, 216, 228, 0.32)');
+    g.addColorStop(1, 'rgba(196, 208, 224, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    const tex = new THREE.CanvasTexture(cCanvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  });
 
   const cloudMat = new THREE.MeshBasicMaterial({
     map: mistTex,
@@ -865,12 +870,10 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
 
     if (underPeaceCanal) {
       y = -1.15;
-    } else if (inSurroundingPond) {
+    } else if (inSurroundingPond || onSacredBridge) {
       y = -0.9;
     } else if (onBridgePier) {
       y = 0.34;
-    } else if (onSacredBridge) {
-      y = 0.15;
     } else if (underPushkariniBasin) {
       y = -0.82;
     } else if (underGangaSagarBasin) {
@@ -1937,14 +1940,19 @@ export function createCurbedRoads(
   const curbIndices: number[] = [];
   let curbVertCount = 0;
 
+  const trimPlazas = [
+    ...aprons,
+    { x: -304, z: 100, r: 9.6 }, // Western Peace Stupa Plaza
+  ];
+
   for (const rawPts of ROAD_PATHS) {
-    const pts = trimPathBetweenPlazas(rawPts, aprons);
+    const pts = trimPathBetweenPlazas(rawPts, trimPlazas);
     const curve = new THREE.CatmullRomCurve3(
       pts.map(([x, z]) => new THREE.Vector3(x, sampleTerrainMeshHeight(terrainMesh, x, z), z)),
     );
     const len = curve.getLength();
     if (len < 1.5) continue;
-    const steps = Math.max(16, Math.min(120, Math.floor(len * 0.75)));
+    const steps = Math.max(16, Math.min(260, Math.floor(len * 0.9)));
     const width = 4.0;
     const shoulder = 0.65;
     const uvScale = 0.28;
@@ -2050,8 +2058,21 @@ export function createCurbedRoads(
         const inChowk =
           baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
         const inLumbini =
-          baseX > -261.5 && baseX < -159.0 && baseZ > 40.2 && baseZ < 160.2;
-        if (inChowk || inLumbini || rm.deckY <= -0.1) {
+          baseX > -261.5 && baseX < -159.0 && baseZ > 40.0 && baseZ < 160.2;
+        const atSouthGateApron =
+          baseX > -214.0 && baseX < -206.0 && baseZ > 159.5 && baseZ < 164.6;
+        const atNorthGateApron =
+          baseX > -214.0 && baseX < -206.0 && baseZ > 34.8 && baseZ < 40.2;
+        const atEastCorridorTJunction =
+          baseX > -159.2 && baseX < -153.8 && baseZ > 161.2 && baseZ < 164.8;
+        if (
+          inChowk ||
+          inLumbini ||
+          atSouthGateApron ||
+          atNorthGateApron ||
+          atEastCorridorTJunction ||
+          rm.deckY <= -0.1
+        ) {
           prevRingStart = -1;
           continue;
         }
@@ -2105,8 +2126,15 @@ export function createCurbedRoads(
     group.add(continuousCurbMesh);
   }
 
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
+  const lanternGroup = new THREE.Group();
+  lanternGroup.userData.snapCategory = 'lantern-root';
+  group.add(lanternGroup);
+
   const lanternCoords = ROAD_LANTERN_COORDS;
-  const lanternStoneMat = new THREE.MeshStandardMaterial({
+  const lanternStoneMat = getCachedMaterial(textures, 'road-lantern-stone', () =>
+    new THREE.MeshStandardMaterial({
     map: textures.cobbleMap,
     normalMap: textures.cobbleNormal,
     normalScale: new THREE.Vector2(0.7, 0.7),
@@ -2115,18 +2143,23 @@ export function createCurbedRoads(
     aoMapIntensity: 0.86,
     color: 0x94938c,
     roughness: 1.0,
-  });
-  const lanternBronzeMat = new THREE.MeshStandardMaterial({
-    color: 0x8c6427,
-    roughness: 0.34,
-    metalness: 0.84,
-  });
-  const lanternGlowMat = new THREE.MeshStandardMaterial({
-    color: 0xffdf9e,
-    emissive: 0xe69832,
-    emissiveIntensity: 2.2,
-    roughness: 0.25,
-  });
+  }),
+  );
+  const lanternBronzeMat = getCachedMaterial(textures, 'road-lantern-bronze', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x8c6427,
+      roughness: 0.34,
+      metalness: 0.84,
+    }),
+  );
+  const lanternGlowMat = getCachedMaterial(textures, 'road-lantern-glow', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xffdf9e,
+      emissive: 0xe69832,
+      emissiveIntensity: 2.2,
+      roughness: 0.25,
+    }),
+  );
 
   const lanternShaftGeo = new THREE.LatheGeometry(
     [
@@ -2196,10 +2229,10 @@ export function createCurbedRoads(
       post.add(ptLight);
       lanternLights.push(ptLight);
     }
-    group.add(post);
+    lanternGroup.add(post);
   });
 
-  return { group, lanternLights };
+  return { group, lanternGroup, lanternLights };
 }
 
 function mergeStaticGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -3608,51 +3641,56 @@ export function createLumbiniPeaceParkland(
   // Harmika with custom Buddha Wisdom Eyes + Urna texture on all 4 cardinal faces
   let harmikaSideMat: THREE.Material = goldMat;
   if (typeof document !== 'undefined') {
-    const hc = document.createElement('canvas');
-    hc.width = 256;
-    hc.height = 128;
-    const hctx = hc.getContext('2d');
-    if (hctx) {
-      hctx.fillStyle = '#f6f2e8';
-      hctx.fillRect(0, 0, 256, 128);
-      hctx.strokeStyle = '#c89b32';
-      hctx.lineWidth = 10;
-      hctx.strokeRect(5, 5, 246, 118);
-      // Paired serene Wisdom Eyes + eyebrows
-      hctx.strokeStyle = '#182442';
-      hctx.fillStyle = '#182442';
-      hctx.lineWidth = 4;
-      for (const ex of [72, 184]) {
-        hctx.beginPath();
-        hctx.moveTo(ex - 36, 44);
-        hctx.quadraticCurveTo(ex, 26, ex + 36, 44);
-        hctx.stroke();
-        hctx.beginPath();
-        hctx.ellipse(ex, 56, 28, 12, 0, 0, Math.PI * 2);
-        hctx.fillStyle = '#ffffff';
-        hctx.fill();
-        hctx.stroke();
-        hctx.beginPath();
-        hctx.arc(ex, 56, 9, 0, Math.PI * 2);
-        hctx.fillStyle = '#1b2b4c';
-        hctx.fill();
-      }
-      // Golden Urna third-eye dot & Nepali Aik numeral nose curl
-      hctx.fillStyle = '#b91c1c';
-      hctx.beginPath();
-      hctx.arc(128, 36, 7, 0, Math.PI * 2);
-      hctx.fill();
-      hctx.strokeStyle = '#b91c1c';
-      hctx.lineWidth = 5;
-      hctx.beginPath();
-      hctx.moveTo(128, 66);
-      hctx.quadraticCurveTo(124, 92, 116, 102);
-      hctx.arc(128, 100, 12, Math.PI, 0, false);
-      hctx.stroke();
-      const hTex = new THREE.CanvasTexture(hc);
-      hTex.colorSpace = THREE.SRGBColorSpace;
-      harmikaSideMat = new THREE.MeshStandardMaterial({ map: hTex, roughness: 0.35, metalness: 0.15 });
-    }
+    harmikaSideMat = getCachedMaterial(textures, 'peace-stupa-harmika-mat', () => {
+      const hTex = getCachedTexture('peace-stupa-harmika-eyes', () => {
+        const hc = document.createElement('canvas');
+        hc.width = 256;
+        hc.height = 128;
+        const hctx = hc.getContext('2d');
+        if (hctx) {
+          hctx.fillStyle = '#f6f2e8';
+          hctx.fillRect(0, 0, 256, 128);
+          hctx.strokeStyle = '#c89b32';
+          hctx.lineWidth = 10;
+          hctx.strokeRect(5, 5, 246, 118);
+          // Paired serene Wisdom Eyes + eyebrows
+          hctx.strokeStyle = '#182442';
+          hctx.fillStyle = '#182442';
+          hctx.lineWidth = 4;
+          for (const ex of [72, 184]) {
+            hctx.beginPath();
+            hctx.moveTo(ex - 36, 44);
+            hctx.quadraticCurveTo(ex, 26, ex + 36, 44);
+            hctx.stroke();
+            hctx.beginPath();
+            hctx.ellipse(ex, 56, 28, 12, 0, 0, Math.PI * 2);
+            hctx.fillStyle = '#ffffff';
+            hctx.fill();
+            hctx.stroke();
+            hctx.beginPath();
+            hctx.arc(ex, 56, 9, 0, Math.PI * 2);
+            hctx.fillStyle = '#1b2b4c';
+            hctx.fill();
+          }
+          // Golden Urna third-eye dot & Nepali Aik numeral nose curl
+          hctx.fillStyle = '#b91c1c';
+          hctx.beginPath();
+          hctx.arc(128, 36, 7, 0, Math.PI * 2);
+          hctx.fill();
+          hctx.strokeStyle = '#b91c1c';
+          hctx.lineWidth = 5;
+          hctx.beginPath();
+          hctx.moveTo(128, 66);
+          hctx.quadraticCurveTo(124, 92, 116, 102);
+          hctx.arc(128, 100, 12, Math.PI, 0, false);
+          hctx.stroke();
+        }
+        const tex = new THREE.CanvasTexture(hc);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        return tex;
+      });
+      return new THREE.MeshStandardMaterial({ map: hTex, roughness: 0.35, metalness: 0.15 });
+    });
   }
 
   const harmikaBase = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.18, 1.72), whiteStuccoMat);
@@ -3793,6 +3831,7 @@ export function createLumbiniPeaceParkland(
   });
 
   group.add(stupaGroup);
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
 
   return {
     group,

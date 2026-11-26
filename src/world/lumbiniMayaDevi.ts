@@ -2168,6 +2168,13 @@ export function buildMayaDeviTemple(
   const atmosphereParticles = createSanctumAtmosphereParticles(clerestoryBeamSpecs);
   group.add(atmosphereParticles.group);
 
+  for (let i = 0; i < cornerLamps.length; i++) {
+    cornerLamps[i].userData.noMerge = true;
+  }
+  for (let i = 0; i < wallLanternFlames.length; i++) {
+    wallLanternFlames[i].userData.noMerge = true;
+  }
+
   cornerLampRig.userData.onFlickerUpdate = (t: number) => {
     for (let i = 0; i < cornerLamps.length; i++) {
       const flame = cornerLamps[i];

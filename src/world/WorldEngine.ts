@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -118,6 +117,23 @@ import {
   StaticPhysicsWorld,
   sanitizeSceneGeometry,
 } from './physicsBvh';
+import {
+  getCachedMaterial,
+  getCachedTexture,
+  mergeStaticMeshesByMaterial,
+} from './meshOptimization';
+import {
+  BoundingSphereEntry,
+  DiscreteHudState,
+  ShadowUpdateCheckInput,
+  formatClockHour,
+  hasDiscreteHudChanged,
+  isWithinSleepDistanceSq,
+  raySegmentHitsSphere,
+  selectClosestIndicesZeroAlloc,
+  shouldUpdateShadowMap,
+  writeDirtyDatasetAttr,
+} from './perfLogic';
 
 const _snapBox = new THREE.Box3();
 const _snapWorldPos = new THREE.Vector3();
@@ -142,9 +158,26 @@ export interface WorldHudSnapshot {
   isMeditating: boolean;
 }
 
+export interface WorldHudContinuousSnapshot {
+  distanceWalked: number;
+  formattedHour: string;
+  phaseLabel: string;
+  coordsX: number;
+  coordsZ: number;
+}
+
+export interface WorldPerfMetrics {
+  fps: number;
+  drawCalls: number;
+  triangles: number;
+}
+
 export interface WorldEngineCallbacks {
   onSelectLandmark: (landmark: LandmarkData) => void;
-  onHudUpdate: (snapshot: WorldHudSnapshot) => void;
+  onHudUpdate?: (snapshot: WorldHudSnapshot) => void;
+  onHudTick?: (snapshot: WorldHudContinuousSnapshot) => void;
+  onHudDiscreteChange?: (snapshot: WorldHudSnapshot) => void;
+  onPerfUpdate?: (metrics: WorldPerfMetrics) => void;
   onPlaceWaypointRequest: (x: number, z: number) => void;
   onInspectHighlight?: (highlight: { title: string; subtitle: string; description: string }) => void;
   onBellRing?: () => void;
@@ -215,8 +248,6 @@ export class WorldEngine {
   private callbacks: WorldEngineCallbacks;
   private renderer!: THREE.WebGLRenderer;
   private composer: EffectComposer | null = null;
-  private composerDepthTex: THREE.DepthTexture | null = null;
-  private gtaoPass: GTAOPass | null = null;
   private bloomPass: UnrealBloomPass | null = null;
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
@@ -224,6 +255,37 @@ export class WorldEngine {
   private isSoftwareGl = false;
   private renderFrameCount = 0;
   private emissiveRegistry: Array<{ mat: THREE.MeshStandardMaterial; baseIntensity: number }> = [];
+
+  private outerGroundsGroup: THREE.Group | null = null;
+  private curbedRoadsLanternGroup: THREE.Group | null = null;
+  private staticGroundsMerged = false;
+  private shadowPrevState: ShadowUpdateCheckInput | null = null;
+  private shadowForceDirty = true;
+  private maxMovingPropSpeed = 0;
+  private lastHudTickAt = -10;
+  private lastDiscreteHud: DiscreteHudState | null = null;
+  private lastSyncDatasetFlushAt = -10;
+  private lastSimDatasetFlushAt = -10;
+  private datasetCache: Record<string, string> = {};
+  private perfDiagnosticsEnabled = false;
+  private perfInitialized = false;
+  private perfFramesAccum = 0;
+  private perfWindowStartMs = performance.now();
+  private currentPerfMetrics: WorldPerfMetrics = { fps: 60, drawCalls: 0, triangles: 0 };
+  private occluderSpheres: BoundingSphereEntry[] = [];
+  private filteredOccludersScratch: THREE.Object3D[] = [];
+  private occluderTmpBox = new THREE.Box3();
+  private occluderTmpSphere = new THREE.Sphere();
+  private animatedNodeAnchors: Array<{ isGlobal: boolean; x: number; z: number }> = [];
+  private wheelSpotsScratch: Array<{ x: number; z: number }> = [];
+  private bellSpotsScratch: Array<{ x: number; z: number }> = [];
+  private lampSpotsScratch: Array<{ x: number; z: number; isLit: boolean }> = [];
+  private listenerPoseScratch = { x: 0, y: 0, z: 0, forwardX: 0, forwardY: 0, forwardZ: -1 };
+  private beaconPosX = new Float64Array(0);
+  private beaconPosZ = new Float64Array(0);
+  private beaconEligible = new Uint8Array(0);
+  private beaconSelectedIdx = new Int32Array(6);
+  private beaconSelectedDistSq = new Float64Array(6);
 
   private sunLight!: THREE.DirectionalLight;
   private hemiLight!: THREE.HemisphereLight;
@@ -507,12 +569,39 @@ export class WorldEngine {
     }
     this.beaconLights = [];
 
+    const count = this.beaconPoolDescs.length;
+    this.beaconPosX = new Float64Array(count);
+    this.beaconPosZ = new Float64Array(count);
+    this.beaconEligible = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+      this.beaconPosX[i] = this.beaconPoolDescs[i].pos.x;
+      this.beaconPosZ[i] = this.beaconPoolDescs[i].pos.z;
+    }
+
     const poolSize = 6;
+    this.beaconSelectedIdx = new Int32Array(poolSize);
+    this.beaconSelectedDistSq = new Float64Array(poolSize);
     for (let i = 0; i < poolSize; i++) {
       const pLight = new THREE.PointLight(0xffb85c, 0, 24, 1.6);
       this.scene.add(pLight);
       this.pooledPointLights.push(pLight);
     }
+  }
+
+  private writeDataset(key: string, value: string): void {
+    if (!this.renderer?.domElement) return;
+    writeDirtyDatasetAttr(this.renderer.domElement.dataset, this.datasetCache, key, value);
+  }
+
+  public setPerfDiagnosticsEnabled(enabled: boolean): void {
+    this.perfDiagnosticsEnabled = enabled;
+    if (enabled) {
+      this.callbacks.onPerfUpdate?.(this.currentPerfMetrics);
+    }
+  }
+
+  public getPerfMetrics(): WorldPerfMetrics {
+    return this.currentPerfMetrics;
   }
 
   private collectEmissiveMaterials(): void {
@@ -544,29 +633,45 @@ export class WorldEngine {
     if (this.skyDomeMesh) {
       this.skyDomeMesh.position.copy(this.camera.position);
     }
+    this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
     if (!this.isSoftwareGl && this.composer) {
-      if (this.gtaoPass && this.composer.readBuffer?.depthTexture) {
-        const depthTex = this.composer.readBuffer.depthTexture;
-        const gtaoAny = this.gtaoPass as unknown as {
-          depthTexture?: THREE.DepthTexture;
-          gtaoMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
-          pdMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
-          depthRenderMaterial?: { uniforms?: { tDepth?: { value: unknown } } };
-        };
-        if (gtaoAny.depthTexture !== depthTex) {
-          gtaoAny.depthTexture = depthTex;
-          if (gtaoAny.gtaoMaterial?.uniforms?.tDepth) gtaoAny.gtaoMaterial.uniforms.tDepth.value = depthTex;
-          if (gtaoAny.pdMaterial?.uniforms?.tDepth) gtaoAny.pdMaterial.uniforms.tDepth.value = depthTex;
-          if (gtaoAny.depthRenderMaterial?.uniforms?.tDepth) gtaoAny.depthRenderMaterial.uniforms.tDepth.value = depthTex;
-        }
-      }
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
     this.renderFrameCount++;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.renderFrame = String(this.renderFrameCount);
+    this.writeDataset('renderFrame', String(this.renderFrameCount));
+
+    const drawCalls = this.renderer.info.render.calls;
+    const triangles = this.renderer.info.render.triangles;
+    this.currentPerfMetrics.drawCalls = drawCalls;
+    this.currentPerfMetrics.triangles = triangles;
+
+    const nowMs = performance.now();
+    if (!this.perfInitialized) {
+      this.perfInitialized = true;
+      this.perfWindowStartMs = nowMs;
+      this.perfFramesAccum = 0;
+      this.currentPerfMetrics.fps = this.isSoftwareGl ? 1 : 60;
+      if (this.perfDiagnosticsEnabled) {
+        this.callbacks.onPerfUpdate?.(this.currentPerfMetrics);
+      }
+      return;
+    }
+
+    this.perfFramesAccum++;
+    const winMs = nowMs - this.perfWindowStartMs;
+    if (winMs >= 250 && this.perfFramesAccum > 0) {
+      this.currentPerfMetrics.fps = Math.max(
+        1,
+        Math.min(240, Math.round((this.perfFramesAccum * 1000) / winMs)),
+      );
+      this.perfFramesAccum = 0;
+      this.perfWindowStartMs = nowMs;
+      if (this.perfDiagnosticsEnabled) {
+        this.callbacks.onPerfUpdate?.(this.currentPerfMetrics);
+      }
     }
   }
 
@@ -624,6 +729,8 @@ export class WorldEngine {
     this.renderer.toneMappingExposure = 0.92;
     this.renderer.shadowMap.enabled = !this.isSoftwareGl;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
 
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.width = '100%';
@@ -656,36 +763,17 @@ export class WorldEngine {
       const pr = this.renderer.getPixelRatio();
       const rtW = Math.max(1, Math.floor(width * pr));
       const rtH = Math.max(1, Math.floor(height * pr));
-      this.composerDepthTex = new THREE.DepthTexture(rtW, rtH);
-      this.composerDepthTex.format = THREE.DepthStencilFormat;
-      this.composerDepthTex.type = THREE.UnsignedInt248Type;
+      const gl = this.renderer.getContext();
+      const isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
       const composerRt = new THREE.WebGLRenderTarget(rtW, rtH, {
         type: THREE.HalfFloatType,
-        depthTexture: this.composerDepthTex,
+        samples: isWebGL2 ? 4 : 0,
       });
 
       this.composer = new EffectComposer(this.renderer, composerRt);
       this.composer.setPixelRatio(pr);
       this.composer.setSize(width, height);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-
-      this.gtaoPass = new GTAOPass(
-        this.scene,
-        this.camera,
-        width,
-        height,
-        { depthTexture: this.composer.renderTarget2.depthTexture ?? undefined },
-      );
-      this.gtaoPass.updateGtaoMaterial({
-        radius: 1.65,
-        distanceExponent: 1.75,
-        thickness: 1.15,
-        samples: 12,
-        scale: 1.0,
-      });
-      this.gtaoPass.output = GTAOPass.OUTPUT.Default;
-      this.gtaoPass.blendIntensity = 0.48;
-      this.composer.addPass(this.gtaoPass);
 
       const initialBloom = computeTimeLightingState(
         getPresetHour(this.timePreset),
@@ -875,6 +963,7 @@ export class WorldEngine {
     this.beaconLights.push(...peaceParkland.beaconLights);
 
     const roadsResult = createCurbedRoads(this.textures, this.terrainMesh);
+    this.curbedRoadsLanternGroup = roadsResult.lanternGroup;
     this.scene.add(roadsResult.group);
     this.beaconLights.push(...roadsResult.lanternLights);
 
@@ -886,8 +975,10 @@ export class WorldEngine {
     this.scene.add(this.foliageController.group);
 
     const worldBirds = createAmbientWorldBirds();
+    worldBirds.controller.userData.isGlobalAnimation = true;
     this.scene.add(worldBirds.group);
     this.animatedLandmarkNodes.push(worldBirds.controller);
+    this.animatedNodeAnchors.push({ isGlobal: true, x: 0, z: 0 });
 
     // Spawn Vista Landmarks: Carved Stone & Cast-Bronze Monument + Valley Trail Kiosk
     const nameSign = create3DNameSign(this.textures);
@@ -943,9 +1034,11 @@ export class WorldEngine {
       'janaki-mandir': () =>
         createJanakiMandir(this.textures, () => {
           if (this.disposed) return;
+          this.shadowForceDirty = true;
           this.buildPhysicsBvhAndSnapAssets();
-          if (this.renderer?.domElement) {
-            this.renderer.domElement.dataset.lanternsLoaded = 'true';
+          this.writeDataset('lanternsLoaded', 'true');
+          if (!this.isSoftwareGl) {
+            this.renderer.compileAsync?.(this.scene, this.camera).catch(() => undefined);
           }
           this.scheduleImmediateRender();
         }),
@@ -969,7 +1062,19 @@ export class WorldEngine {
 
       this.landmarkHitTargets.push(built.hitMesh);
       this.beaconLights.push(...built.beaconLights);
-      this.animatedLandmarkNodes.push(...built.animatedNodes);
+      if (built.animatedNodes.length > 0) {
+        built.group.updateMatrixWorld(true);
+        for (const node of built.animatedNodes) {
+          this.animatedLandmarkNodes.push(node);
+          const isGlobal = Boolean(node.userData?.isGlobalAnimation);
+          if (node.parent) {
+            node.getWorldPosition(_vec3);
+            this.animatedNodeAnchors.push({ isGlobal, x: _vec3.x, z: _vec3.z });
+          } else {
+            this.animatedNodeAnchors.push({ isGlobal, x: lm.position.x, z: lm.position.z });
+          }
+        }
+      }
       if (lm.id === 'lumbini-buddha') {
         if (typeof built.group.userData.lotusCount === 'number') {
           this.lumbiniLotusCount = built.group.userData.lotusCount;
@@ -1091,105 +1196,171 @@ export class WorldEngine {
 
   private populateOuterTempleGrounds(): void {
     const outerGroup = new THREE.Group();
+    outerGroup.userData.snapCategory = 'outer-root';
+    this.outerGroundsGroup = outerGroup;
 
-    const whiteMarbleMat = new THREE.MeshPhysicalMaterial({
-      map: this.textures.janaki.marbleAshlarMap,
-      normalMap: this.textures.janaki.marbleAshlarNormal,
-      normalScale: new THREE.Vector2(0.55, 0.55),
-      roughnessMap: this.textures.janaki.marbleAshlarRough,
-      aoMap: this.textures.janaki.marbleAshlarAo,
-      aoMapIntensity: 0.85,
-      color: 0xf4efe6,
-      roughness: 1.0,
-      metalness: 0.03,
-      clearcoat: 0.16,
-      clearcoatRoughness: 0.44,
-      ior: 1.48,
-    });
-    const tealMarbleMat = new THREE.MeshStandardMaterial({
-      map: this.textures.janaki.marbleTrimMap,
-      normalMap: this.textures.janaki.marbleTrimNormal,
-      normalScale: new THREE.Vector2(0.48, 0.48),
-      roughnessMap: this.textures.janaki.marbleTrimRough,
-      aoMap: this.textures.janaki.marbleTrimAo,
-      aoMapIntensity: 0.8,
-      color: 0x1d5f66,
-      roughness: 1.0,
-      metalness: 0.05,
-    });
-    const weatheredStoneMat = new THREE.MeshStandardMaterial({
-      map: this.textures.sandstoneMap,
-      normalMap: this.textures.sandstoneNormal,
-      normalScale: new THREE.Vector2(0.75, 0.75),
-      roughnessMap: this.textures.sandstoneRough,
-      aoMap: this.textures.sandstoneAo,
-      aoMapIntensity: 0.84,
-      color: 0xc8bfb0,
-      roughness: 1.0,
-    });
-    const agedBronzeMat = new THREE.MeshStandardMaterial({
-      map: this.textures.agedBronzeMap,
-      normalMap: this.textures.agedBronzeNormal,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughnessMap: this.textures.agedBronzeRough,
-      color: 0xc2924c,
-      roughness: 0.32,
-      metalness: 0.86,
-    });
-    const brightBrassMat = new THREE.MeshStandardMaterial({
-      color: 0xe7bc5e,
-      roughness: 0.24,
-      metalness: 0.9,
-      emissive: 0x5c3b07,
-      emissiveIntensity: 0.2,
-    });
-    const timberMat = new THREE.MeshStandardMaterial({
-      map: this.textures.woodMap,
-      normalMap: this.textures.woodNormal,
-      color: 0x7b5a3d,
-      roughness: 0.86,
-    });
-    const waterBowlMat = new THREE.MeshStandardMaterial({
-      normalMap: this.textures.waterNormal,
-      normalScale: new THREE.Vector2(0.55, 0.55),
-      color: 0x22666b,
-      roughness: 0.1,
-      metalness: 0.24,
-    });
-    const lilyPadMat = new THREE.MeshStandardMaterial({
-      color: 0x3b7a3e,
-      roughness: 0.62,
-    });
-    const lotusOuterMat = new THREE.MeshStandardMaterial({
-      color: 0xf190b0,
-      roughness: 0.48,
-      side: THREE.DoubleSide,
-    });
-    const lotusInnerMat = new THREE.MeshStandardMaterial({
-      color: 0xffd2e0,
-      roughness: 0.42,
-      side: THREE.DoubleSide,
-    });
-    const flameMat = new THREE.MeshStandardMaterial({
-      color: 0xfff3c4,
-      emissive: 0xff9b28,
-      emissiveIntensity: 2.4,
-      roughness: 0.18,
-    });
-    const emberMat = new THREE.MeshStandardMaterial({
-      color: 0x6b2210,
-      emissive: 0xff5a1f,
-      emissiveIntensity: 2.05,
-      roughness: 0.65,
-    });
-    const flagColors = [0x2563eb, 0xf8fafc, 0xdc2626, 0x16a34a, 0xeab308];
-    const flagMats = flagColors.map(
-      (hex) =>
+    const whiteMarbleMat = getCachedMaterial(
+      this.textures,
+      'outer-white-marble',
+      () =>
+        new THREE.MeshPhysicalMaterial({
+          map: this.textures.janaki.marbleAshlarMap,
+          normalMap: this.textures.janaki.marbleAshlarNormal,
+          normalScale: new THREE.Vector2(0.55, 0.55),
+          roughnessMap: this.textures.janaki.marbleAshlarRough,
+          aoMap: this.textures.janaki.marbleAshlarAo,
+          aoMapIntensity: 0.85,
+          color: 0xf4efe6,
+          roughness: 1.0,
+          metalness: 0.03,
+          clearcoat: 0.16,
+          clearcoatRoughness: 0.44,
+          ior: 1.48,
+        }),
+    );
+    const tealMarbleMat = getCachedMaterial(
+      this.textures,
+      'outer-teal-marble',
+      () =>
         new THREE.MeshStandardMaterial({
-          color: hex,
+          map: this.textures.janaki.marbleTrimMap,
+          normalMap: this.textures.janaki.marbleTrimNormal,
+          normalScale: new THREE.Vector2(0.48, 0.48),
+          roughnessMap: this.textures.janaki.marbleTrimRough,
+          aoMap: this.textures.janaki.marbleTrimAo,
+          aoMapIntensity: 0.8,
+          color: 0x1d5f66,
+          roughness: 1.0,
+          metalness: 0.05,
+        }),
+    );
+    const weatheredStoneMat = getCachedMaterial(
+      this.textures,
+      'outer-weathered-stone',
+      () =>
+        new THREE.MeshStandardMaterial({
+          map: this.textures.sandstoneMap,
+          normalMap: this.textures.sandstoneNormal,
+          normalScale: new THREE.Vector2(0.75, 0.75),
+          roughnessMap: this.textures.sandstoneRough,
+          aoMap: this.textures.sandstoneAo,
+          aoMapIntensity: 0.84,
+          color: 0xc8bfb0,
+          roughness: 1.0,
+        }),
+    );
+    const agedBronzeMat = getCachedMaterial(
+      this.textures,
+      'outer-aged-bronze',
+      () =>
+        new THREE.MeshStandardMaterial({
+          map: this.textures.agedBronzeMap,
+          normalMap: this.textures.agedBronzeNormal,
+          normalScale: new THREE.Vector2(0.85, 0.85),
+          roughnessMap: this.textures.agedBronzeRough,
+          color: 0xc2924c,
+          roughness: 0.32,
+          metalness: 0.86,
+        }),
+    );
+    const brightBrassMat = getCachedMaterial(
+      this.textures,
+      'outer-bright-brass',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0xe7bc5e,
+          roughness: 0.24,
+          metalness: 0.9,
+          emissive: 0x5c3b07,
+          emissiveIntensity: 0.2,
+        }),
+    );
+    const timberMat = getCachedMaterial(
+      this.textures,
+      'outer-timber',
+      () =>
+        new THREE.MeshStandardMaterial({
+          map: this.textures.woodMap,
+          normalMap: this.textures.woodNormal,
+          color: 0x7b5a3d,
           roughness: 0.86,
+        }),
+    );
+    const waterBowlMat = getCachedMaterial(
+      this.textures,
+      'outer-water-bowl',
+      () =>
+        new THREE.MeshStandardMaterial({
+          normalMap: this.textures.waterNormal,
+          normalScale: new THREE.Vector2(0.55, 0.55),
+          color: 0x22666b,
+          roughness: 0.1,
+          metalness: 0.24,
+        }),
+    );
+    const lilyPadMat = getCachedMaterial(
+      this.textures,
+      'outer-lily-pad',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0x3b7a3e,
+          roughness: 0.62,
+        }),
+    );
+    const lotusOuterMat = getCachedMaterial(
+      this.textures,
+      'outer-lotus-outer',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0xf190b0,
+          roughness: 0.48,
           side: THREE.DoubleSide,
         }),
+    );
+    const lotusInnerMat = getCachedMaterial(
+      this.textures,
+      'outer-lotus-inner',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0xffd2e0,
+          roughness: 0.42,
+          side: THREE.DoubleSide,
+        }),
+    );
+    const flameMat = getCachedMaterial(
+      this.textures,
+      'outer-flame',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0xfff3c4,
+          emissive: 0xff9b28,
+          emissiveIntensity: 2.4,
+          roughness: 0.18,
+        }),
+    );
+    const emberMat = getCachedMaterial(
+      this.textures,
+      'outer-ember',
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: 0x6b2210,
+          emissive: 0xff5a1f,
+          emissiveIntensity: 2.05,
+          roughness: 0.65,
+        }),
+    );
+    const flagColors = [0x2563eb, 0xf8fafc, 0xdc2626, 0x16a34a, 0xeab308];
+    const flagMats = flagColors.map((hex, i) =>
+      getCachedMaterial(
+        this.textures,
+        `outer-flag-mat-${i}`,
+        () =>
+          new THREE.MeshStandardMaterial({
+            color: hex,
+            roughness: 0.86,
+            side: THREE.DoubleSide,
+          }),
+      ),
     );
 
     const lungtaDrapeMats = getLungtaDrapeMaterials();
@@ -1507,6 +1678,7 @@ export class WorldEngine {
           const flag = new THREE.Mesh(flagClothGeo, outerFlagMats[f % outerFlagMats.length]);
           flag.position.set(t * 1.4, 2.47 + spanDy * t, 0);
           flag.userData.nonCollidable = true;
+          flag.userData.noMerge = true;
           artifact.add(flag);
         }
       }
@@ -1925,31 +2097,32 @@ export class WorldEngine {
       stepSide === 0 ? 1 : (stepSide > 0 ? 1 : -1),
       surface,
     );
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.footstepCount = String(this.footstepBurstCount);
-      this.renderer.domElement.dataset.footstepActive = 'true';
-      this.renderer.domElement.dataset.footprintDecals = String(this.footprintPool.totalSpawned);
-    }
+    this.writeDataset('footstepCount', String(this.footstepBurstCount));
+    this.writeDataset('footstepActive', 'true');
+    this.writeDataset('footprintDecals', String(this.footprintPool.totalSpawned));
   }
 
   private buildFootprintDecals(): void {
-    const c = document.createElement('canvas');
-    c.width = 64;
-    c.height = 128;
-    const ctx = c.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, 64, 128);
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      // Soft sole oval + heel oval silhouette
-      ctx.beginPath();
-      ctx.ellipse(32, 42, 16, 26, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(32, 92, 12.5, 16, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    this.footprintTex = new THREE.CanvasTexture(c);
-    this.footprintTex.colorSpace = THREE.SRGBColorSpace;
+    this.footprintTex = getCachedTexture('footprint-decal-tex', () => {
+      const c = document.createElement('canvas');
+      c.width = 64;
+      c.height = 128;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, 64, 128);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        // Soft sole oval + heel oval silhouette
+        ctx.beginPath();
+        ctx.ellipse(32, 42, 16, 26, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(32, 92, 12.5, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    });
     this.footprintGeo = new THREE.PlaneGeometry(0.18, 0.34);
     this.footprintGeo.rotateX(-Math.PI / 2);
     this.footprintMat = new THREE.MeshBasicMaterial({
@@ -2006,103 +2179,104 @@ export class WorldEngine {
     }
     this.footprintInst.instanceMatrix.needsUpdate = true;
     if (this.footprintInst.instanceColor) this.footprintInst.instanceColor.needsUpdate = true;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.activeFootprints = String(activeCount);
-    }
+    this.writeDataset('activeFootprints', String(activeCount));
   }
 
   private buildMeditationButterflies(): void {
-    // Paint a detailed scalloped monarch/swallowtail wing alpha+vein CanvasTexture
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, 256, 256);
+    this.butterflyWingTex = getCachedTexture('butterfly-wing-tex', () => {
+      // Paint a detailed scalloped monarch/swallowtail wing alpha+vein CanvasTexture
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d')!;
+      ctx.clearRect(0, 0, 256, 256);
 
-    // Forewing outer silhouette (hinge at x=0, tip toward x=244, y=34)
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(4, 112);
-    ctx.bezierCurveTo(58, 44, 168, 12, 238, 30);
-    ctx.bezierCurveTo(250, 48, 240, 96, 210, 128);
-    ctx.bezierCurveTo(174, 146, 84, 138, 4, 128);
-    ctx.closePath();
-
-    // Hindwing scalloped silhouette (y=124..242)
-    ctx.moveTo(4, 124);
-    ctx.bezierCurveTo(86, 126, 178, 138, 198, 174);
-    ctx.bezierCurveTo(206, 200, 178, 232, 138, 240);
-    ctx.bezierCurveTo(122, 244, 112, 234, 96, 242);
-    ctx.bezierCurveTo(60, 234, 22, 196, 4, 142);
-    ctx.closePath();
-
-    const grad = ctx.createRadialGradient(34, 124, 12, 140, 124, 210);
-    grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(0.55, '#f4f4f4');
-    grad.addColorStop(0.84, '#d8d8d8');
-    grad.addColorStop(1, '#262120');
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.clip();
-
-    // Dark scalloped wing margin & delicate cream marginal spots
-    ctx.strokeStyle = '#1c1816';
-    ctx.lineWidth = 22;
-    ctx.stroke();
-
-    ctx.fillStyle = '#fff9eb';
-    const spots: Array<[number, number, number]> = [
-      [226, 42, 4.5],
-      [228, 66, 4.0],
-      [218, 92, 4.0],
-      [204, 115, 3.8],
-      [186, 166, 3.6],
-      [176, 194, 4.0],
-      [154, 218, 4.2],
-      [126, 228, 3.8],
-      [94, 226, 3.6],
-    ];
-    for (const [sx, sy, sr] of spots) {
+      // Forewing outer silhouette (hinge at x=0, tip toward x=244, y=34)
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.moveTo(4, 112);
+      ctx.bezierCurveTo(58, 44, 168, 12, 238, 30);
+      ctx.bezierCurveTo(250, 48, 240, 96, 210, 128);
+      ctx.bezierCurveTo(174, 146, 84, 138, 4, 128);
+      ctx.closePath();
+
+      // Hindwing scalloped silhouette (y=124..242)
+      ctx.moveTo(4, 124);
+      ctx.bezierCurveTo(86, 126, 178, 138, 198, 174);
+      ctx.bezierCurveTo(206, 200, 178, 232, 138, 240);
+      ctx.bezierCurveTo(122, 244, 112, 234, 96, 242);
+      ctx.bezierCurveTo(60, 234, 22, 196, 4, 142);
+      ctx.closePath();
+
+      const grad = ctx.createRadialGradient(34, 124, 12, 140, 124, 210);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.55, '#f4f4f4');
+      grad.addColorStop(0.84, '#d8d8d8');
+      grad.addColorStop(1, '#262120');
+      ctx.fillStyle = grad;
       ctx.fill();
-    }
 
-    // Crisp organic wing veins radiating from thorax hinge
-    ctx.strokeStyle = 'rgba(26, 20, 18, 0.85)';
-    ctx.lineCap = 'round';
-    const foreVeins: Array<[number, number, number, number, number, number]> = [
-      [8, 116, 86, 82, 226, 38],
-      [8, 118, 96, 94, 222, 68],
-      [8, 120, 102, 108, 210, 98],
-      [8, 122, 92, 122, 192, 124],
-    ];
-    ctx.lineWidth = 3.2;
-    for (const [x0, y0, cx1, cy1, x1, y1] of foreVeins) {
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.quadraticCurveTo(cx1, cy1, x1, y1);
-      ctx.stroke();
-    }
-    const hindVeins: Array<[number, number, number, number, number, number]> = [
-      [8, 130, 88, 148, 188, 168],
-      [8, 133, 82, 166, 166, 204],
-      [8, 136, 62, 184, 128, 228],
-      [8, 140, 38, 188, 76, 224],
-    ];
-    ctx.lineWidth = 2.8;
-    for (const [x0, y0, cx1, cy1, x1, y1] of hindVeins) {
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.quadraticCurveTo(cx1, cy1, x1, y1);
-      ctx.stroke();
-    }
-    ctx.restore();
+      ctx.clip();
 
-    this.butterflyWingTex = new THREE.CanvasTexture(canvas);
-    this.butterflyWingTex.colorSpace = THREE.SRGBColorSpace;
-    this.butterflyWingTex.needsUpdate = true;
+      // Dark scalloped wing margin & delicate cream marginal spots
+      ctx.strokeStyle = '#1c1816';
+      ctx.lineWidth = 22;
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff9eb';
+      const spots: Array<[number, number, number]> = [
+        [226, 42, 4.5],
+        [228, 66, 4.0],
+        [218, 92, 4.0],
+        [204, 115, 3.8],
+        [186, 166, 3.6],
+        [176, 194, 4.0],
+        [154, 218, 4.2],
+        [126, 228, 3.8],
+        [94, 226, 3.6],
+      ];
+      for (const [sx, sy, sr] of spots) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Crisp organic wing veins radiating from thorax hinge
+      ctx.strokeStyle = 'rgba(26, 20, 18, 0.85)';
+      ctx.lineCap = 'round';
+      const foreVeins: Array<[number, number, number, number, number, number]> = [
+        [8, 116, 86, 82, 226, 38],
+        [8, 118, 96, 94, 222, 68],
+        [8, 120, 102, 108, 210, 98],
+        [8, 122, 92, 122, 192, 124],
+      ];
+      ctx.lineWidth = 3.2;
+      for (const [x0, y0, cx1, cy1, x1, y1] of foreVeins) {
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(cx1, cy1, x1, y1);
+        ctx.stroke();
+      }
+      const hindVeins: Array<[number, number, number, number, number, number]> = [
+        [8, 130, 88, 148, 188, 168],
+        [8, 133, 82, 166, 166, 204],
+        [8, 136, 62, 184, 128, 228],
+        [8, 140, 38, 188, 76, 224],
+      ];
+      ctx.lineWidth = 2.8;
+      for (const [x0, y0, cx1, cy1, x1, y1] of hindVeins) {
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(cx1, cy1, x1, y1);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    });
 
     // Slightly cambered multi-quad wing mesh hinged at x=0 (positive +X wing; mirrored for left wing)
     const wingPos = new Float32Array([
@@ -2232,17 +2406,13 @@ export class WorldEngine {
     if (this.butterflyBodyInst) {
       this.butterflyBodyInst.instanceMatrix.needsUpdate = true;
     }
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.butterflyCount = String(this.butterflyStates.length);
-      this.renderer.domElement.dataset.butterflyFlockActive = this.isMeditating ? 'true' : 'false';
-    }
+    this.writeDataset('butterflyCount', String(this.butterflyStates.length));
+    this.writeDataset('butterflyFlockActive', this.isMeditating ? 'true' : 'false');
   }
 
   private updateFootstepParticles(dt: number): void {
     if (!this.fsActive) {
-      if (this.renderer?.domElement) {
-        this.renderer.domElement.dataset.footstepActive = 'false';
-      }
+      this.writeDataset('footstepActive', 'false');
       return;
     }
     let anyAlive = false;
@@ -2281,9 +2451,7 @@ export class WorldEngine {
     }
 
     this.fsActive = anyAlive;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.footstepActive = anyAlive ? 'true' : 'false';
-    }
+    this.writeDataset('footstepActive', anyAlive ? 'true' : 'false');
     (this.footstepGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (this.footstepGeo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
     (this.footstepGeo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
@@ -2754,9 +2922,7 @@ export class WorldEngine {
     const atten = Math.max(0.28, 1 - dist / 14);
     soundEngine.playTempleBell(atten * intensity, entry.pitchScale);
     this.bellRingsCount += 1;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.bellRings = String(this.bellRingsCount);
-    }
+    this.writeDataset('bellRings', String(this.bellRingsCount));
     this.callbacks.onBellRing?.();
   }
 
@@ -2818,21 +2984,30 @@ export class WorldEngine {
       const staticSnappedRoots: THREE.Object3D[] = [];
       this.scene.traverse((obj) => {
         if (obj.userData?.snapCategory && !obj.userData?.isInteractiveProp) {
-          staticSnappedRoots.push(obj);
+          let ancestorHasSnap = false;
+          let p = obj.parent;
+          while (p) {
+            if (p.userData?.snapCategory) {
+              ancestorHasSnap = true;
+              break;
+            }
+            p = p.parent;
+          }
+          if (!ancestorHasSnap) {
+            staticSnappedRoots.push(obj);
+          }
         }
       });
       if (staticSnappedRoots.length > 0) {
         this.physicsWorld.appendStaticObjects(staticSnappedRoots, exclude);
       }
-      if (this.renderer?.domElement) {
-        const stats = this.physicsWorld.getStats();
-        this.renderer.domElement.dataset.physicsWallTris = String(stats.wallTriangles);
-        this.renderer.domElement.dataset.physicsFloorTris = String(stats.floorTriangles);
-        this.renderer.domElement.dataset.physicsNavVerts = String(stats.navVertices);
-        this.renderer.domElement.dataset.sanitizedBarriers = String(report.sanitizedBarriers);
-        this.renderer.domElement.dataset.repairedGeometries = String(report.repairedGeometries);
-        this.renderer.domElement.dataset.addedUv1 = String(report.addedUv1Count);
-      }
+      const stats = this.physicsWorld.getStats();
+      this.writeDataset('physicsWallTris', String(stats.wallTriangles));
+      this.writeDataset('physicsFloorTris', String(stats.floorTriangles));
+      this.writeDataset('physicsNavVerts', String(stats.navVertices));
+      this.writeDataset('sanitizedBarriers', String(report.sanitizedBarriers));
+      this.writeDataset('repairedGeometries', String(report.repairedGeometries));
+      this.writeDataset('addedUv1', String(report.addedUv1Count));
     }
 
     return report;
@@ -2840,6 +3015,24 @@ export class WorldEngine {
 
   public getLastSanitizeReport(): GeometrySanitizeReport | null {
     return this.lastSanitizeReport;
+  }
+
+  private refreshOccluderSpheres(): void {
+    this.occluderSpheres.length = 0;
+    this.scene.updateMatrixWorld(true);
+    for (let i = 0; i < this.cameraOccluders.length; i++) {
+      const obj = this.cameraOccluders[i];
+      this.occluderTmpBox.setFromObject(obj);
+      if (this.occluderTmpBox.isEmpty()) continue;
+      this.occluderTmpBox.getBoundingSphere(this.occluderTmpSphere);
+      this.occluderSpheres.push({
+        objIndex: i,
+        cx: this.occluderTmpSphere.center.x,
+        cy: this.occluderTmpSphere.center.y,
+        cz: this.occluderTmpSphere.center.z,
+        radius: this.occluderTmpSphere.radius,
+      });
+    }
   }
 
   private buildPhysicsBvhAndSnapAssets(): void {
@@ -2850,26 +3043,50 @@ export class WorldEngine {
     });
     this.snappedAssetsCount = this.snapInteractiveAssetsToFloor();
 
+    if (!this.staticGroundsMerged) {
+      if (this.outerGroundsGroup) {
+        mergeStaticMeshesByMaterial(this.outerGroundsGroup, {
+          preserveCustomShaderMaterials: true,
+        });
+      }
+      if (this.curbedRoadsLanternGroup) {
+        mergeStaticMeshesByMaterial(this.curbedRoadsLanternGroup, {
+          preserveCustomShaderMaterials: true,
+        });
+      }
+      this.staticGroundsMerged = true;
+    }
+    this.refreshOccluderSpheres();
+
     const staticSnappedRoots: THREE.Object3D[] = [];
     this.scene.traverse((obj) => {
       if (obj.userData?.snapCategory && !obj.userData?.isInteractiveProp) {
-        staticSnappedRoots.push(obj);
+        let ancestorHasSnap = false;
+        let p = obj.parent;
+        while (p) {
+          if (p.userData?.snapCategory) {
+            ancestorHasSnap = true;
+            break;
+          }
+          p = p.parent;
+        }
+        if (!ancestorHasSnap) {
+          staticSnappedRoots.push(obj);
+        }
       }
     });
     if (staticSnappedRoots.length > 0) {
       this.physicsWorld.appendStaticObjects(staticSnappedRoots, exclude);
     }
 
-    if (this.renderer?.domElement) {
-      const stats = this.physicsWorld.getStats();
-      this.renderer.domElement.dataset.physicsWallTris = String(stats.wallTriangles);
-      this.renderer.domElement.dataset.physicsFloorTris = String(stats.floorTriangles);
-      this.renderer.domElement.dataset.physicsNavVerts = String(stats.navVertices);
-      this.renderer.domElement.dataset.snappedAssets = String(this.snappedAssetsCount);
-      this.renderer.domElement.dataset.sanitizedBarriers = String(report.sanitizedBarriers);
-      this.renderer.domElement.dataset.repairedGeometries = String(report.repairedGeometries);
-      this.renderer.domElement.dataset.addedUv1 = String(report.addedUv1Count);
-    }
+    const stats = this.physicsWorld.getStats();
+    this.writeDataset('physicsWallTris', String(stats.wallTriangles));
+    this.writeDataset('physicsFloorTris', String(stats.floorTriangles));
+    this.writeDataset('physicsNavVerts', String(stats.navVertices));
+    this.writeDataset('snappedAssets', String(this.snappedAssetsCount));
+    this.writeDataset('sanitizedBarriers', String(report.sanitizedBarriers));
+    this.writeDataset('repairedGeometries', String(report.repairedGeometries));
+    this.writeDataset('addedUv1', String(report.addedUv1Count));
   }
 
   /**
@@ -3223,9 +3440,6 @@ export class WorldEngine {
         this.composer.setPixelRatio(this.renderer.getPixelRatio());
         this.composer.setSize(w, h);
       }
-      if (this.gtaoPass) {
-        this.gtaoPass.setSize(w, h);
-      }
       if (this.bloomPass) {
         this.bloomPass.resolution.set(w, h);
       }
@@ -3424,6 +3638,7 @@ export class WorldEngine {
 
   public setTimePreset(preset: TimePreset): void {
     this.timePreset = preset;
+    this.shadowForceDirty = true;
     this.syncLighting((performance.now() - this.startTimeMs) / 1000);
     this.emitHud(true);
     this.scheduleImmediateRender();
@@ -3444,6 +3659,7 @@ export class WorldEngine {
 
   public setWeather(weather: WeatherKind): void {
     this.weather = weather;
+    this.shadowForceDirty = true;
     this.pondRainIntensity = weather === 'rain' ? 1.0 : weather === 'mist' ? 0.14 : 0.0;
     REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value = this.pondRainIntensity;
     this.weatherParticles?.syncWeatherImmediate(weather, this.getPixelScale());
@@ -3457,6 +3673,7 @@ export class WorldEngine {
 
   public setLumbiniPreset(preset: LumbiniAmbiencePreset): void {
     this.lumbiniPreset = preset;
+    this.shadowForceDirty = true;
     this.syncLighting((performance.now() - this.startTimeMs) / 1000);
     this.emitHud(true);
     this.scheduleImmediateRender();
@@ -3467,9 +3684,7 @@ export class WorldEngine {
     if (this.character?.root) {
       this.character.root.visible = Boolean(this.focusedLandmark) || mode !== 'first-person';
     }
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.cameraMode = mode;
-    }
+    this.writeDataset('cameraMode', mode);
     this.emitHud(true);
     this.scheduleImmediateRender();
   }
@@ -3483,6 +3698,7 @@ export class WorldEngine {
 
   public setGraphicsQuality(preset: GraphicsQualityPreset): void {
     this.graphicsQuality = preset;
+    this.shadowForceDirty = true;
     const cfg = getGraphicsQualityConfig(preset);
     this.grassController?.setQuality?.(preset);
     if (this.renderer) {
@@ -3497,8 +3713,9 @@ export class WorldEngine {
         this.sunLight.shadow.map?.dispose();
         this.sunLight.shadow.map = null;
       }
-      this.renderer.domElement.dataset.graphicsQuality = preset;
+      this.writeDataset('graphicsQuality', preset);
     }
+    this.syncLighting((performance.now() - this.startTimeMs) / 1000);
     this.scheduleImmediateRender();
   }
 
@@ -3509,9 +3726,7 @@ export class WorldEngine {
     entry.velocity = Math.min(28, entry.velocity + impulse);
     entry.cooldownUntil = elapsed + 0.9;
     this.prayerWheelSpinsCount += 1;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
-    }
+    this.writeDataset('prayerWheelSpins', String(this.prayerWheelSpinsCount));
     this.spawnPrayerWheelParticles(entry.worldPos.x, entry.worldPos.y + 0.15, entry.worldPos.z, impulse / 14);
     soundEngine.playPrayerWheelSpin();
   }
@@ -3541,9 +3756,7 @@ export class WorldEngine {
       pondY: 0.16,
     });
     this.pebbleTossesCount += 1;
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.pebbleTosses = String(this.pebbleTossesCount);
-    }
+    this.writeDataset('pebbleTosses', String(this.pebbleTossesCount));
     soundEngine.playClick();
   }
 
@@ -3598,13 +3811,9 @@ export class WorldEngine {
     );
     soundEngine.playRitualButterLampOffering(litCount);
 
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.butterLampsLit = String(litCount);
-      this.renderer.domElement.dataset.ritualOfferings = String(this.ritualOfferingsCount);
-      this.renderer.domElement.dataset.ritualOfferingSounds = String(
-        soundEngine.getRitualOfferingSoundCount(),
-      );
-    }
+    this.writeDataset('butterLampsLit', String(litCount));
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.writeDataset('ritualOfferingSounds', String(soundEngine.getRitualOfferingSoundCount()));
     this.lastContextualAction = this.getContextualAction();
     this.emitHud(true);
     this.scheduleImmediateRender();
@@ -3612,28 +3821,59 @@ export class WorldEngine {
 
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
-    const wheelSpots = this.prayerWheelEntries.map((w) => ({
-      x: w.worldPos.x,
-      z: w.worldPos.z,
-    }));
-    const bellSpots = this.templeBellEntries.map((b) => ({
-      x: b.worldPos.x,
-      z: b.worldPos.z,
-    }));
-    const lampSpots = this.butterLampEntries.map((l) => ({
-      x: l.worldPos.x,
-      z: l.worldPos.z,
-      isLit: l.isLit,
-    }));
+
+    const wLen = this.prayerWheelEntries.length;
+    this.wheelSpotsScratch.length = wLen;
+    for (let i = 0; i < wLen; i++) {
+      const wp = this.prayerWheelEntries[i].worldPos;
+      let slot = this.wheelSpotsScratch[i];
+      if (!slot) {
+        slot = { x: wp.x, z: wp.z };
+        this.wheelSpotsScratch[i] = slot;
+      } else {
+        slot.x = wp.x;
+        slot.z = wp.z;
+      }
+    }
+
+    const bLen = this.templeBellEntries.length;
+    this.bellSpotsScratch.length = bLen;
+    for (let i = 0; i < bLen; i++) {
+      const wp = this.templeBellEntries[i].worldPos;
+      let slot = this.bellSpotsScratch[i];
+      if (!slot) {
+        slot = { x: wp.x, z: wp.z };
+        this.bellSpotsScratch[i] = slot;
+      } else {
+        slot.x = wp.x;
+        slot.z = wp.z;
+      }
+    }
+
+    const lLen = this.butterLampEntries.length;
+    this.lampSpotsScratch.length = lLen;
+    for (let i = 0; i < lLen; i++) {
+      const entry = this.butterLampEntries[i];
+      let slot = this.lampSpotsScratch[i];
+      if (!slot) {
+        slot = { x: entry.worldPos.x, z: entry.worldPos.z, isLit: entry.isLit };
+        this.lampSpotsScratch[i] = slot;
+      } else {
+        slot.x = entry.worldPos.x;
+        slot.z = entry.worldPos.z;
+        slot.isLit = entry.isLit;
+      }
+    }
+
     return computeContextualWorldAction(
       this.playerPos.x,
       this.playerPos.z,
       nearest?.landmark ?? null,
-      wheelSpots,
-      bellSpots,
+      this.wheelSpotsScratch,
+      this.bellSpotsScratch,
       this.pebbleSpots,
       this.meditationSpots,
-      lampSpots,
+      this.lampSpotsScratch,
     );
   }
 
@@ -3807,16 +4047,40 @@ export class WorldEngine {
       const desiredDist = _camRayDir.length();
       if (desiredDist > 0.1) {
         _camRayDir.divideScalar(desiredDist);
-        this.raycaster.layers.set(0);
-        this.raycaster.near = 0.22;
-        this.raycaster.far = desiredDist;
-        this.raycaster.set(lookAt, _camRayDir);
-        const hits = this.raycaster.intersectObjects(this.cameraOccluders, false);
-        this.raycaster.near = 0;
-        this.raycaster.far = Infinity;
-        if (hits.length > 0) {
-          const safeDist = Math.max(0.75, hits[0].distance - 0.35);
-          camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+        this.filteredOccludersScratch.length = 0;
+        for (let i = 0; i < this.occluderSpheres.length; i++) {
+          const s = this.occluderSpheres[i];
+          if (
+            raySegmentHitsSphere(
+              lookAt.x,
+              lookAt.y,
+              lookAt.z,
+              _camRayDir.x,
+              _camRayDir.y,
+              _camRayDir.z,
+              desiredDist,
+              s.cx,
+              s.cy,
+              s.cz,
+              s.radius,
+              0.75,
+            )
+          ) {
+            this.filteredOccludersScratch.push(this.cameraOccluders[s.objIndex]);
+          }
+        }
+        if (this.filteredOccludersScratch.length > 0) {
+          this.raycaster.layers.set(0);
+          this.raycaster.near = 0.22;
+          this.raycaster.far = desiredDist;
+          this.raycaster.set(lookAt, _camRayDir);
+          const hits = this.raycaster.intersectObjects(this.filteredOccludersScratch, false);
+          this.raycaster.near = 0;
+          this.raycaster.far = Infinity;
+          if (hits.length > 0) {
+            const safeDist = Math.max(0.75, hits[0].distance - 0.35);
+            camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+          }
         }
       }
     }
@@ -3885,6 +4149,7 @@ export class WorldEngine {
     const safe = clampToWalkable(this.playerPos.x, this.playerPos.z, x, z);
     this.playerPos.x = safe.x;
     this.playerPos.z = safe.z;
+    this.shadowForceDirty = true;
     this.playerPos.y = getSurfaceHeightAt(safe.x, safe.z);
     this.playerVelY = 0;
     this.isGrounded = true;
@@ -3918,41 +4183,45 @@ export class WorldEngine {
       this.playerPos.y,
     );
     this.camera.getWorldDirection(_camForward);
+    this.listenerPoseScratch.x = this.playerPos.x;
+    this.listenerPoseScratch.y = this.playerPos.y + 1.6;
+    this.listenerPoseScratch.z = this.playerPos.z;
+    this.listenerPoseScratch.forwardX = _camForward.x;
+    this.listenerPoseScratch.forwardY = _camForward.y;
+    this.listenerPoseScratch.forwardZ = _camForward.z;
     soundEngine.updateAmbience(
       ambienceMix,
       0.016,
       this.lumbiniPreset,
       this.weather,
-      {
-        x: this.playerPos.x,
-        y: this.playerPos.y + 1.6,
-        z: this.playerPos.z,
-        forwardX: _camForward.x,
-        forwardY: _camForward.y,
-        forwardZ: _camForward.z,
-      },
+      this.listenerPoseScratch,
       getPresetHour(this.timePreset),
     );
-    if (this.renderer?.domElement) {
-      const ds = this.renderer.domElement.dataset;
-      const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
-      const forestBirdStatus = soundEngine.getForestBirdStatus();
-      const cricketStatus = soundEngine.getLumbiniCricketStatus();
-      ds.ambienceZone = ambienceMix.activeZone;
-      ds.lumbiniSpatialAudio = lumbiniSpatial.inZone ? 'true' : 'false';
-      ds.forestBirdInZone = forestBirdStatus.inForest ? 'true' : 'false';
-      ds.lastForestBirdEmitter =
-        forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none';
-      ds.cricketInZone = cricketStatus.inZone ? 'true' : 'false';
-      ds.lastCricketEmitter =
-        cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none';
-      ds.insideMayaDevi =
-        Math.abs(this.playerPos.x + 210) <= 17.2 &&
+    const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
+    const forestBirdStatus = soundEngine.getForestBirdStatus();
+    const cricketStatus = soundEngine.getLumbiniCricketStatus();
+    this.writeDataset('ambienceZone', ambienceMix.activeZone);
+    this.writeDataset('lumbiniSpatialAudio', lumbiniSpatial.inZone ? 'true' : 'false');
+    this.writeDataset('forestBirdInZone', forestBirdStatus.inForest ? 'true' : 'false');
+    this.writeDataset(
+      'lastForestBirdEmitter',
+      forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none',
+    );
+    this.writeDataset('cricketInZone', cricketStatus.inZone ? 'true' : 'false');
+    this.writeDataset(
+      'lastCricketEmitter',
+      cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none',
+    );
+    this.writeDataset(
+      'insideMayaDevi',
+      Math.abs(this.playerPos.x + 210) <= 17.2 &&
         this.playerPos.z >= 62.8 &&
         this.playerPos.z <= 85.2
-          ? 'true'
-          : 'false';
-    }
+        ? 'true'
+        : 'false',
+    );
+    this.lastSyncDatasetFlushAt = -10;
+    this.lastSimDatasetFlushAt = -10;
     this.emitHud(true);
   }
 
@@ -4006,6 +4275,40 @@ export class WorldEngine {
     this.sunLight.target.updateMatrixWorld();
     this.sunLight.position.set(lx + sunOffX, sunOffY, lz + sunOffZ);
 
+    const sunDirLen = Math.hypot(sunOffX, sunOffY, sunOffZ) || 1;
+    const sunDirX = sunOffX / sunDirLen;
+    const sunDirY = sunOffY / sunDirLen;
+    const sunDirZ = sunOffZ / sunDirLen;
+    if (!this.isSoftwareGl && this.renderer?.shadowMap.enabled) {
+      const nextShadowState: ShadowUpdateCheckInput = {
+        targetX: lx,
+        targetZ: lz,
+        sunDirX,
+        sunDirY,
+        sunDirZ,
+      };
+      if (
+        shouldUpdateShadowMap(
+          this.shadowPrevState,
+          nextShadowState,
+          this.shadowForceDirty,
+          this.maxMovingPropSpeed,
+        )
+      ) {
+        this.renderer.shadowMap.needsUpdate = true;
+        if (!this.shadowPrevState) {
+          this.shadowPrevState = nextShadowState;
+        } else {
+          this.shadowPrevState.targetX = lx;
+          this.shadowPrevState.targetZ = lz;
+          this.shadowPrevState.sunDirX = sunDirX;
+          this.shadowPrevState.sunDirY = sunDirY;
+          this.shadowPrevState.sunDirZ = sunDirZ;
+        }
+        this.shadowForceDirty = false;
+      }
+    }
+
     const inMayaDeviSanctum =
       Math.abs(lightingAnchor.x + 210) <= 17.8 &&
       lightingAnchor.z >= 62.2 &&
@@ -4022,9 +4325,7 @@ export class WorldEngine {
 
     this.skyDomeMat.uniforms.topColor.value.set(state.skyTopColor);
     this.skyDomeMat.uniforms.horizonColor.value.set(state.skyHorizonColor);
-    this.skyDomeMat.uniforms.sunDir.value
-      .set(sunOffX, sunOffY, sunOffZ)
-      .normalize();
+    this.skyDomeMat.uniforms.sunDir.value.set(sunDirX, sunDirY, sunDirZ);
     this.skyDomeMat.uniforms.sunColor.value.set(state.sunColor);
     if (this.scene.background instanceof THREE.Color) {
       this.scene.background.set(state.fogColor);
@@ -4042,14 +4343,12 @@ export class WorldEngine {
     REFLECTIVE_WATER_ENV_UNIFORMS.uSkyColor.value
       .set(state.skyHorizonColor)
       .lerp(_targetColor.set(state.skyTopColor), 0.35);
-    REFLECTIVE_WATER_ENV_UNIFORMS.uSunDir.value
-      .set(sunOffX, sunOffY, sunOffZ)
-      .normalize();
+    REFLECTIVE_WATER_ENV_UNIFORMS.uSunDir.value.set(sunDirX, sunDirY, sunDirZ);
     REFLECTIVE_WATER_ENV_UNIFORMS.uSunColor.value.set(state.sunColor);
     REFLECTIVE_WATER_ENV_UNIFORMS.uFogColor.value.set(state.fogColor);
     REFLECTIVE_WATER_ENV_UNIFORMS.uFogDensity.value = state.fogDensity * 0.85;
     WORLD_HAZE_UNIFORMS.uHazeColor.value.set(state.fogColor);
-    WORLD_HAZE_UNIFORMS.uSunDir.value.set(sunOffX, sunOffY, sunOffZ).normalize();
+    WORLD_HAZE_UNIFORMS.uSunDir.value.set(sunDirX, sunDirY, sunDirZ);
     WORLD_HAZE_UNIFORMS.uSunColor.value.set(state.sunColor);
     WORLD_HAZE_UNIFORMS.uHazeDensity.value = Math.max(0.0022, state.fogDensity * 1.15);
     WORLD_HAZE_UNIFORMS.uMaxHaze.value =
@@ -4073,30 +4372,29 @@ export class WorldEngine {
         this.pooledPointLights[i].intensity = 0;
       }
     } else {
-      const chosen: Array<{ idx: number; distSq: number }> = [];
-      for (let i = 0; i < this.beaconPoolDescs.length; i++) {
-        const desc = this.beaconPoolDescs[i];
-        if (state.lanternIntensity <= 0.02 && !desc.interiorSanctum) continue;
-        const p = desc.pos;
-        const dx = p.x - lx;
-        const dz = p.z - lz;
-        const distSq = dx * dx + dz * dz;
-        if (chosen.length < this.pooledPointLights.length) {
-          chosen.push({ idx: i, distSq });
-          chosen.sort((a, b) => a.distSq - b.distSq);
-        } else if (distSq < chosen[chosen.length - 1].distSq) {
-          chosen[chosen.length - 1] = { idx: i, distSq };
-          chosen.sort((a, b) => a.distSq - b.distSq);
-        }
+      const descCount = this.beaconPoolDescs.length;
+      for (let i = 0; i < descCount; i++) {
+        this.beaconEligible[i] =
+          state.lanternIntensity <= 0.02 && !this.beaconPoolDescs[i].interiorSanctum ? 0 : 1;
       }
+      const selectedCount = selectClosestIndicesZeroAlloc(
+        this.beaconPosX,
+        this.beaconPosZ,
+        this.beaconEligible,
+        descCount,
+        lx,
+        lz,
+        this.beaconSelectedIdx,
+        this.beaconSelectedDistSq,
+        this.pooledPointLights.length,
+      );
       for (let i = 0; i < this.pooledPointLights.length; i++) {
         const pl = this.pooledPointLights[i];
-        const pick = chosen[i];
-        if (!pick) {
+        if (i >= selectedCount) {
           pl.intensity = 0;
           continue;
         }
-        const desc = this.beaconPoolDescs[pick.idx];
+        const desc = this.beaconPoolDescs[this.beaconSelectedIdx[i]];
         pl.position.copy(desc.pos);
         pl.distance = desc.distance;
         pl.decay = desc.decay;
@@ -4147,6 +4445,14 @@ export class WorldEngine {
     }
 
     for (let i = 0; i < this.animatedLandmarkNodes.length; i++) {
+      const anchor = this.animatedNodeAnchors[i];
+      if (
+        anchor &&
+        !anchor.isGlobal &&
+        !isWithinSleepDistanceSq(anchor.x, anchor.z, lx, lz, 8100)
+      ) {
+        continue;
+      }
       const node = this.animatedLandmarkNodes[i];
       if (typeof node.userData.onEnvironmentUpdate === 'function') {
         node.userData.onEnvironmentUpdate(this.birdEnvState);
@@ -4173,21 +4479,33 @@ export class WorldEngine {
       state.phaseLabel,
     );
     const pixelScale = this.getPixelScale();
-    this.lumbiniFireflies?.update(elapsed, fireflyIntensity, pixelScale);
+    if (this.lumbiniFireflies) {
+      const nearFireflies = isWithinSleepDistanceSq(lx, lz, -210, 88, 14400);
+      this.lumbiniFireflies.points.visible = nearFireflies && fireflyIntensity > 0.01;
+      if (nearFireflies) {
+        this.lumbiniFireflies.update(elapsed, fireflyIntensity, pixelScale);
+      }
+    }
     let litLampCount = 0;
     for (let i = 0; i < this.butterLampEntries.length; i++) {
       if (this.butterLampEntries[i].isLit) litLampCount++;
     }
     const ritualGlow =
       this.butterLampEntries.length > 0 ? litLampCount / this.butterLampEntries.length : 0;
-    this.lumbiniIncenseSmoke?.update(
-      elapsed,
-      this.birdEnvState.windX,
-      this.birdEnvState.windZ,
-      pixelScale,
-      state.sunColor,
-      ritualGlow,
-    );
+    if (this.lumbiniIncenseSmoke) {
+      const nearSmoke = isWithinSleepDistanceSq(lx, lz, -210, 74, 8100);
+      this.lumbiniIncenseSmoke.points.visible = nearSmoke;
+      if (nearSmoke) {
+        this.lumbiniIncenseSmoke.update(
+          elapsed,
+          this.birdEnvState.windX,
+          this.birdEnvState.windZ,
+          pixelScale,
+          state.sunColor,
+          ritualGlow,
+        );
+      }
+    }
     if (this.atmospherePoints) {
       this.atmospherePoints.visible = this.weather === 'mist' || this.weather === 'foggy';
     }
@@ -4195,40 +4513,39 @@ export class WorldEngine {
       this.sakuraPetalsPoints.visible = this.weather === 'clear' || this.weather === 'mist';
     }
 
-    const canvas = this.renderer?.domElement;
-    if (canvas) {
-      canvas.dataset.weather = this.weather;
-      canvas.dataset.lumbiniPreset = this.lumbiniPreset;
-      canvas.dataset.lumbiniBlend = lumbiniBlend.toFixed(2);
-      canvas.dataset.particleIntensity = profile.activeRatio.toFixed(2);
-      canvas.dataset.weatherParticleMode = this.weatherParticles?.currentMode ?? 'petals';
-      canvas.dataset.weatherParticleCount = String(this.weatherParticles?.count ?? 0);
-      canvas.dataset.lumbiniFireflyIntensity = fireflyIntensity.toFixed(2);
-      canvas.dataset.lumbiniFireflyCount = String(this.lumbiniFireflies?.count ?? 0);
-      canvas.dataset.incenseSmokeCount = String(this.lumbiniIncenseSmoke?.count ?? 0);
-      canvas.dataset.butterLampsLit = String(litLampCount);
-      canvas.dataset.butterLampsTotal = String(this.butterLampEntries.length);
-      canvas.dataset.ritualOfferings = String(this.ritualOfferingsCount);
-      canvas.dataset.ritualOfferingSounds = String(soundEngine.getRitualOfferingSoundCount());
-      canvas.dataset.lastApproachCueLandmark = this.lastApproachCueLandmarkId ?? 'none';
-      canvas.dataset.approachCueCount = String(this.approachCueCount);
-      canvas.dataset.cameraFar = String(Math.round(this.camera.far));
-      canvas.dataset.bloomStrength = state.bloomStrength.toFixed(2);
-      canvas.dataset.bloomThreshold = state.bloomThreshold.toFixed(2);
-      canvas.dataset.postprocessing = this.composer
-        ? this.gtaoPass
-          ? 'gtao+bloom'
-          : 'bloom'
-        : 'direct';
-      canvas.dataset.lotusCount = String(this.lumbiniLotusCount);
-      canvas.dataset.pondRainRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value.toFixed(2);
-      canvas.dataset.pondProximityRipple = REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2);
-      canvas.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
-      canvas.dataset.prayerWheelParticles = String(this.prayerWheelParticleBursts);
-      canvas.dataset.playerX = this.playerPos.x.toFixed(1);
-      canvas.dataset.playerZ = this.playerPos.z.toFixed(1);
-      canvas.dataset.distanceWalked = String(Math.round(this.distanceWalked));
-      canvas.dataset.cameraMode = this.cameraMode;
+    if (
+      this.renderer?.domElement &&
+      (this.lastSyncDatasetFlushAt < 0 || elapsed - this.lastSyncDatasetFlushAt >= 0.25)
+    ) {
+      this.lastSyncDatasetFlushAt = elapsed;
+      this.writeDataset('weather', this.weather);
+      this.writeDataset('lumbiniPreset', this.lumbiniPreset);
+      this.writeDataset('lumbiniBlend', lumbiniBlend.toFixed(2));
+      this.writeDataset('particleIntensity', profile.activeRatio.toFixed(2));
+      this.writeDataset('weatherParticleMode', this.weatherParticles?.currentMode ?? 'petals');
+      this.writeDataset('weatherParticleCount', String(this.weatherParticles?.count ?? 0));
+      this.writeDataset('lumbiniFireflyIntensity', fireflyIntensity.toFixed(2));
+      this.writeDataset('lumbiniFireflyCount', String(this.lumbiniFireflies?.count ?? 0));
+      this.writeDataset('incenseSmokeCount', String(this.lumbiniIncenseSmoke?.count ?? 0));
+      this.writeDataset('butterLampsLit', String(litLampCount));
+      this.writeDataset('butterLampsTotal', String(this.butterLampEntries.length));
+      this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+      this.writeDataset('ritualOfferingSounds', String(soundEngine.getRitualOfferingSoundCount()));
+      this.writeDataset('lastApproachCueLandmark', this.lastApproachCueLandmarkId ?? 'none');
+      this.writeDataset('approachCueCount', String(this.approachCueCount));
+      this.writeDataset('cameraFar', String(Math.round(this.camera.far)));
+      this.writeDataset('bloomStrength', state.bloomStrength.toFixed(2));
+      this.writeDataset('bloomThreshold', state.bloomThreshold.toFixed(2));
+      this.writeDataset('postprocessing', this.composer ? 'bloom' : 'direct');
+      this.writeDataset('lotusCount', String(this.lumbiniLotusCount));
+      this.writeDataset('pondRainRipple', REFLECTIVE_WATER_ENV_UNIFORMS.uRainIntensity.value.toFixed(2));
+      this.writeDataset('pondProximityRipple', REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2));
+      this.writeDataset('pondTrailRipples', String(this.pondTrailRippleCount));
+      this.writeDataset('prayerWheelParticles', String(this.prayerWheelParticleBursts));
+      this.writeDataset('playerX', this.playerPos.x.toFixed(1));
+      this.writeDataset('playerZ', this.playerPos.z.toFixed(1));
+      this.writeDataset('distanceWalked', String(Math.round(this.distanceWalked)));
+      this.writeDataset('cameraMode', this.cameraMode);
     }
   }
 
@@ -4342,9 +4659,18 @@ export class WorldEngine {
     const targetRainIntensity = this.weather === 'rain' ? 1.0 : this.weather === 'mist' ? 0.14 : 0.0;
     this.pondRainIntensity += (targetRainIntensity - this.pondRainIntensity) * (1 - Math.exp(-4.0 * dt));
     this.syncLighting(elapsed);
+
+    const simAnchor = this.gameState === 'title' ? this.currentLookAt : this.playerPos;
+    const simX = simAnchor.x;
+    const simZ = simAnchor.z;
+
     this.riverController.update(elapsed);
-    this.glacialLakeController?.update(elapsed);
-    this.peaceParklandController?.update(elapsed);
+    if (isWithinSleepDistanceSq(simX, simZ, GLACIAL_LAKE.x, GLACIAL_LAKE.z, 10000)) {
+      this.glacialLakeController?.update(elapsed);
+    }
+    if (isWithinSleepDistanceSq(simX, simZ, -268, 100, 14400)) {
+      this.peaceParklandController?.update(elapsed);
+    }
     this.treeBumpStrength *= Math.exp(-5.5 * dt);
     this.foliageController.update(elapsed, this.treeBumpPos, this.treeBumpStrength);
 
@@ -4413,20 +4739,18 @@ export class WorldEngine {
       this.playerPos.y,
     );
     this.camera.getWorldDirection(_camForward);
-    const listenerPose = {
-      x: this.playerPos.x,
-      y: this.playerPos.y + 1.6,
-      z: this.playerPos.z,
-      forwardX: _camForward.x,
-      forwardY: _camForward.y,
-      forwardZ: _camForward.z,
-    };
+    this.listenerPoseScratch.x = this.playerPos.x;
+    this.listenerPoseScratch.y = this.playerPos.y + 1.6;
+    this.listenerPoseScratch.z = this.playerPos.z;
+    this.listenerPoseScratch.forwardX = _camForward.x;
+    this.listenerPoseScratch.forwardY = _camForward.y;
+    this.listenerPoseScratch.forwardZ = _camForward.z;
     soundEngine.updateAmbience(
       ambienceMix,
       dt,
       this.lumbiniPreset,
       this.weather,
-      listenerPose,
+      this.listenerPoseScratch,
       getPresetHour(this.timePreset),
     );
 
@@ -4439,25 +4763,22 @@ export class WorldEngine {
       );
       if (approachMatch && soundEngine.isEnabled()) {
         const lm = approachMatch.landmark;
-        const targetPos = {
-          x: lm.position.x,
-          y: groundHeightAt(lm.position.x, lm.position.z) + 2.4,
-          z: lm.position.z,
-        };
         const played = soundEngine.playLandmarkApproachCue(
           lm.id,
-          targetPos,
+          {
+            x: lm.position.x,
+            y: groundHeightAt(lm.position.x, lm.position.z) + 2.4,
+            z: lm.position.z,
+          },
           approachMatch.cueRadius,
-          listenerPose,
+          this.listenerPoseScratch,
         );
         if (played) {
           this.cuedLandmarkIds.add(lm.id);
           this.lastApproachCueLandmarkId = lm.id;
           this.approachCueCount++;
-          if (this.renderer?.domElement) {
-            this.renderer.domElement.dataset.lastApproachCueLandmark = lm.id;
-            this.renderer.domElement.dataset.approachCueCount = String(this.approachCueCount);
-          }
+          this.writeDataset('lastApproachCueLandmark', lm.id);
+          this.writeDataset('approachCueCount', String(this.approachCueCount));
         }
       }
     }
@@ -4485,48 +4806,62 @@ export class WorldEngine {
         );
       }
     }
-    const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
-    const forestBirdStatus = soundEngine.getForestBirdStatus();
-    const cricketStatus = soundEngine.getLumbiniCricketStatus();
-    const lumbiniAudio = computeLumbiniAudioProfile(ambienceMix, this.lumbiniPreset, this.weather);
     const surfaceKind = getFootstepSurfaceKind(this.playerPos.x, this.playerPos.z);
-    if (this.renderer?.domElement) {
-      this.renderer.domElement.dataset.ambienceZone = ambienceMix.activeZone;
-      this.renderer.domElement.dataset.surfaceKind = surfaceKind;
-      this.renderer.domElement.dataset.forestLevel = ambienceMix.forestLevel.toFixed(2);
-      this.renderer.domElement.dataset.rustleLevel = ambienceMix.rustleLevel.toFixed(2);
-      this.renderer.domElement.dataset.chimeActivity = lumbiniAudio.chimeActivity.toFixed(2);
-      this.renderer.domElement.dataset.bowlActivity = lumbiniAudio.bowlActivity.toFixed(2);
-      this.renderer.domElement.dataset.flagFlutter = lumbiniAudio.flagFlutterLevel.toFixed(2);
-      this.renderer.domElement.dataset.lumbiniSpatialAudio = lumbiniSpatial.inZone ? 'true' : 'false';
-      this.renderer.domElement.dataset.lumbiniBirdEmitter =
-        lumbiniSpatial.lastBirdEmitterId ?? lumbiniSpatial.nearestBirdEmitterId ?? 'none';
-      this.renderer.domElement.dataset.lumbiniRustleEmitter =
-        lumbiniSpatial.lastRustleEmitterId ?? lumbiniSpatial.nearestRustleEmitterId ?? 'none';
-      this.renderer.domElement.dataset.lumbiniBirdEvents = String(lumbiniSpatial.birdEventCount);
-      this.renderer.domElement.dataset.lumbiniRustleEvents = String(lumbiniSpatial.rustleEventCount);
-      this.renderer.domElement.dataset.forestBirdInZone = forestBirdStatus.inForest ? 'true' : 'false';
-      this.renderer.domElement.dataset.forestBirdEvents = String(forestBirdStatus.eventCount);
-      this.renderer.domElement.dataset.lastForestBirdEmitter =
-        forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none';
-      this.renderer.domElement.dataset.cricketInZone = cricketStatus.inZone ? 'true' : 'false';
-      this.renderer.domElement.dataset.cricketActivity = cricketStatus.cricketActivity.toFixed(2);
-      this.renderer.domElement.dataset.cricketEvents = String(cricketStatus.eventCount);
-      this.renderer.domElement.dataset.lastCricketEmitter =
-        cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none';
-      this.renderer.domElement.dataset.inMeadow = meadowInfo.inMeadow ? 'true' : 'false';
-      this.renderer.domElement.dataset.meadowZone = meadowInfo.zoneId ?? 'none';
-      this.renderer.domElement.dataset.meadowDisp = this.meadowDisplacementStrength.toFixed(2);
-      this.renderer.domElement.dataset.waterEdgeRipples = String(this.waterEdgeRippleCount);
-      this.renderer.domElement.dataset.lastWaterRippleBody = this.lastWaterRippleBody;
-      this.renderer.domElement.dataset.pondProximityRipple =
-        REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2);
-      this.renderer.domElement.dataset.prayerWheelSpins = String(this.prayerWheelSpinsCount);
-      this.renderer.domElement.dataset.prayerWheelParticles = String(this.prayerWheelParticleBursts);
-      this.renderer.domElement.dataset.pebbleTosses = String(this.pebbleTossesCount);
-      this.renderer.domElement.dataset.cameraMode = this.cameraMode;
-      this.renderer.domElement.dataset.graphicsQuality = this.graphicsQuality;
-      this.renderer.domElement.dataset.meditating = this.isMeditating ? 'true' : 'false';
+    if (
+      this.renderer?.domElement &&
+      (this.lastSimDatasetFlushAt < 0 || elapsed - this.lastSimDatasetFlushAt >= 0.25)
+    ) {
+      this.lastSimDatasetFlushAt = elapsed;
+      const lumbiniSpatial = soundEngine.getLumbiniSpatialStatus();
+      const forestBirdStatus = soundEngine.getForestBirdStatus();
+      const cricketStatus = soundEngine.getLumbiniCricketStatus();
+      const lumbiniAudio = computeLumbiniAudioProfile(ambienceMix, this.lumbiniPreset, this.weather);
+      this.writeDataset('ambienceZone', ambienceMix.activeZone);
+      this.writeDataset('surfaceKind', surfaceKind);
+      this.writeDataset('forestLevel', ambienceMix.forestLevel.toFixed(2));
+      this.writeDataset('rustleLevel', ambienceMix.rustleLevel.toFixed(2));
+      this.writeDataset('chimeActivity', lumbiniAudio.chimeActivity.toFixed(2));
+      this.writeDataset('bowlActivity', lumbiniAudio.bowlActivity.toFixed(2));
+      this.writeDataset('flagFlutter', lumbiniAudio.flagFlutterLevel.toFixed(2));
+      this.writeDataset('lumbiniSpatialAudio', lumbiniSpatial.inZone ? 'true' : 'false');
+      this.writeDataset(
+        'lumbiniBirdEmitter',
+        lumbiniSpatial.lastBirdEmitterId ?? lumbiniSpatial.nearestBirdEmitterId ?? 'none',
+      );
+      this.writeDataset(
+        'lumbiniRustleEmitter',
+        lumbiniSpatial.lastRustleEmitterId ?? lumbiniSpatial.nearestRustleEmitterId ?? 'none',
+      );
+      this.writeDataset('lumbiniBirdEvents', String(lumbiniSpatial.birdEventCount));
+      this.writeDataset('lumbiniRustleEvents', String(lumbiniSpatial.rustleEventCount));
+      this.writeDataset('forestBirdInZone', forestBirdStatus.inForest ? 'true' : 'false');
+      this.writeDataset('forestBirdEvents', String(forestBirdStatus.eventCount));
+      this.writeDataset(
+        'lastForestBirdEmitter',
+        forestBirdStatus.lastEmitterId ?? forestBirdStatus.nearestEmitterId ?? 'none',
+      );
+      this.writeDataset('cricketInZone', cricketStatus.inZone ? 'true' : 'false');
+      this.writeDataset('cricketActivity', cricketStatus.cricketActivity.toFixed(2));
+      this.writeDataset('cricketEvents', String(cricketStatus.eventCount));
+      this.writeDataset(
+        'lastCricketEmitter',
+        cricketStatus.lastEmitterId ?? cricketStatus.nearestEmitterId ?? 'none',
+      );
+      this.writeDataset('inMeadow', meadowInfo.inMeadow ? 'true' : 'false');
+      this.writeDataset('meadowZone', meadowInfo.zoneId ?? 'none');
+      this.writeDataset('meadowDisp', this.meadowDisplacementStrength.toFixed(2));
+      this.writeDataset('waterEdgeRipples', String(this.waterEdgeRippleCount));
+      this.writeDataset('lastWaterRippleBody', this.lastWaterRippleBody);
+      this.writeDataset(
+        'pondProximityRipple',
+        REFLECTIVE_WATER_ENV_UNIFORMS.uPlayerPondProximity.value.toFixed(2),
+      );
+      this.writeDataset('prayerWheelSpins', String(this.prayerWheelSpinsCount));
+      this.writeDataset('prayerWheelParticles', String(this.prayerWheelParticleBursts));
+      this.writeDataset('pebbleTosses', String(this.pebbleTossesCount));
+      this.writeDataset('cameraMode', this.cameraMode);
+      this.writeDataset('graphicsQuality', this.graphicsQuality);
+      this.writeDataset('meditating', this.isMeditating ? 'true' : 'false');
     }
 
     const horizSpeed = Math.hypot(this.playerVx, this.playerVz);
@@ -4555,6 +4890,14 @@ export class WorldEngine {
     }
 
     for (let i = 0; i < this.animatedLandmarkNodes.length; i++) {
+      const anchor = this.animatedNodeAnchors[i];
+      if (
+        anchor &&
+        !anchor.isGlobal &&
+        !isWithinSleepDistanceSq(anchor.x, anchor.z, simX, simZ, 8100)
+      ) {
+        continue;
+      }
       const node = this.animatedLandmarkNodes[i];
       if (
         typeof node.userData.onFlickerUpdate !== 'function' &&
@@ -4567,8 +4910,19 @@ export class WorldEngine {
 
     for (let i = 0; i < this.prayerWheelEntries.length; i++) {
       const wheel = this.prayerWheelEntries[i];
+      const nearWheel = isWithinSleepDistanceSq(
+        wheel.worldPos.x,
+        wheel.worldPos.z,
+        simX,
+        simZ,
+        8100,
+      );
+      if (!nearWheel && wheel.velocity <= 0.25) {
+        wheel.velocity = 0;
+        continue;
+      }
       let impulse = 0;
-      if (this.gameState === 'playing' && elapsed >= wheel.cooldownUntil) {
+      if (this.gameState === 'playing' && elapsed >= wheel.cooldownUntil && nearWheel) {
         const d = Math.hypot(wheel.worldPos.x - this.playerPos.x, wheel.worldPos.z - this.playerPos.z);
         if (d < 2.15 && horizSpeed > 0.35) {
           impulse = 14.5;
@@ -4623,8 +4977,19 @@ export class WorldEngine {
       this.ritualEmberAccum += dt * Math.min(8.5, 1.8 + litCountForEmber * 0.75);
       while (this.ritualEmberAccum >= 1) {
         this.ritualEmberAccum -= 1;
-        const pick = this.butterLampEntries.filter((l) => l.isLit);
-        const chosen = pick[Math.floor(Math.random() * pick.length)];
+        const targetIdx = Math.floor(Math.random() * litCountForEmber);
+        let seenLit = 0;
+        let chosen: ButterLampEntry | undefined;
+        for (let k = 0; k < this.butterLampEntries.length; k++) {
+          const cand = this.butterLampEntries[k];
+          if (cand.isLit) {
+            if (seenLit === targetIdx) {
+              chosen = cand;
+              break;
+            }
+            seenLit++;
+          }
+        }
         if (chosen) {
           const ang = Math.random() * Math.PI * 2;
           this.pushBurstParticle(
@@ -4666,7 +5031,18 @@ export class WorldEngine {
     }
     for (let i = 0; i < this.templeBellEntries.length; i++) {
       const entry = this.templeBellEntries[i];
+      const age = elapsed - entry.ringStart;
+      const ringing = age >= 0 && age < entry.ringDuration;
+      const nearBell = isWithinSleepDistanceSq(
+        entry.worldPos.x,
+        entry.worldPos.z,
+        simX,
+        simZ,
+        8100,
+      );
+      if (!ringing && !nearBell) continue;
       if (
+        nearBell &&
         this.gameState === 'playing' &&
         elapsed >= entry.cooldownUntil &&
         Math.abs(entry.worldPos.y - this.playerPos.y) < 5.2
@@ -4679,8 +5055,7 @@ export class WorldEngine {
           this.triggerTempleBell(entry, elapsed, 0.92, bellDist);
         }
       }
-      const age = elapsed - entry.ringStart;
-      if (age >= 0 && age < entry.ringDuration) {
+      if (ringing) {
         const decay = Math.exp(-1.35 * age);
         const theta = entry.amplitude * decay * Math.sin(8.8 * age);
         entry.swingPivot.rotation.x = theta;
@@ -4710,6 +5085,7 @@ export class WorldEngine {
     // Step 3D rigid-body-feel interactive props: player impulses, prop stacking,
     // quaternion tumbling, tree collisions, water buoyancy & ripple splashes.
     let playerPropSupportY = -999;
+    this.maxMovingPropSpeed = 0;
     const playerSpeed = Math.hypot(this.playerVx, this.playerVz);
 
     for (let i = 0; i < this.interactiveProps.length; i++) {
@@ -4878,6 +5254,7 @@ export class WorldEngine {
         const nextX = prop.x + prop.vx * dt;
         const nextZ = prop.z + prop.vz * dt;
         const propSpeed = Math.hypot(prop.vx, prop.vz);
+        this.maxMovingPropSpeed = Math.max(this.maxMovingPropSpeed, propSpeed, Math.abs(prop.vy));
 
         // Allow buoyant props to slide/roll smoothly into river & lake basins instead of bouncing off walkable shore boundary
         const nextWater = this.getWaterSurfaceAt(nextX, nextZ);
@@ -5034,21 +5411,27 @@ export class WorldEngine {
               prop.quat.premultiply(_snapQuat).normalize();
             }
           } else {
-            // Snap nearest cube/barrel/block face axis to world up so it rests flush on any side
-            const candidates = [
-              { x: me[0], y: me[1], z: me[2] },
-              { x: -me[0], y: -me[1], z: -me[2] },
-              { x: me[4], y: me[5], z: me[6] },
-              { x: -me[4], y: -me[5], z: -me[6] },
-              { x: me[8], y: me[9], z: me[10] },
-              { x: -me[8], y: -me[9], z: -me[10] },
-            ];
-            let bestDot = -2;
-            for (const c of candidates) {
-              if (c.y > bestDot) {
-                bestDot = c.y;
-                _bestLocalAxis.set(c.x, c.y, c.z);
-              }
+            // Snap nearest cube/barrel/block face axis to world up without array allocation
+            let bestDot = me[1];
+            _bestLocalAxis.set(me[0], me[1], me[2]);
+            if (-me[1] > bestDot) {
+              bestDot = -me[1];
+              _bestLocalAxis.set(-me[0], -me[1], -me[2]);
+            }
+            if (me[5] > bestDot) {
+              bestDot = me[5];
+              _bestLocalAxis.set(me[4], me[5], me[6]);
+            }
+            if (-me[5] > bestDot) {
+              bestDot = -me[5];
+              _bestLocalAxis.set(-me[4], -me[5], -me[6]);
+            }
+            if (me[9] > bestDot) {
+              bestDot = me[9];
+              _bestLocalAxis.set(me[8], me[9], me[10]);
+            }
+            if (-me[9] > bestDot) {
+              _bestLocalAxis.set(-me[8], -me[9], -me[10]);
             }
             _bestLocalAxis.normalize();
             _snapAxis.crossVectors(_bestLocalAxis, _upVec);
@@ -5206,11 +5589,9 @@ export class WorldEngine {
               if (edgeRipple.waterBody === 'pushkarini' || edgeRipple.waterBody === 'surrounding') {
                 this.pondTrailRippleCount++;
               }
-              if (this.renderer?.domElement) {
-                this.renderer.domElement.dataset.pondTrailRipples = String(this.pondTrailRippleCount);
-                this.renderer.domElement.dataset.waterEdgeRipples = String(this.waterEdgeRippleCount);
-                this.renderer.domElement.dataset.lastWaterRippleBody = edgeRipple.waterBody;
-              }
+              this.writeDataset('pondTrailRipples', String(this.pondTrailRippleCount));
+              this.writeDataset('waterEdgeRipples', String(this.waterEdgeRippleCount));
+              this.writeDataset('lastWaterRippleBody', edgeRipple.waterBody);
             }
           }
         }
@@ -5308,11 +5689,12 @@ export class WorldEngine {
     this.cameraDistance = dampCameraValue(this.cameraDistance, this.targetCameraDistance, 10.0, dt);
 
     if (this.renderer?.domElement) {
-      const ds = this.renderer.domElement.dataset;
-      ds.insideMayaDevi = inMayaDeviInterior ? 'true' : 'false';
-      ds.cameraMode = this.cameraMode;
-      ds.cameraPitchDeg = String(Math.round((-this.cameraPitch * 180) / Math.PI));
-      ds.cameraYawDeg = String(Math.round(((this.cameraYaw * 180) / Math.PI) % 360));
+      this.writeDataset('insideMayaDevi', inMayaDeviInterior ? 'true' : 'false');
+      this.writeDataset('cameraMode', this.cameraMode);
+      if (elapsed - this.lastSimDatasetFlushAt < 0.02 || this.lastSimDatasetFlushAt < 0) {
+        this.writeDataset('cameraPitchDeg', String(Math.round((-this.cameraPitch * 180) / Math.PI)));
+        this.writeDataset('cameraYawDeg', String(Math.round(((this.cameraYaw * 180) / Math.PI) % 360)));
+      }
     }
 
     if (this.focusedLandmark) {
@@ -5376,16 +5758,12 @@ export class WorldEngine {
     this.camera.lookAt(this.currentLookAt);
 
     this.lastContextualAction = this.getContextualAction();
-
-    if (elapsed - this.lastHudEmit > 0.14) {
-      this.emitHud(false);
-    }
+    this.emitHud(false);
   }
 
   private emitHud(force: boolean): void {
     const elapsed = (performance.now() - this.startTimeMs) / 1000;
-    if (!force && elapsed - this.lastHudEmit < 0.14) return;
-    this.lastHudEmit = elapsed;
+    const tickDue = force || this.lastHudTickAt < 0 || elapsed - this.lastHudTickAt >= 0.25;
 
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
     const zoneName = nearest
@@ -5393,6 +5771,25 @@ export class WorldEngine {
       : this.playerPos.x > getRiverCenterX(this.playerPos.z)
         ? 'Vellore Foothills'
         : 'Kathmandu Valley';
+
+    const action = this.lastContextualAction ?? this.getContextualAction();
+    const showLumbiniPresets =
+      zoneName === 'Lumbini Sacred Garden' ||
+      this.focusedLandmark?.id === 'lumbini-buddha' ||
+      (this.playerPos.x <= -152 && this.playerPos.z >= 15 && this.playerPos.z <= 185);
+
+    const nextDiscrete: DiscreteHudState = {
+      zoneName,
+      nearestLandmarkId: nearest?.landmark.id ?? null,
+      actionKind: action?.kind ?? null,
+      actionIndex: typeof action?.index === 'number' ? action.index : null,
+      actionLabel: action?.label ?? null,
+      isMeditating: this.isMeditating,
+      showLumbiniPresets,
+    };
+
+    const discreteChanged = force || hasDiscreteHudChanged(this.lastDiscreteHud, nextDiscrete);
+    if (!tickDue && !discreteChanged) return;
 
     const effectiveLighting = computeEffectiveLightingState(
       getPresetHour(this.timePreset),
@@ -5403,18 +5800,35 @@ export class WorldEngine {
       this.focusedLandmark?.id,
     );
 
-    this.callbacks.onHudUpdate({
-      zoneName,
-      nearestLandmark: nearest?.landmark ?? null,
-      distanceWalked: this.distanceWalked,
-      timeState: effectiveLighting.lighting,
-      coords: {
-        x: Math.round(this.playerPos.x),
-        z: Math.round(this.playerPos.z),
-      },
-      contextualAction: this.lastContextualAction ?? this.getContextualAction(),
-      isMeditating: this.isMeditating,
-    });
+    if (tickDue) {
+      this.lastHudTickAt = elapsed;
+      this.lastHudEmit = elapsed;
+      this.callbacks.onHudTick?.({
+        distanceWalked: this.distanceWalked,
+        formattedHour: formatClockHour(effectiveLighting.lighting.hour),
+        phaseLabel: effectiveLighting.lighting.phaseLabel,
+        coordsX: Math.round(this.playerPos.x),
+        coordsZ: Math.round(this.playerPos.z),
+      });
+    }
+
+    if (discreteChanged) {
+      this.lastDiscreteHud = nextDiscrete;
+      const snap: WorldHudSnapshot = {
+        zoneName,
+        nearestLandmark: nearest?.landmark ?? null,
+        distanceWalked: this.distanceWalked,
+        timeState: effectiveLighting.lighting,
+        coords: {
+          x: Math.round(this.playerPos.x),
+          z: Math.round(this.playerPos.z),
+        },
+        contextualAction: action,
+        isMeditating: this.isMeditating,
+      };
+      this.callbacks.onHudDiscreteChange?.(snap);
+      this.callbacks.onHudUpdate?.(snap);
+    }
   }
 
   public dispose(): void {
@@ -5435,22 +5849,26 @@ export class WorldEngine {
         const renderable = obj as THREE.Mesh | THREE.Points;
         renderable.geometry?.dispose();
         if (Array.isArray(renderable.material)) {
-          renderable.material.forEach((m) => m.dispose());
-        } else {
-          renderable.material?.dispose();
+          renderable.material.forEach((m) => {
+            if (!m.userData?.__cachedSingleton) m.dispose();
+          });
+        } else if (renderable.material && !renderable.material.userData?.__cachedSingleton) {
+          renderable.material.dispose();
         }
       }
     });
-    this.footprintTex?.dispose();
-    this.butterflyWingTex?.dispose();
+    if (this.footprintTex && !this.footprintTex.userData?.__cachedSingleton) {
+      this.footprintTex.dispose();
+    }
+    if (this.butterflyWingTex && !this.butterflyWingTex.userData?.__cachedSingleton) {
+      this.butterflyWingTex.dispose();
+    }
     this.tossedPebbleGeo?.dispose();
     this.tossedPebbleMat?.dispose();
     this.weatherParticles?.dispose();
     this.lumbiniFireflies?.dispose();
     this.lumbiniIncenseSmoke?.dispose();
     this.textures?.dispose();
-    this.gtaoPass?.dispose();
-    this.composerDepthTex?.dispose();
     this.composer?.dispose();
     this.renderer?.dispose();
     if (this.renderer?.domElement?.parentElement === this.container) {

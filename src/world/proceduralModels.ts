@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ProceduralTextureSet } from './proceduralTextures';
 import { BRIDGE_BOUNDS, getSurfaceHeightAt, groundHeightAt } from './worldLogic';
 import { createWavingPrayerFlagGarland, getLungtaDrapeMaterials } from './prayerFlags';
+import { getCachedMaterial, mergeStaticMeshesByMaterial } from './meshOptimization';
 
 export interface ExplorerCharacterRig {
   root: THREE.Group;
@@ -81,17 +82,21 @@ function createSignpost(
   textures: ProceduralTextureSet,
 ): THREE.Group {
   const sign = new THREE.Group();
-  const postMat = new THREE.MeshStandardMaterial({
-    map: textures.woodMap,
-    normalMap: textures.woodNormal,
-    color: 0xffffff,
-    roughness: 0.82,
-  });
-  const metalMat = new THREE.MeshStandardMaterial({
-    color: 0x262b33,
-    roughness: 0.42,
-    metalness: 0.78,
-  });
+  const postMat = getCachedMaterial(textures, 'signpost-wood', () =>
+    new THREE.MeshStandardMaterial({
+      map: textures.woodMap,
+      normalMap: textures.woodNormal,
+      color: 0xffffff,
+      roughness: 0.82,
+    }),
+  );
+  const metalMat = getCachedMaterial(textures, 'signpost-metal', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x262b33,
+      roughness: 0.42,
+      metalness: 0.78,
+    }),
+  );
 
   const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 1.74, 10), postMat);
   pL.position.set(-0.92, 0.63, 0);
@@ -902,6 +907,11 @@ export function createKathmanduPagoda(textures: ProceduralTextureSet): LandmarkB
   hitMesh.layers.set(1);
   group.add(hitMesh);
 
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
   return { group, hitMesh, beaconLights, animatedNodes };
 }
 
@@ -1076,6 +1086,18 @@ export function createBoudhanathStupa(textures: ProceduralTextureSet): LandmarkB
 
   // 8 Sweeping Radial Prayer Flag Ropes from spire canopy down to Mandala plinth corners
   const prayerColors = [0x2c5c8f, 0xd8d3c8, 0x992c27, 0x2d6b3c, 0xb88c28];
+  const prayerRopeMat = getCachedMaterial(textures, 'boudha-rope', () =>
+    new THREE.MeshStandardMaterial({ color: 0xbcb5a8, roughness: 0.9 }),
+  );
+  const prayerFlagMats = prayerColors.map((hex, cIdx) =>
+    getCachedMaterial(textures, `boudha-flag-${cIdx}`, () =>
+      new THREE.MeshStandardMaterial({
+        color: hex,
+        roughness: 0.88,
+        side: THREE.DoubleSide,
+      }),
+    ),
+  );
   for (let l = 0; l < 8; l++) {
     const ang = (l / 8) * Math.PI * 2 + Math.PI / 8;
     const topP = new THREE.Vector3(0, chhatraY - 0.12, 0);
@@ -1086,18 +1108,14 @@ export function createBoudhanathStupa(textures: ProceduralTextureSet): LandmarkB
     group.add(
       new THREE.Mesh(
         new THREE.TubeGeometry(rCurve, 12, 0.015, 4, false),
-        new THREE.MeshStandardMaterial({ color: 0xbcb5a8, roughness: 0.9 }),
+        prayerRopeMat,
       ),
     );
     for (let f = 1; f <= 8; f++) {
       const fp = rCurve.getPoint(f / 9);
       const fl = new THREE.Mesh(
         new THREE.PlaneGeometry(0.24, 0.28),
-        new THREE.MeshStandardMaterial({
-          color: prayerColors[(l + f) % prayerColors.length],
-          roughness: 0.88,
-          side: THREE.DoubleSide,
-        }),
+        prayerFlagMats[(l + f) % prayerFlagMats.length],
       );
       fl.position.set(fp.x, fp.y - 0.12, fp.z);
       fl.rotation.y = ang + Math.PI / 2;
@@ -1141,6 +1159,11 @@ export function createBoudhanathStupa(textures: ProceduralTextureSet): LandmarkB
   hitMesh.position.y = 4.0;
   hitMesh.layers.set(1);
   group.add(hitMesh);
+
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
 
   return { group, hitMesh, beaconLights, animatedNodes };
 }
@@ -1534,6 +1557,8 @@ export function createPumdikotShiva(textures: ProceduralTextureSet): LandmarkBui
   hitMesh.layers.set(1);
   group.add(hitMesh);
 
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
   return { group, hitMesh, beaconLights, animatedNodes };
 }
 
@@ -1793,6 +1818,11 @@ export function createVitClockTower(textures: ProceduralTextureSet): LandmarkBui
   hitMesh.layers.set(1);
   group.add(hitMesh);
 
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
   return { group, hitMesh, beaconLights, animatedNodes };
 }
 
@@ -1913,6 +1943,11 @@ export function createAniFlowStudio(textures: ProceduralTextureSet): LandmarkBui
   hitMesh.layers.set(1);
   group.add(hitMesh);
 
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
   return { group, hitMesh, beaconLights, animatedNodes };
 }
 
@@ -2007,6 +2042,11 @@ export function createAgentCitadel(textures: ProceduralTextureSet): LandmarkBuil
   hitMesh.position.y = 3.6;
   hitMesh.layers.set(1);
   group.add(hitMesh);
+
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
 
   return { group, hitMesh, beaconLights, animatedNodes };
 }
@@ -2112,6 +2152,11 @@ export function createBreathSensorLab(
   hitMesh.layers.set(1);
   group.add(hitMesh);
 
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
+
   return { group, hitMesh, beaconLights, animatedNodes };
 }
 
@@ -2199,6 +2244,11 @@ export function createRecruiterBeacon(textures: ProceduralTextureSet): LandmarkB
   hitMesh.position.y = 3.5;
   hitMesh.layers.set(1);
   group.add(hitMesh);
+
+  for (const node of animatedNodes) {
+    node.userData.noMerge = true;
+  }
+  mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
 
   return { group, hitMesh, beaconLights, animatedNodes };
 }
@@ -2344,6 +2394,8 @@ export function createSuspensionBridge(textures: ProceduralTextureSet): THREE.Gr
       bridge.add(flag);
     }
   }
+
+  mergeStaticMeshesByMaterial(bridge, { preserveCustomShaderMaterials: true });
 
   return bridge;
 }

@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LANDMARKS, LandmarkData } from './data/portfolioData';
 import { LiveWeatherInfo, fetchLiveWeather } from './services/weatherService';
-import { WorldEngine, WorldGameState, WorldHudSnapshot } from './world/WorldEngine';
+import {
+  WorldEngine,
+  WorldGameState,
+  WorldHudContinuousSnapshot,
+  WorldHudSnapshot,
+  WorldPerfMetrics,
+} from './world/WorldEngine';
 import { soundEngine } from './world/soundEngine';
 import {
   CameraViewMode,
@@ -31,8 +37,10 @@ import { LandmarksIndexModal } from './components/LandmarksIndexModal';
 import { ContactModal } from './components/ContactModal';
 import { PauseModal } from './components/PauseModal';
 import { WaypointPromptModal } from './components/WaypointPromptModal';
+import { PerfOverlay } from './components/PerfOverlay';
 
 const STORAGE_PROGRESS_KEY = 'aashish_3d_progress_v1';
+const DISTANCE_MILESTONES = [1000, 5000, 10000];
 
 interface PersistedState {
   discoveredIds: string[];
@@ -118,11 +126,23 @@ export default function App() {
     initialAutostart ? 'playing' : 'title',
   );
   const [persisted, setPersisted] = useState<PersistedState>(() => loadPersistedState());
+  const persistedRef = useRef(persisted);
+  persistedRef.current = persisted;
+
   const [selectedLandmark, setSelectedLandmark] = useState<LandmarkData | null>(null);
   const [atlasOpen, setAtlasOpen] = useState(false);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
-  const lastSavedDistanceRef = useRef<number>(persisted.totalDistanceWalked);
+  const [perfOverlayOpen, setPerfOverlayOpen] = useState(false);
+
+  const latestDistanceRef = useRef<number>(persisted.totalDistanceWalked);
+  const lastMilestoneDistanceRef = useRef<number>(persisted.totalDistanceWalked);
+  const distanceTextRef = useRef<HTMLSpanElement>(null);
+  const clockTextRef = useRef<HTMLSpanElement>(null);
+  const fpsRef = useRef<HTMLSpanElement>(null);
+  const callsRef = useRef<HTMLSpanElement>(null);
+  const trisRef = useRef<HTMLSpanElement>(null);
+
   const [dockCollapsed, setDockCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 640,
   );
@@ -167,15 +187,26 @@ export default function App() {
     isMeditating: false,
   }));
 
-  const achievementProgress = {
-    discoveredIds: persisted.discoveredIds,
-    totalDistanceWalked: Math.max(persisted.totalDistanceWalked, hud.distanceWalked),
-    customWaypointCount: persisted.customWaypoints.length,
-    bellRingsCount: persisted.bellRingsCount,
-  };
-  const unlockedAchievementsCount = evaluateAchievements(achievementProgress).filter(
-    (item) => item.status.unlocked,
-  ).length;
+  const flushDistanceWalked = useCallback(() => {
+    const rounded = Math.round(latestDistanceRef.current);
+    setPersisted((prev) =>
+      rounded > prev.totalDistanceWalked ? { ...prev, totalDistanceWalked: rounded } : prev,
+    );
+  }, []);
+
+  const achievementProgress = useMemo(
+    () => ({
+      discoveredIds: persisted.discoveredIds,
+      totalDistanceWalked: Math.max(persisted.totalDistanceWalked, Math.round(latestDistanceRef.current)),
+      customWaypointCount: persisted.customWaypoints.length,
+      bellRingsCount: persisted.bellRingsCount,
+    }),
+    [persisted],
+  );
+  const unlockedAchievementsCount = useMemo(
+    () => evaluateAchievements(achievementProgress).filter((item) => item.status.unlocked).length,
+    [achievementProgress],
+  );
 
   const activeWeather: WeatherKind =
     weatherMode === 'live' ? weatherInfo.weather : weatherMode;
@@ -195,16 +226,47 @@ export default function App() {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // Persist discovered landmarks & custom markers offline
+  // Persist progress offline without triggering unnecessary Three.js re-syncs
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_PROGRESS_KEY, JSON.stringify(persisted));
     } catch {
       // Ignore quota issues
     }
-    engineRef.current?.syncCustomWaypoints(persisted.customWaypoints);
-    engineRef.current?.syncDiscoveredLandmarks(persisted.discoveredIds);
   }, [persisted]);
+
+  useEffect(() => {
+    engineRef.current?.syncCustomWaypoints(persisted.customWaypoints);
+  }, [persisted.customWaypoints]);
+
+  useEffect(() => {
+    engineRef.current?.syncDiscoveredLandmarks(persisted.discoveredIds);
+  }, [persisted.discoveredIds]);
+
+  // Flush walked distance synchronously on page hide / unload / unmount
+  useEffect(() => {
+    const persistDistanceSync = () => {
+      try {
+        const current = persistedRef.current;
+        const rounded = Math.max(current.totalDistanceWalked, Math.round(latestDistanceRef.current));
+        if (rounded > current.totalDistanceWalked) {
+          localStorage.setItem(
+            STORAGE_PROGRESS_KEY,
+            JSON.stringify({ ...current, totalDistanceWalked: rounded }),
+          );
+        }
+      } catch {
+        // Ignore storage write errors
+      }
+    };
+    window.addEventListener('pagehide', persistDistanceSync);
+    window.addEventListener('beforeunload', persistDistanceSync);
+    return () => {
+      window.removeEventListener('pagehide', persistDistanceSync);
+      window.removeEventListener('beforeunload', persistDistanceSync);
+      persistDistanceSync();
+    };
+  }, []);
 
   // Real-time weather fetch + online/offline sync listener
   useEffect(() => {
@@ -230,33 +292,75 @@ export default function App() {
     };
   }, []);
 
-  const openLandmark = useCallback((landmark: LandmarkData) => {
-    setSelectedLandmark(landmark);
-    setAtlasOpen(false);
-    setAchievementsOpen(false);
-    engineRef.current?.markLandmarkDiscovered(landmark.id);
-    engineRef.current?.setFocusedLandmark(landmark);
-    soundEngine.playBellChime();
-    setPersisted((prev) => {
-      const discoveredIds = prev.discoveredIds.includes(landmark.id)
-        ? prev.discoveredIds
-        : [...prev.discoveredIds, landmark.id];
-      const visitHistory = recordVisitHistory(prev.visitHistory, landmark.id);
-      return { ...prev, discoveredIds, visitHistory };
-    });
-  }, []);
+  const openLandmark = useCallback(
+    (landmark: LandmarkData) => {
+      const roundedDist = Math.round(latestDistanceRef.current);
+      setSelectedLandmark(landmark);
+      setAtlasOpen(false);
+      setAchievementsOpen(false);
+      engineRef.current?.markLandmarkDiscovered(landmark.id);
+      engineRef.current?.setFocusedLandmark(landmark);
+      soundEngine.playBellChime();
+      setPersisted((prev) => {
+        const discoveredIds = prev.discoveredIds.includes(landmark.id)
+          ? prev.discoveredIds
+          : [...prev.discoveredIds, landmark.id];
+        const visitHistory = recordVisitHistory(prev.visitHistory, landmark.id);
+        return {
+          ...prev,
+          discoveredIds,
+          visitHistory,
+          totalDistanceWalked: Math.max(prev.totalDistanceWalked, roundedDist),
+        };
+      });
+    },
+    [],
+  );
 
   const callbacksRef = useRef({
     onSelectLandmark: openLandmark,
-    onHudUpdate: (snapshot: WorldHudSnapshot) => {
+    onHudTick: (tick: WorldHudContinuousSnapshot) => {
+      latestDistanceRef.current = tick.distanceWalked;
+      const rounded = Math.round(tick.distanceWalked);
+      if (distanceTextRef.current) {
+        const nextDistText = `${rounded}m walked`;
+        if (distanceTextRef.current.textContent !== nextDistText) {
+          distanceTextRef.current.textContent = nextDistText;
+        }
+      }
+      if (clockTextRef.current) {
+        const nextClockText = `${tick.formattedHour} (${tick.phaseLabel})`;
+        if (clockTextRef.current.textContent !== nextClockText) {
+          clockTextRef.current.textContent = nextClockText;
+        }
+      }
+      const prevMilestoneCheck = lastMilestoneDistanceRef.current;
+      for (const m of DISTANCE_MILESTONES) {
+        if (prevMilestoneCheck < m && tick.distanceWalked >= m) {
+          lastMilestoneDistanceRef.current = tick.distanceWalked;
+          setPersisted((prev) =>
+            rounded > prev.totalDistanceWalked ? { ...prev, totalDistanceWalked: rounded } : prev,
+          );
+          break;
+        }
+      }
+    },
+    onHudDiscreteChange: (snapshot: WorldHudSnapshot) => {
+      latestDistanceRef.current = Math.max(latestDistanceRef.current, snapshot.distanceWalked);
       setHud(snapshot);
-      if (snapshot.distanceWalked - lastSavedDistanceRef.current >= 10) {
-        lastSavedDistanceRef.current = snapshot.distanceWalked;
-        setPersisted((prev) =>
-          snapshot.distanceWalked > prev.totalDistanceWalked
-            ? { ...prev, totalDistanceWalked: Math.round(snapshot.distanceWalked) }
-            : prev,
-        );
+    },
+    onPerfUpdate: (metrics: WorldPerfMetrics) => {
+      if (fpsRef.current) {
+        fpsRef.current.textContent = `${metrics.fps} FPS`;
+      }
+      if (callsRef.current) {
+        callsRef.current.textContent = `${metrics.drawCalls} calls`;
+      }
+      if (trisRef.current) {
+        trisRef.current.textContent =
+          metrics.triangles >= 1000
+            ? `${(metrics.triangles / 1000).toFixed(1)}k tris`
+            : `${metrics.triangles} tris`;
       }
     },
     onBellRing: () => {
@@ -279,7 +383,9 @@ export default function App() {
 
     const engine = new WorldEngine(container, {
       onSelectLandmark: (lm) => callbacksRef.current.onSelectLandmark(lm),
-      onHudUpdate: (snap) => callbacksRef.current.onHudUpdate(snap),
+      onHudTick: (tick) => callbacksRef.current.onHudTick(tick),
+      onHudDiscreteChange: (snap) => callbacksRef.current.onHudDiscreteChange(snap),
+      onPerfUpdate: (metrics) => callbacksRef.current.onPerfUpdate(metrics),
       onBellRing: () => callbacksRef.current.onBellRing(),
       onPlaceWaypointRequest: (x, z) => callbacksRef.current.onPlaceWaypointRequest(x, z),
       onInspectHighlight: (hl) => callbacksRef.current.onInspectHighlight(hl),
@@ -299,6 +405,10 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    engineRef.current?.setPerfDiagnosticsEnabled(perfOverlayOpen);
+  }, [perfOverlayOpen]);
 
   // Sync engine state with React controls
   useEffect(() => {
@@ -364,6 +474,12 @@ export default function App() {
         return;
       }
 
+      if (e.code === 'KeyP') {
+        e.preventDefault();
+        setPerfOverlayOpen((prev) => !prev);
+        return;
+      }
+
       if (gameState === 'title') {
         if ((e.code === 'Enter' || e.code === 'Space') && !contactOpen) {
           e.preventDefault();
@@ -409,7 +525,7 @@ export default function App() {
         return;
       }
 
-      if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (e.code === 'Escape') {
         e.preventDefault();
         if (contactOpen) {
           setContactOpen(false);
@@ -439,7 +555,11 @@ export default function App() {
           setPlacementMode(false);
           return;
         }
-        setGameState((prev) => (prev === 'playing' ? 'paused' : 'playing'));
+        setGameState((prev) => {
+          const next = prev === 'playing' ? 'paused' : 'playing';
+          if (next === 'paused') flushDistanceWalked();
+          return next;
+        });
       }
     };
 
@@ -450,6 +570,7 @@ export default function App() {
     activeHighlight,
     atlasOpen,
     contactOpen,
+    flushDistanceWalked,
     gameState,
     handleCloseLandmark,
     handleStart,
@@ -497,6 +618,15 @@ export default function App() {
         ref={mountRef}
         className="absolute inset-0 w-full h-full"
         aria-label="Interactive 3D Portfolio World"
+      />
+
+      {/* Toggleable Developer Performance Diagnostics Pill (P key) */}
+      <PerfOverlay
+        open={perfOverlayOpen}
+        fpsRef={fpsRef}
+        callsRef={callsRef}
+        trisRef={trisRef}
+        initialMetrics={engineRef.current?.getPerfMetrics()}
       />
 
       {webglError && (
@@ -552,7 +682,9 @@ export default function App() {
               totalLandmarks={LANDMARKS.length}
               unlockedAchievementsCount={unlockedAchievementsCount}
               totalAchievementsCount={ACHIEVEMENTS.length}
-              distanceWalked={hud.distanceWalked}
+              distanceWalked={Math.max(hud.distanceWalked, latestDistanceRef.current)}
+              distanceTextRef={distanceTextRef}
+              clockTextRef={clockTextRef}
               timeState={hud.timeState}
               weatherInfo={weatherInfo}
               activeWeather={activeWeather}
@@ -564,10 +696,16 @@ export default function App() {
               showLumbiniPresets={showLumbiniPresets}
               hasOpenLandmark={Boolean(selectedLandmark)}
               onToggleSound={() => setSoundEnabled(soundEngine.toggle())}
-              onOpenAchievements={() => setAchievementsOpen(true)}
+              onOpenAchievements={() => {
+                flushDistanceWalked();
+                setAchievementsOpen(true);
+              }}
               onOpenAtlas={() => setAtlasOpen(true)}
               onOpenContact={() => setContactOpen(true)}
-              onPause={() => setGameState('paused')}
+              onPause={() => {
+                flushDistanceWalked();
+                setGameState('paused');
+              }}
               onInspectNearest={openLandmark}
               contextualAction={hud.contextualAction}
               isMeditating={hud.isMeditating}
@@ -657,13 +795,14 @@ export default function App() {
       <PauseModal
         open={gameState === 'paused'}
         discoveredCount={persisted.discoveredIds.length}
-        distanceWalked={hud.distanceWalked}
+        distanceWalked={Math.max(persisted.totalDistanceWalked, latestDistanceRef.current)}
         onResume={() => setGameState('playing')}
         onResetPosition={() => {
           engineRef.current?.resetToSpawn();
           setGameState('playing');
         }}
         onBackToTitle={() => {
+          flushDistanceWalked();
           handleCloseLandmark();
           setGameState('title');
         }}
