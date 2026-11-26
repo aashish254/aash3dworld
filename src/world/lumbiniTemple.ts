@@ -26,6 +26,7 @@ import {
   buildThaiMarbleSanctuary,
   buildToranaGate,
 } from './lumbiniShrines';
+import { buildLumbiniComplexPerimeterFence } from './lumbiniPerimeterFence';
 import { mergeStaticMeshesByMaterial } from './meshOptimization';
 import { createLumbiniTextures } from './lumbiniTextures';
 import { createWavingPrayerFlagGarland, updatePrayerFlagUniforms } from './prayerFlags';
@@ -327,8 +328,8 @@ export function createLumbiniBuddha(
     lowerStep.position.set(0, -0.012, 1.62); // flush from 1.00..2.24m, top = +0.048
     lowerStep.receiveShadow = true;
     lowerStep.userData.nonCollidable = true;
-    const roadLipPad = new THREE.Mesh(new THREE.BoxGeometry(w + 0.80, 0.08, 0.90), chunarStoneMat);
-    roadLipPad.position.set(0, -0.016, 2.69); // top = +0.024 (tucks 4mm cleanly beneath cobble deck +0.028)
+    const roadLipPad = new THREE.Mesh(new THREE.BoxGeometry(w + 0.80, 0.06, 0.90), chunarStoneMat);
+    roadLipPad.position.set(0, -0.042, 2.69); // top = -0.012 (4cm cleanly below cobble deck +0.028 — zero white Z-fighting!)
     roadLipPad.receiveShadow = true;
     roadLipPad.userData.nonCollidable = true;
     landing.add(upperStep, lowerStep, roadLipPad);
@@ -353,12 +354,16 @@ export function createLumbiniBuddha(
     [25.05, 1.95, 37.9, 0.22],
     [-26.25, 6.05, 35.5, 0.22],
     [25.05, 6.05, 37.9, 0.22],
-    // Transverse axial perspective ribs every 4m amplifying depth toward Maya Devi Temple
-    ...[62.0, 50.0, 46.0, 34.0, 30.0].map((rz): [number, number, number, number] => [0, rz, 6.4, 0.28]),
-    ...[8.0, 12.0, 16.0, 20.0, 24.0].map((rz): [number, number, number, number] => [-5.85, rz, 5.1, 0.26]),
-    ...[0.0, -4.0, -8.0].map((rz): [number, number, number, number] => [0, rz, 7.6, 0.28]),
+    // Transverse axial perspective ribs every 4m amplifying depth toward Maya Devi Temple (split cleanly around medallions & curbs!)
+    [-2.05, 62.0, 2.3, 0.28],
+    [2.05, 62.0, 2.3, 0.28],
+    ...[50.0, 46.0, 34.0, 30.0].map((rz): [number, number, number, number] => [0, rz, 6.4, 0.28]),
+    ...[8.0, 12.0, 16.0, 20.0, 24.0].map((rz): [number, number, number, number] => [-5.90, rz, 4.96, 0.26]),
+    [-2.35, 0.0, 2.9, 0.28],
+    [2.35, 0.0, 2.9, 0.28],
+    ...[-4.0, -8.0].map((rz): [number, number, number, number] => [0, rz, 7.6, 0.28]),
     ...[-34, -26, -18, -10, 10, 18, 26, 34, 41].map((rx): [number, number, number, number] => [rx, 4.0, 0.26, 3.8]),
-    ...[-42, -30, -18, -8, 8, 18, 30, 42].map((rx): [number, number, number, number] => [rx, 61.9, 0.28, 2.94]),
+    ...[-42, -30, -18, -8, 8, 18, 30, 42].map((rx): [number, number, number, number] => [rx, 61.96, 0.28, 2.76]),
   ];
   const unitStripGeo = new THREE.BoxGeometry(1, 0.024, 1);
   const curbInst = new THREE.InstancedMesh(unitStripGeo, chunarStoneMat, curbTransforms.length);
@@ -376,8 +381,8 @@ export function createLumbiniBuddha(
   group.add(curbInst);
 
   // Sculpted 3D Chunar sandstone + bronze Lotus / Dharmachakra medallions along main axis
-  const medStoneBaseGeo = new THREE.CylinderGeometry(0.86, 0.90, 0.016, 24);
-  const medStoneInnerGeo = new THREE.CylinderGeometry(0.62, 0.62, 0.014, 24);
+  const medStoneBaseGeo = new THREE.CylinderGeometry(0.86, 0.90, 0.020, 24);
+  const medStoneInnerGeo = new THREE.CylinderGeometry(0.62, 0.62, 0.016, 24);
   const medBronzeRimGeo = new THREE.TorusGeometry(0.63, 0.024, 8, 24);
   medBronzeRimGeo.rotateX(Math.PI / 2);
   const medCoreDiscGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.018, 18);
@@ -395,19 +400,19 @@ export function createLumbiniBuddha(
     outerStone.receiveShadow = true;
     outerStone.userData.nonCollidable = true;
     const innerStone = new THREE.Mesh(medStoneInnerGeo, terracottaPaverMat);
-    innerStone.position.set(mx, baseY + 0.008, mz);
+    innerStone.position.set(mx, baseY + 0.014, mz);
     innerStone.receiveShadow = true;
     innerStone.userData.nonCollidable = true;
     const rim = new THREE.Mesh(medBronzeRimGeo, warmBronzeMat);
-    rim.position.set(mx, baseY + 0.018, mz);
+    rim.position.set(mx, baseY + 0.024, mz);
     rim.userData.nonCollidable = true;
     const hub = new THREE.Mesh(medCoreDiscGeo, giltGoldMat);
-    hub.position.set(mx, baseY + 0.017, mz);
+    hub.position.set(mx, baseY + 0.023, mz);
     hub.userData.nonCollidable = true;
     group.add(outerStone, innerStone, rim, hub);
     for (let k = 0; k < 4; k++) {
       const spoke = new THREE.Mesh(medSpokeGeo, warmBronzeMat);
-      spoke.position.set(mx, baseY + 0.016, mz);
+      spoke.position.set(mx, baseY + 0.022, mz);
       spoke.rotation.y = (k * Math.PI) / 4;
       spoke.userData.nonCollidable = true;
       group.add(spoke);
@@ -456,8 +461,8 @@ export function createLumbiniBuddha(
   addPilgrimBench(-7.6, 22.2, Math.PI * 0.5);
   addPilgrimBench(-14.5, 1.3, 0);
   addPilgrimBench(14.5, 1.3, 0);
-  addPilgrimBench(-15.5, 62.5, 0);
-  addPilgrimBench(15.5, 62.5, 0);
+  addPilgrimBench(-16.1, 62.55, 0);
+  addPilgrimBench(16.1, 62.55, 0);
 
   // (Red-roofed South Bridge Milepost Steles removed for a clean unobstructed temple approach.)
 
@@ -487,31 +492,20 @@ export function createLumbiniBuddha(
   group.add(realisticHedges);
 
   // =========================================================================
-  // 3. PERIMETER GARDEN BRICK WALL (88m x 96m) & 4 CARDINAL GATES
+  // 3. UNIFIED COMPLEX PERIMETER FENCING AROUND TEMPLE + SACRED LAKE + 4 PORTALS
   // =========================================================================
-  const addGardenWall = (cx: number, cz: number, sx: number, sz: number) => {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.70, sz), brickMat);
-    base.position.set(cx, 0.35, cz);
-    base.castShadow = true;
-    base.receiveShadow = true;
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(sx + 0.08, 0.14, sz + 0.08), chunarStoneMat);
-    cap.position.set(cx, 0.77, cz);
-    group.add(base, cap);
-  };
-  // South boundary (z = +52.0, gate |x| <= 3.4)
-  addGardenWall(-23.7, 52.0, 40.6, 0.68);
-  addGardenWall(23.7, 52.0, 40.6, 0.68);
-  // North boundary (z = -44.0, gate |x| <= 3.4)
-  addGardenWall(-23.7, -44.0, 40.6, 0.68);
-  addGardenWall(23.7, -44.0, 40.6, 0.68);
-  // West boundary (x = -44.0, gate z in [1.5, 6.5])
-  addGardenWall(-44.0, -21.25, 0.68, 45.5);
-  addGardenWall(-44.0, 29.25, 0.68, 45.5);
-  // East boundary (x = +44.0, gate z in [1.5, 6.5])
-  addGardenWall(44.0, -21.25, 0.68, 45.5);
-  addGardenWall(44.0, 29.25, 0.68, 45.5);
+  // Dividing inner brick walls removed so Maya Devi lawns & Sacred Lake read as one
+  // unified sacred sanctuary enclosed by an ornate outer heritage perimeter fence.
+  const complexPerimeterFence = buildLumbiniComplexPerimeterFence({
+    brickMat,
+    chunarStoneMat,
+    warmBronzeMat,
+    giltGoldMat,
+    terracottaCapMat,
+  });
+  group.add(complexPerimeterFence);
 
-  // Cardinal Dharmachakra Torana Archways at South & North Gates
+  // Cardinal Dharmachakra Torana Archways at South & North Inner Bridgehead Portals
   const southTorana = buildToranaGate(chunarStoneMat, brickMat, giltGoldMat, warmBronzeMat);
   southTorana.scale.setScalar(1.16);
   southTorana.position.set(0, 0.10, 51.8);
@@ -931,7 +925,7 @@ export function createLumbiniBuddha(
     [-6.8, 53.6, -8.5, 55.0, 'Sacred Pond'],
   ];
 
-  // Peace Garden Stone Lanterns neatly placed along lawn edges & promenade curbs (completely clear of walkways!)
+  // Peace Garden Stone Lanterns neatly placed along lawn edges & promenade curbs (every lantern actively lit!)
   for (const [lx, lz] of [
     [-7.4, 48.5], [7.4, 48.5],
     [-7.4, 33.0], [7.4, 33.0],
@@ -945,6 +939,14 @@ export function createLumbiniBuddha(
   ] as Array<[number, number]>) {
     const lantern = buildPeaceLantern(chunarStoneMat, warmBronzeMat, flameGlowMat);
     lantern.position.set(lx, 0.10, lz);
+    const lLight = new THREE.PointLight(0xffb54d, 1.85, 19, 1.6);
+    lLight.position.set(0, 1.92, 0);
+    lLight.userData.intensityScale = 1.28;
+    lLight.userData.flickerAmp = 0.08;
+    lLight.userData.flickerPhase = lx * 0.37 + lz * 0.51;
+    lLight.userData.warmFlicker = true;
+    lantern.add(lLight);
+    beaconLights.push(lLight);
     group.add(lantern);
   }
 

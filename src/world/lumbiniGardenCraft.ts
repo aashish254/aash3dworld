@@ -870,12 +870,12 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
 
   const amberGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xffdf9e,
-    emissive: 0xff9b28,
-    emissiveIntensity: 0.96,
+    emissive: 0xffa634,
+    emissiveIntensity: 1.28,
     roughness: 0.14,
     metalness: 0.04,
     transparent: true,
-    opacity: 0.52,
+    opacity: 0.50,
     clearcoat: 0.9,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -883,11 +883,11 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
 
   const chimneyGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xfff8e6,
-    emissive: 0xffc864,
-    emissiveIntensity: 0.88,
+    emissive: 0xffcf6a,
+    emissiveIntensity: 1.12,
     roughness: 0.08,
     transparent: true,
-    opacity: 0.48,
+    opacity: 0.46,
     depthWrite: false,
     side: THREE.FrontSide,
   });
@@ -907,18 +907,35 @@ function getDetailedPeaceLanternCache(): DetailedPeaceLanternCache {
   return cachedDetailedLantern;
 }
 
-const lanternInnerCoreGeo = new THREE.SphereGeometry(0.088, 12, 10);
-lanternInnerCoreGeo.scale(1.0, 1.55, 1.0);
-lanternInnerCoreGeo.translate(0, 1.89, 0);
+const lanternInnerCoreGeo = new THREE.SphereGeometry(0.115, 14, 12);
+lanternInnerCoreGeo.scale(1.0, 1.48, 1.0);
+lanternInnerCoreGeo.translate(0, 1.90, 0);
 const lanternInnerCoreMat = new THREE.MeshBasicMaterial({
-  color: 0xffdc8a,
+  color: 0xffbe4a,
   transparent: true,
-  opacity: 0.58,
+  opacity: 0.72,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
 });
-const lanternFlameCoreMat = new THREE.MeshBasicMaterial({
-  color: 0xfff8de,
+const lanternFlameCoreMat = new THREE.MeshStandardMaterial({
+  color: 0xfffbe6,
+  emissive: 0xffd260,
+  emissiveIntensity: 2.85,
+  roughness: 0.12,
+  metalness: 0.0,
+});
+const lanternFlameOuterGeo = new THREE.SphereGeometry(0.056, 12, 10);
+lanternFlameOuterGeo.scale(1.0, 2.25, 1.0);
+lanternFlameOuterGeo.translate(0, 1.88, 0);
+const lanternFlameOuterMat = new THREE.MeshStandardMaterial({
+  color: 0xffb347,
+  emissive: 0xff6b14,
+  emissiveIntensity: 2.2,
+  roughness: 0.18,
+  metalness: 0.0,
+  transparent: true,
+  opacity: 0.74,
+  depthWrite: false,
 });
 
 /**
@@ -964,17 +981,23 @@ export function buildDetailedPeaceLantern(
   const flame = new THREE.Mesh(cache.flameGeo, lanternFlameCoreMat);
   flame.userData.nonCollidable = true;
 
+  const flameOuter = new THREE.Mesh(lanternFlameOuterGeo, lanternFlameOuterMat);
+  flameOuter.userData.nonCollidable = true;
+
   const innerHalo = new THREE.Mesh(lanternInnerCoreGeo, lanternInnerCoreMat);
   innerHalo.userData.nonCollidable = true;
 
-  // Subtle warm soffit highlight ring inside roof ceiling
+  // Warm soffit highlight disc inside roof ceiling
   const soffitGlow = new THREE.Mesh(
-    new THREE.RingGeometry(0.06, 0.22, 12),
+    new THREE.RingGeometry(0.04, 0.23, 14),
     glowMat,
   );
   soffitGlow.rotation.x = Math.PI / 2;
   soffitGlow.position.y = 2.11;
   soffitGlow.userData.nonCollidable = true;
+  if ((glowMat as THREE.MeshStandardMaterial).isMaterial) {
+    (glowMat as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+  }
 
   g.add(
     basaltMesh,
@@ -985,6 +1008,7 @@ export function buildDetailedPeaceLantern(
     amberGlass,
     chimney,
     innerHalo,
+    flameOuter,
     flame,
     soffitGlow,
   );

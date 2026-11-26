@@ -1971,7 +1971,7 @@ export function buildSacredGardenSurroundingPond(
     addBankWall(stepX0, stepX1, 6.8, outMaxZ - 0.604, -0.28, -1.02, brickMat);
   }
 
-  // 3. Outer Sacred Pond Pilgrim Promenades (top at ly = +0.09 -> world +0.34m)
+  // 3. Outer Sacred Pond Pilgrim Promenades (top at ly = +0.09 -> world +0.34m, strictly non-overlapping with bankWall!)
   const addPromenadeWalk = (x0: number, x1: number, z0: number, z1: number) => {
     const sx = x1 - x0;
     const sz = z1 - z0;
@@ -1980,28 +1980,24 @@ export function buildSacredGardenSurroundingPond(
     walk.receiveShadow = true;
     g.add(walk);
   };
-  addPromenadeWalk(-51.2, 50.7, 60.2, 63.6); // South outer pilgrim trail
-  addPromenadeWalk(-51.2, 50.7, -55.6, -52.2); // North outer pilgrim trail
-  addPromenadeWalk(-51.2, -50.0, -52.2, 60.2); // West outer coping walk
-  addPromenadeWalk(50.0, 50.7, -52.2, 60.2); // East outer coping trim
+  addPromenadeWalk(-51.2, 50.7, 60.55, 63.6); // South outer pilgrim trail (starts cleanly outside South bankWall 60.55)
+  addPromenadeWalk(-51.2, 50.7, -55.6, -52.55); // North outer pilgrim trail (ends cleanly outside North bankWall -52.55)
+  addPromenadeWalk(-51.2, -50.55, -52.55, 60.55); // West outer coping walk (strictly outside West bankWall -50.55)
+  addPromenadeWalk(50.55, 50.7, -52.55, 60.55); // East outer coping trim (strictly outside East bankWall 50.55)
 
-  // Outer Chunar sandstone curb border rails cleanly split at cardinal bridges (top +0.112 local -> proud 2.2cm, zero Z-fighting)
+  // Outer Chunar sandstone curb border rails cleanly seated atop +0.090 deck & inset 1.5cm from outer vertical faces (zero Z-fighting)
   const addCurbRun = (x0: number, x1: number, z0: number, z1: number) => {
     const sx = x1 - x0;
     const sz = z1 - z0;
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.044, sz), chunarMat);
-    curb.position.set((x0 + x1) * 0.5, 0.090, (z0 + z1) * 0.5);
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.024, sz), chunarMat);
+    curb.position.set((x0 + x1) * 0.5, 0.102, (z0 + z1) * 0.5);
     curb.receiveShadow = true;
     curb.userData.nonCollidable = true;
     g.add(curb);
   };
-  for (const cz of [60.31, 63.49, -52.31, -55.49]) {
-    addCurbRun(-51.2, -3.45, cz - 0.11, cz + 0.11);
-    addCurbRun(3.45, 50.7, cz - 0.11, cz + 0.11);
-  }
-  for (const cx of [-51.09, 50.59]) {
-    addCurbRun(cx - 0.11, cx + 0.11, -52.2, 1.25);
-    addCurbRun(cx - 0.11, cx + 0.11, 6.75, 60.2);
+  for (const cz of [60.425, -52.425]) {
+    addCurbRun(-50.96, -3.45, cz - 0.11, cz + 0.11);
+    addCurbRun(3.45, 50.46, cz - 0.11, cz + 0.11);
   }
 
   // 4. Single Combined Real-Time Planar Reflector Water Surface across all 4 surrounding pond channels
@@ -2059,48 +2055,6 @@ export function buildSacredGardenSurroundingPond(
   );
   g.add(surroundingFlora);
   g.userData.lotusCount = surroundingLotuses.length;
-
-  // 8. Ornate Tiered Granite & Bronze Kalash Corner Boundary Pillars at outer South & North Promenade corners
-  const cornerKalashGeo = new THREE.LatheGeometry(
-    [
-      new THREE.Vector2(0.0, 0.0),
-      new THREE.Vector2(0.14, 0.0),
-      new THREE.Vector2(0.11, 0.05),
-      new THREE.Vector2(0.20, 0.14),
-      new THREE.Vector2(0.21, 0.22),
-      new THREE.Vector2(0.12, 0.30),
-      new THREE.Vector2(0.16, 0.35),
-      new THREE.Vector2(0.06, 0.42),
-      new THREE.Vector2(0.015, 0.52),
-      new THREE.Vector2(0.0, 0.56),
-    ],
-    18,
-  );
-  for (const [bx, bz] of [[-50.5, 62.9], [50.2, 62.9], [-50.5, -54.9], [50.2, -54.9]] as Array<[number, number]>) {
-    const mon = new THREE.Group();
-    mon.position.set(bx, 0.09, bz);
-    const footBrick = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.18, 0.92), brickMat);
-    footBrick.position.y = 0.09;
-    footBrick.castShadow = true;
-    footBrick.receiveShadow = true;
-    const baseStone = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.16, 0.76), chunarMat);
-    baseStone.position.y = 0.26;
-    baseStone.castShadow = true;
-    const shaftBlock = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.52, 0.56), chunarMat);
-    shaftBlock.position.y = 0.60;
-    shaftBlock.castShadow = true;
-    const bronzeBand = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.07, 0.60), bronzeMat);
-    bronzeBand.position.y = 0.60;
-    const cornice = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.11, 0.70), chunarMat);
-    cornice.position.y = 0.91;
-    const lotusPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.30, 0.08, 16), bronzeMat);
-    lotusPlate.position.y = 1.00;
-    const pot = new THREE.Mesh(cornerKalashGeo, goldMat);
-    pot.position.y = 1.04;
-    pot.castShadow = true;
-    mon.add(footBrick, baseStone, shaftBlock, bronzeBand, cornice, lotusPlate, pot);
-    g.add(mon);
-  }
 
   return g;
 }

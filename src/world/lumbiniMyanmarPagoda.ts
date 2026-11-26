@@ -437,8 +437,8 @@ export function buildMyanmarGoldenPagoda(
   }
 
   // Sculpted 3D inlaid slate & bronze Dharmachakra medallions at plaza corners & gate axes
-  const medBaseGeo = new THREE.CylinderGeometry(0.66, 0.70, 0.018, 24);
-  const medInnerDiscGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.020, 24);
+  const medBaseGeo = new THREE.CylinderGeometry(0.66, 0.70, 0.022, 24);
+  const medInnerDiscGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.024, 24);
   const medRimGeo = new THREE.TorusGeometry(0.47, 0.026, 8, 24);
   medRimGeo.rotateX(Math.PI / 2);
   const medSpokeGeo = new THREE.BoxGeometry(0.90, 0.016, 0.058);
@@ -455,31 +455,31 @@ export function buildMyanmarGoldenPagoda(
     [7.78, 0],
   ] as Array<[number, number]>) {
     const outerSlate = new THREE.Mesh(medBaseGeo, darkSlateStoneMat);
-    outerSlate.position.set(mx, 0.075, mz);
+    outerSlate.position.set(mx, 0.080, mz); // bottom 0.069 embedded 1mm into plazaSlab top 0.070, top 0.091
     outerSlate.receiveShadow = true;
     outerSlate.userData.nonCollidable = true;
     const innerStone = new THREE.Mesh(medInnerDiscGeo, forecourtMat);
-    innerStone.position.set(mx, 0.076, mz);
+    innerStone.position.set(mx, 0.091, mz); // top 0.103 (1.2cm cleanly proud of outerSlate!)
     innerStone.receiveShadow = true;
     innerStone.userData.nonCollidable = true;
     const rim = new THREE.Mesh(medRimGeo, bronzeMat);
-    rim.position.set(mx, 0.083, mz);
+    rim.position.set(mx, 0.106, mz);
     rim.userData.nonCollidable = true;
     const boss = new THREE.Mesh(medBossGeo, brightGoldMat);
-    boss.position.set(mx, 0.086, mz);
+    boss.position.set(mx, 0.110, mz);
     boss.userData.nonCollidable = true;
     g.add(outerSlate, innerStone, rim, boss);
     for (let k = 0; k < 4; k++) {
       const ang = (k * Math.PI) / 4;
       const ray = new THREE.Mesh(medSpokeGeo, bronzeMat);
-      ray.position.set(mx, 0.083, mz);
+      ray.position.set(mx, 0.107, mz);
       ray.rotation.y = ang;
       ray.userData.nonCollidable = true;
       g.add(ray);
       for (const dir of [-1, 1]) {
         const pAng = ang + (dir > 0 ? 0 : Math.PI) + Math.PI / 8;
         const petal = new THREE.Mesh(medPetalGeo, deepGoldMat);
-        petal.position.set(mx + Math.sin(pAng) * 0.54, 0.081, mz + Math.cos(pAng) * 0.54);
+        petal.position.set(mx + Math.sin(pAng) * 0.54, 0.103, mz + Math.cos(pAng) * 0.54);
         petal.rotation.y = pAng;
         petal.userData.nonCollidable = true;
         g.add(petal);

@@ -145,9 +145,6 @@ export const LUMBINI_PEACE_CANAL = {
   bridgeMaxX: -263.8,
   bridgeCenterZ: 100.0,
   bridgeHalfWidth: 2.6,
-  stupaCenterX: -304,
-  stupaCenterZ: 100,
-  stupaPlazaRadius: 9.6,
 };
 
 export const LUMBINI_SACRED_POND = {
@@ -194,12 +191,10 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
-  // Continuous Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Gate -> Western Peace Parkland (zero overlapping road ribbons!)
-  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 164.0], [-160, 164.5], [-192, 164.4], [-210, 164.4], [-235, 165.4], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 109.6]],
+  // Continuous Janaki Chowk South Gate (-92, 149.5) -> Lumbini South Gate -> Western Peace Parkland Loop -> Lumbini North Gate -> Boudhanath Stupa (-108, 4)
+  [[-92, 149.5], [-92, 155.5], [-92, 161.5], [-120, 164.0], [-160, 164.5], [-192, 164.4], [-210, 164.4], [-235, 165.4], [-272, 167.0], [-298, 158.0], [-304, 132.0], [-304, 100.0], [-304, 68.0], [-298, 40.0], [-272, 29.0], [-234, 32.8], [-210, 35.2], [-194, 34.4], [-172, 26], [-136, 14], [-108, 4]],
   // Park Corridor spur starting cleanly at South Boulevard edge -> Lumbini East Outer Threshold Apron (-158.6, 100.0)
   [[-156.5, 162.3], [-156.8, 134.0], [-156.8, 108.0], [-157.4, 100.0], [-158.6, 100.0]],
-  // Continuous Boudhanath Stupa (-108, 4) -> Lumbini North Gate -> Western Peace Parkland (zero overlapping road ribbons!)
-  [[-108, 4], [-136, 14], [-172, 26], [-194, 34.4], [-210, 35.2], [-234, 32.8], [-272, 29.0], [-298, 40.0], [-304, 68.0], [-304, 90.4]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -299,8 +294,8 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
   { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
   // Lumbini Sacred Garden outer pond promenades (-210, 96) & Expanded Peace Canal Parkland
-  { x: -224.0, z: 157.8, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
-  { x: -196.0, z: 157.8, kind: 'offering-bowl', rotY: -0.25, scale: 1.05 },
+  { x: -221.8, z: 157.55, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
+  { x: -198.2, z: 157.55, kind: 'offering-bowl', rotY: -0.25, scale: 1.05 },
   { x: -224.0, z: 42.2, kind: 'prayer-flags', rotY: 0.4, scale: 1.05 },
   { x: -196.0, z: 42.2, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
   { x: -285.5, z: 76.0, kind: 'prayer-flags', rotY: 0.15, scale: 1.1 },
@@ -398,10 +393,8 @@ export function getWorldTreeSpots(): TreeSpot[] {
       x <= LUMBINI_PEACE_CANAL.maxX + 6.5 &&
       z >= LUMBINI_PEACE_CANAL.minZ - 5.0 &&
       z <= LUMBINI_PEACE_CANAL.maxZ + 5.0;
-    const nearWestPeaceStupa =
-      Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <
-        LUMBINI_PEACE_CANAL.stupaPlazaRadius + 4.5 ||
-      (x >= -296 && x <= -252 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) < 6.2);
+    const nearWestCanalWalk =
+      x >= -303 && x <= -252 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) < 6.2;
     const nearRoad = minDistToRoadSamples(x, z, roadSamples) < 4.6;
     const nearArtifact = OUTER_TEMPLE_ARTIFACT_SPOTS.some((a) => Math.hypot(x - a.x, z - a.z) < 3.0);
 
@@ -411,7 +404,7 @@ export function getWorldTreeSpots(): TreeSpot[] {
       nearRiver ||
       nearLake ||
       nearPeaceCanal ||
-      nearWestPeaceStupa ||
+      nearWestCanalWalk ||
       nearRoad ||
       nearArtifact
     ) {
@@ -884,28 +877,25 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     }
   }
 
-  // Expanded Western Peace Parkland: West-Gate-to-Canal Promenade, Canal-side boardwalks & White Peace Stupa Overlook
+  // Expanded Western Peace Parkland: West-Gate-to-Canal Promenade & Canal-side boardwalks
   const onWestCanalAxisWalk =
-    x >= -295.0 &&
+    x >= -302.0 &&
     x <= -254.0 &&
     Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 2.6;
   const onCanalEdgePromenade =
     z >= LUMBINI_PEACE_CANAL.minZ &&
     z <= LUMBINI_PEACE_CANAL.maxZ &&
     ((x >= -265.2 && x <= -261.2) || (x >= -282.8 && x <= -278.8));
-  const onWestStupaPlaza =
-    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
-    LUMBINI_PEACE_CANAL.stupaPlazaRadius;
-  if (onWestStupaPlaza || onWestCanalAxisWalk) {
+  if (onWestCanalAxisWalk) {
     surfaceY = Math.max(surfaceY, 0.35);
   } else if (onCanalEdgePromenade) {
     surfaceY = Math.max(surfaceY, 0.32);
   }
 
-  // Raised level cobblestone road decks outside Janaki Chowk, Lumbini Precinct & Western Peace Plaza
+  // Raised level cobblestone road decks outside Janaki Chowk & Lumbini Precinct
   const inJanakiChowk = x >= -131.0 && x <= -53.5 && z >= 70.0 && z <= 150.2;
   const inLumbiniPrecinct = x >= -261.0 && x <= -159.2 && z >= 43.2 && z <= 156.8;
-  if (!inJanakiChowk && !inLumbiniPrecinct && !onWestStupaPlaza) {
+  if (!inJanakiChowk && !inLumbiniPrecinct) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
     let bestDeckY = surfaceY;
@@ -959,11 +949,6 @@ export function isWalkablePosition(x: number, z: number): boolean {
     x <= LUMBINI_PEACE_CANAL.maxX + 0.65 &&
     z >= LUMBINI_PEACE_CANAL.minZ - 0.65 &&
     z <= LUMBINI_PEACE_CANAL.maxZ + 0.65
-  ) {
-    return false;
-  }
-  if (
-    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <= 4.35
   ) {
     return false;
   }
@@ -1069,13 +1054,23 @@ export function isWalkablePosition(x: number, z: number): boolean {
     const ldx = x - lumbiniLm.position.x;
     const ldz = z - lumbiniLm.position.z;
     if (ldx >= -54.0 && ldx <= 54.0 && ldz >= -57.0 && ldz <= 66.0) {
-      // 1. Perimeter low brick wall (keep North/South axial gates |ldx| <= 3.4 and West/East gates ldz in [1.5, 6.5] wide open)
-      if (Math.abs(ldz - 52.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
-      if (Math.abs(ldz + 44.0) <= 0.65 && Math.abs(ldx) >= 3.4 && ldx >= -44.4 && ldx <= 44.4) return false;
-      if (Math.abs(ldx + 44.0) <= 0.65 && (ldz < 1.5 || ldz > 6.5) && ldz >= -44.4 && ldz <= 52.4) return false;
-      if (Math.abs(ldx - 44.0) <= 0.65 && (ldz < 1.5 || ldz > 6.5) && ldz >= -44.4 && ldz <= 52.4) return false;
+      // 1. Unified Outer Complex Heritage Perimeter Fence enclosing Temple + Sacred Lake + Outer Promenades
+      // (keeps North/South axial gates |ldx| < 3.05 and West/East gates ldz in [1.65, 6.35] wide open)
+      if (Math.abs(ldz - 63.475) <= 0.45 && Math.abs(ldx) >= 3.45 && ldx >= -51.55 && ldx <= 51.05) return false;
+      if (Math.abs(ldz + 55.475) <= 0.45 && Math.abs(ldx) >= 3.45 && ldx >= -51.55 && ldx <= 51.05) return false;
+      if (Math.abs(ldx + 51.075) <= 0.45 && (ldz < 1.25 || ldz > 6.75) && ldz >= -55.95 && ldz <= 63.95) return false;
+      if (Math.abs(ldx - 50.575) <= 0.45 && (ldz < 1.25 || ldz > 6.75) && ldz >= -55.95 && ldz <= 63.95) return false;
 
-      // 2. South & North Dharmachakra Torana Gate piers + West/East Gate piers
+      // Outer Corner Bastions & 8 Cardinal Entrance Gate Piers
+      for (const [px, pz] of [
+        [-51.075, 63.475], [50.575, 63.475], [-51.075, -55.475], [50.575, -55.475],
+        [-3.65, 63.475], [3.65, 63.475], [-3.65, -55.475], [3.65, -55.475],
+        [-51.075, 1.05], [-51.075, 6.95], [50.575, 1.05], [50.575, 6.95],
+      ] as Array<[number, number]>) {
+        if (Math.abs(ldx - px) <= 0.62 && Math.abs(ldz - pz) <= 0.62) return false;
+      }
+
+      // 2. Inner South & North Dharmachakra Torana Bridgehead Piers + West/East Portal Piers
       if (Math.abs(Math.abs(ldx) - 4.12) <= 0.85 && (Math.abs(ldz - 51.8) <= 0.85 || Math.abs(ldz + 43.8) <= 0.85)) {
         return false;
       }
@@ -1172,8 +1167,8 @@ export function isWalkablePosition(x: number, z: number): boolean {
         [-7.6, 22.2, 0.55, 1.15],
         [-14.5, 1.3, 1.15, 0.55],
         [14.5, 1.3, 1.15, 0.55],
-        [-15.5, 62.5, 1.15, 0.55],
-        [15.5, 62.5, 1.15, 0.55],
+        [-16.1, 62.55, 1.15, 0.55],
+        [16.1, 62.55, 1.15, 0.55],
       ] as Array<[number, number, number, number]>) {
         if (Math.abs(ldx - bx) <= hw && Math.abs(ldz - bz) <= hd) return false;
       }
@@ -2672,11 +2667,9 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
     }
   }
 
-  // Western Lumbini Peace Canal promenade, Maitri bridge approach & Peace Stupa plaza
+  // Western Lumbini Peace Canal promenade & Maitri bridge approach
   if (
-    Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
-      LUMBINI_PEACE_CANAL.stupaPlazaRadius ||
-    (x >= -295.0 && x <= -254.0 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 2.6) ||
+    (x >= -302.0 && x <= -254.0 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 2.6) ||
     (z >= LUMBINI_PEACE_CANAL.minZ &&
       z <= LUMBINI_PEACE_CANAL.maxZ &&
       ((x >= -265.2 && x <= -261.2) || (x >= -282.8 && x <= -278.8)))
@@ -3065,9 +3058,9 @@ export const LUMBINI_SPATIAL_AUDIO_EMITTERS: LumbiniSpatialEmitterSpec[] = [
     speciesHint: 'garden-hedge',
   },
   {
-    id: 'lumbini-stupa-leaves',
+    id: 'lumbini-west-park-leaves',
     kind: 'leaf-rustle',
-    label: 'Shanti Peace Parkland Trees',
+    label: 'Western Peace Parkland Trees',
     x: -296.0,
     y: 3.0,
     z: 100.0,

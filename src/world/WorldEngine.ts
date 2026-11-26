@@ -64,7 +64,7 @@ import {
 } from './worldLogic';
 import { LumbiniFireflySystem } from './lumbiniFireflies';
 import { LumbiniIncenseSmokeSystem } from './lumbiniIncenseSmoke';
-import { createRoundedSpoonLotusPetalGeo } from './lumbiniBuddhaSculpt';
+import { UrliOfferingBowlSuite } from './urliLotusCraft';
 import { getLungtaDrapeMaterials } from './prayerFlags';
 import { WeatherParticleSystem } from './weatherParticles';
 import { ProceduralTextureSet, createProceduralTextures } from './proceduralTextures';
@@ -578,7 +578,7 @@ export class WorldEngine {
       this.beaconPosZ[i] = this.beaconPoolDescs[i].pos.z;
     }
 
-    const poolSize = 6;
+    const poolSize = 8;
     this.beaconSelectedIdx = new Int32Array(poolSize);
     this.beaconSelectedDistSq = new Float64Array(poolSize);
     for (let i = 0; i < poolSize; i++) {
@@ -1286,58 +1286,6 @@ export class WorldEngine {
           roughness: 0.86,
         }),
     );
-    const waterBowlMat = getCachedMaterial(
-      this.textures,
-      'outer-water-bowl',
-      () =>
-        new THREE.MeshStandardMaterial({
-          normalMap: this.textures.waterNormal,
-          normalScale: new THREE.Vector2(0.55, 0.55),
-          color: 0x22666b,
-          roughness: 0.1,
-          metalness: 0.24,
-        }),
-    );
-    const lilyPadMat = getCachedMaterial(
-      this.textures,
-      'outer-lily-pad',
-      () =>
-        new THREE.MeshStandardMaterial({
-          color: 0x3b7a3e,
-          roughness: 0.62,
-        }),
-    );
-    const lotusOuterMat = getCachedMaterial(
-      this.textures,
-      'outer-lotus-outer',
-      () =>
-        new THREE.MeshStandardMaterial({
-          color: 0xf190b0,
-          roughness: 0.48,
-          side: THREE.DoubleSide,
-        }),
-    );
-    const lotusInnerMat = getCachedMaterial(
-      this.textures,
-      'outer-lotus-inner',
-      () =>
-        new THREE.MeshStandardMaterial({
-          color: 0xffd2e0,
-          roughness: 0.42,
-          side: THREE.DoubleSide,
-        }),
-    );
-    const flameMat = getCachedMaterial(
-      this.textures,
-      'outer-flame',
-      () =>
-        new THREE.MeshStandardMaterial({
-          color: 0xfff3c4,
-          emissive: 0xff9b28,
-          emissiveIntensity: 2.4,
-          roughness: 0.18,
-        }),
-    );
     const emberMat = getCachedMaterial(
       this.textures,
       'outer-ember',
@@ -1366,53 +1314,10 @@ export class WorldEngine {
     const lungtaDrapeMats = getLungtaDrapeMaterials();
     const outerFlagMats = lungtaDrapeMats.length >= 5 ? lungtaDrapeMats : flagMats;
 
-    // Ornate Makrana White Marble & Hammered Brass Urli Sacred Lotus Basin geometries (smooth 24-seg pedestals!)
-    const urliFootingGeo = new THREE.CylinderGeometry(0.55, 0.64, 0.82, 24);
-    const urliPlinthGeo = new THREE.CylinderGeometry(0.48, 0.54, 0.12, 24);
-    const urliSteppedGeo = new THREE.CylinderGeometry(0.39, 0.45, 0.12, 24);
-    const urliTealCollarGeo = new THREE.CylinderGeometry(0.33, 0.36, 0.08, 24);
-    const urliNeckGeo = new THREE.LatheGeometry(
-      [
-        new THREE.Vector2(0.0, 0.0),
-        new THREE.Vector2(0.32, 0.0),
-        new THREE.Vector2(0.27, 0.035),
-        new THREE.Vector2(0.22, 0.075),
-        new THREE.Vector2(0.25, 0.115),
-        new THREE.Vector2(0.31, 0.145),
-        new THREE.Vector2(0.0, 0.145),
-      ],
-      24,
+    const urliSuite = new UrliOfferingBowlSuite(
+      Math.max(4, this.textures.meadowMap?.anisotropy || 4),
     );
-    const urliLotusBaseGeo = createRoundedSpoonLotusPetalGeo(0.115, 0.19, 0.026);
-    const urliCalyxCollarGeo = new THREE.TorusGeometry(0.245, 0.016, 10, 28);
-    urliCalyxCollarGeo.rotateX(Math.PI / 2);
-    const urliLathePts = [
-      new THREE.Vector2(0.0, 0.0),
-      new THREE.Vector2(0.22, 0.015),
-      new THREE.Vector2(0.35, 0.07),
-      new THREE.Vector2(0.49, 0.18),
-      new THREE.Vector2(0.54, 0.28),
-      new THREE.Vector2(0.58, 0.32),
-      new THREE.Vector2(0.55, 0.35),
-      new THREE.Vector2(0.47, 0.32),
-      new THREE.Vector2(0.42, 0.27),
-      new THREE.Vector2(0.24, 0.11),
-      new THREE.Vector2(0.0, 0.095),
-    ];
-    const bowlGeo = new THREE.LatheGeometry(urliLathePts, 32);
-    const bowlBandGeo = new THREE.TorusGeometry(0.525, 0.014, 8, 32);
-    bowlBandGeo.rotateX(Math.PI / 2);
-    const bowlRimCollarGeo = new THREE.TorusGeometry(0.562, 0.014, 8, 32);
-    bowlRimCollarGeo.rotateX(Math.PI / 2);
-    const bowlHandleGeo = new THREE.TorusGeometry(0.055, 0.014, 8, 16);
-    const bowlWaterGeo = new THREE.CircleGeometry(0.445, 24);
-    bowlWaterGeo.rotateX(-Math.PI / 2);
-    const lilyGeo = new THREE.CircleGeometry(0.095, 14, 0.2, Math.PI * 1.82);
-    lilyGeo.rotateX(-Math.PI / 2);
-    const lotusPetalGeo = createRoundedSpoonLotusPetalGeo(0.052, 0.088, 0.016);
-    const centerDiyaStemGeo = new THREE.CylinderGeometry(0.025, 0.045, 0.13, 12);
-    const diyaCupGeo = new THREE.CylinderGeometry(0.055, 0.025, 0.036, 12);
-    const flameGeo = new THREE.ConeGeometry(0.026, 0.092, 8);
+    let offeringBowlIdx = 0;
 
     // Makrana Marble Pedestal + Cast-Bronze Newari Tripod Dhupauro Censer geometries (smooth 24-seg pedestals!)
     const censerFootingGeo = new THREE.CylinderGeometry(0.44, 0.52, 0.82, 24);
@@ -1466,111 +1371,47 @@ export class WorldEngine {
       artifact.scale.setScalar(spot.scale);
 
       if (spot.kind === 'offering-bowl') {
-        const footing = new THREE.Mesh(urliFootingGeo, weatheredStoneMat);
-        footing.position.y = -0.39;
-        footing.receiveShadow = true;
-        const p1 = new THREE.Mesh(urliPlinthGeo, whiteMarbleMat);
-        p1.position.y = 0.06;
-        p1.castShadow = true;
-        p1.receiveShadow = true;
-        artifact.add(footing);
-        const p2 = new THREE.Mesh(urliSteppedGeo, whiteMarbleMat);
-        p2.position.y = 0.18;
-        p2.castShadow = true;
-        const collar = new THREE.Mesh(urliTealCollarGeo, tealMarbleMat);
-        collar.position.y = 0.28;
-        const neck = new THREE.Mesh(urliNeckGeo, whiteMarbleMat);
-        neck.position.y = 0.31;
-        neck.castShadow = true;
-        const calyxRing = new THREE.Mesh(urliCalyxCollarGeo, brightBrassMat);
-        calyxRing.position.y = 0.335;
-        artifact.add(p1, p2, collar, neck, calyxRing);
-
-        // Two tightly cupped carved Makrana marble spoon-lotus calyx rings hugging the bronze Urli underside
-        for (let lp = 0; lp < 12; lp++) {
-          const ang = (lp / 12) * Math.PI * 2;
-          const petal = new THREE.Mesh(urliLotusBaseGeo, whiteMarbleMat);
-          petal.position.set(Math.sin(ang) * 0.24, 0.345, Math.cos(ang) * 0.24);
-          petal.rotation.y = ang;
-          petal.rotation.x = 0.34;
-          petal.castShadow = true;
-          artifact.add(petal);
-        }
-        for (let lp = 0; lp < 12; lp++) {
-          const ang = ((lp + 0.5) / 12) * Math.PI * 2;
-          const petal = new THREE.Mesh(urliLotusBaseGeo, whiteMarbleMat);
-          petal.scale.setScalar(0.84);
-          petal.position.set(Math.sin(ang) * 0.215, 0.372, Math.cos(ang) * 0.215);
-          petal.rotation.y = ang;
-          petal.rotation.x = 0.24;
-          artifact.add(petal);
-        }
-
-        const bowl = new THREE.Mesh(bowlGeo, agedBronzeMat);
-        bowl.position.y = 0.44;
-        bowl.castShadow = true;
-        const band = new THREE.Mesh(bowlBandGeo, brightBrassMat);
-        band.position.y = 0.69;
-        const rimCollar = new THREE.Mesh(bowlRimCollarGeo, brightBrassMat);
-        rimCollar.position.y = 0.775;
-        artifact.add(bowl, band, rimCollar);
-
-        for (const side of [-1, 1]) {
-          const handle = new THREE.Mesh(bowlHandleGeo, brightBrassMat);
-          handle.position.set(side * 0.565, 0.67, 0);
-          handle.rotation.y = Math.PI / 2;
-          artifact.add(handle);
-        }
-
-        const water = new THREE.Mesh(bowlWaterGeo, waterBowlMat);
-        water.position.y = 0.71;
-        artifact.add(water);
-
-        // Center elevated Akhanda Diya lamp + 2 floating leaf-cup diyas & 3 blooming lotuses
-        const cStem = new THREE.Mesh(centerDiyaStemGeo, brightBrassMat);
-        cStem.position.y = 0.71;
-        const cCup = new THREE.Mesh(diyaCupGeo, brightBrassMat);
-        cCup.position.y = 0.785;
-        const cFlame = new THREE.Mesh(flameGeo, flameMat);
-        cFlame.position.y = 0.84;
-        artifact.add(cStem, cCup, cFlame);
-
-        const lotusPos: Array<[number, number]> = [
-          [-0.2, 0.14],
-          [0.21, 0.11],
-          [0.02, -0.22],
-        ];
-        for (const [lx, lz] of lotusPos) {
-          const pad = new THREE.Mesh(lilyGeo, lilyPadMat);
-          pad.position.set(lx, 0.714, lz);
-          pad.rotation.y = lx * 4.5;
-          artifact.add(pad);
-          for (let k = 0; k < 6; k++) {
-            const ang = (k / 6) * Math.PI * 2;
-            const outerP = new THREE.Mesh(lotusPetalGeo, lotusOuterMat);
-            outerP.position.set(lx + Math.sin(ang) * 0.028, 0.722, lz + Math.cos(ang) * 0.028);
-            outerP.rotation.y = ang;
-            outerP.rotation.x = 0.78;
-            const innerP = new THREE.Mesh(lotusPetalGeo, lotusInnerMat);
-            innerP.scale.setScalar(0.72);
-            innerP.position.set(lx + Math.sin(ang + 0.5) * 0.018, 0.730, lz + Math.cos(ang + 0.5) * 0.018);
-            innerP.rotation.y = ang + 0.5;
-            innerP.rotation.x = 0.42;
-            artifact.add(outerP, innerP);
+        const builtBowl = urliSuite.createOfferingBowlAssembly(
+          {
+            whiteMarbleMat,
+            tealMarbleMat,
+            weatheredStoneMat,
+            agedBronzeMat,
+            brightBrassMat,
+          },
+          offeringBowlIdx * 1.37,
+        );
+        offeringBowlIdx++;
+        artifact.add(builtBowl.group);
+        artifact.userData.noSpin = true;
+        artifact.userData.onEnvironmentUpdate = (env: {
+          elapsed: number;
+          skyColorHex: string;
+          lanternIntensity: number;
+        }) => {
+          const t = env.elapsed;
+          const flameLevel = THREE.MathUtils.clamp(
+            0.72 + (env.lanternIntensity ?? 1.0) * 0.34,
+            0.70,
+            1.35,
+          );
+          builtBowl.waterUniforms.uTime.value = t;
+          builtBowl.waterUniforms.uSkyColor.value.set(env.skyColorHex);
+          builtBowl.waterUniforms.uFlameIntensity.value = flameLevel;
+          for (let fi = 0; fi < builtBowl.flames.length; fi++) {
+            const fl = builtBowl.flames[fi];
+            fl.mantleUniforms.uTime.value = t;
+            fl.mantleUniforms.uIntensity.value = flameLevel;
+            fl.haloUniforms.uTime.value = t;
+            fl.haloUniforms.uIntensity.value = flameLevel;
+            const pulseY = 1 + Math.sin(t * 7.6 + fl.phase) * 0.055 + Math.cos(t * 11.4 + fl.phase) * 0.025;
+            const sway = Math.sin(t * 5.2 + fl.phase) * 0.045;
+            fl.rig.scale.set(fl.baseScale, fl.baseScale * pulseY, fl.baseScale);
+            fl.rig.rotation.z = sway;
           }
-        }
-        for (const [dx, dz] of [
-          [-0.21, -0.14],
-          [0.22, -0.13],
-        ] as Array<[number, number]>) {
-          const dCup = new THREE.Mesh(diyaCupGeo, brightBrassMat);
-          dCup.scale.setScalar(0.78);
-          dCup.position.set(dx, 0.725, dz);
-          const dFlame = new THREE.Mesh(flameGeo, flameMat);
-          dFlame.scale.setScalar(0.75);
-          dFlame.position.set(dx, 0.768, dz);
-          artifact.add(dCup, dFlame);
-        }
+        };
+        this.animatedLandmarkNodes.push(artifact);
+        this.animatedNodeAnchors.push({ isGlobal: false, x: spot.x, z: spot.z });
       } else if (spot.kind === 'incense-stand') {
         const footing = new THREE.Mesh(censerFootingGeo, weatheredStoneMat);
         footing.position.y = -0.39;
@@ -3047,6 +2888,16 @@ export class WorldEngine {
       if (this.outerGroundsGroup) {
         mergeStaticMeshesByMaterial(this.outerGroundsGroup, {
           preserveCustomShaderMaterials: true,
+        });
+        // Static footings/bowls inside outerGroundsGroup are now merged; clear snap metadata so
+        // subsequent deferred buildPhysicsBvhAndSnapAssets() calls never re-snap remaining noMerge
+        // children (Urli water/flames, prayer flag cloths) using a missing footing bounding box.
+        this.outerGroundsGroup.traverse((obj) => {
+          if (obj.userData) {
+            delete obj.userData.snapCategory;
+            delete obj.userData.groundEmbed;
+            delete obj.userData.prayerFlagSpot;
+          }
         });
       }
       if (this.curbedRoadsLanternGroup) {

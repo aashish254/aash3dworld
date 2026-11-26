@@ -1,13 +1,7 @@
 import * as THREE from 'three';
 import { LANDMARKS } from '../data/portfolioData';
-import {
-  createDetailedGajurSpire,
-  createRectangularHipRoofGeometry,
-} from './janakiMandirCraft';
-import { buildDetailedLumbiniBench } from './lumbiniGardenCraft';
-import { createDetailedNicheSeatedBuddha, createRoundedSpoonLotusPetalGeo } from './lumbiniBuddhaSculpt';
+import { createRectangularHipRoofGeometry } from './janakiMandirCraft';
 import { buildPeaceLantern } from './lumbiniShrines';
-import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 import { ProceduralTextureSet } from './proceduralTextures';
 import {
   BRIDGE_BOUNDS,
@@ -828,10 +822,9 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       !inSurroundingPond &&
       !onSacredBridge &&
       !onBridgePier &&
-      x >= -261.5 &&
-      x <= -159.0 &&
-      z >= 40.0 &&
-      z <= 160.2;
+      ((x >= -261.8 && x <= -158.6 && z >= 39.8 && z <= 160.2) ||
+        (Math.abs(x + 210.0) <= 4.5 && z >= 36.6 && z <= 163.4) ||
+        (Math.abs(z - 100.0) <= 3.6 && x >= -265.0 && x <= -155.6));
     const underPeaceCanal =
       !isOnLumbiniCanalBridge(x, z) &&
       x >= LUMBINI_PEACE_CANAL.minX - 0.8 &&
@@ -839,9 +832,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       z >= LUMBINI_PEACE_CANAL.minZ - 0.8 &&
       z <= LUMBINI_PEACE_CANAL.maxZ + 0.8;
     const underWestPeaceWalk =
-      Math.hypot(x - LUMBINI_PEACE_CANAL.stupaCenterX, z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
-        LUMBINI_PEACE_CANAL.stupaPlazaRadius + 0.6 ||
-      (x >= -295.8 && x <= -253.5 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 3.0) ||
+      (x >= -302.4 && x <= -253.5 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 3.0) ||
       (z >= LUMBINI_PEACE_CANAL.minZ - 0.5 &&
         z <= LUMBINI_PEACE_CANAL.maxZ + 0.5 &&
         ((x >= -265.6 && x <= -260.8) || (x >= -283.2 && x <= -278.4)));
@@ -1313,15 +1304,9 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
       return { excluded: true, roadD: 99, distRiver };
     }
     if (
-      px >= -296 &&
+      px >= -302.8 &&
       px <= -254 &&
       Math.abs(pz - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 4.6
-    ) {
-      return { excluded: true, roadD: 99, distRiver };
-    }
-    if (
-      Math.hypot(px - LUMBINI_PEACE_CANAL.stupaCenterX, pz - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
-      LUMBINI_PEACE_CANAL.stupaPlazaRadius + 2.4
     ) {
       return { excluded: true, roadD: 99, distRiver };
     }
@@ -2202,7 +2187,7 @@ export function createCurbedRoads(
     8,
   );
 
-  lanternCoords.forEach(([lx, lz], idx) => {
+  lanternCoords.forEach(([lx, lz]) => {
     const ly = isOnLumbiniBridgeAbutmentPier(lx, lz)
       ? 0.34
       : sampleTerrainMeshHeight(terrainMesh, lx, lz);
@@ -2223,12 +2208,14 @@ export function createCurbedRoads(
     detailedLantern.position.y = 0.15;
     post.add(footing, plinth, detailedLantern);
 
-    if (idx % 3 === 0) {
-      const ptLight = new THREE.PointLight(0xffb85c, 1.6, 18, 1.7);
-      ptLight.position.set(0, 2.02, 0);
-      post.add(ptLight);
-      lanternLights.push(ptLight);
-    }
+    const ptLight = new THREE.PointLight(0xffb54d, 1.85, 19, 1.6);
+    ptLight.position.set(0, 2.02, 0);
+    ptLight.userData.intensityScale = 1.28;
+    ptLight.userData.flickerAmp = 0.08;
+    ptLight.userData.flickerPhase = lx * 0.37 + lz * 0.51;
+    ptLight.userData.warmFlicker = true;
+    post.add(ptLight);
+    lanternLights.push(ptLight);
     lanternGroup.add(post);
   });
 
@@ -3234,15 +3221,6 @@ export function createLumbiniPeaceParkland(
     roughness: 0.9,
     metalness: 0.02,
   });
-  const whiteStuccoMat = new THREE.MeshStandardMaterial({
-    map: textures.whiteStuccoMap,
-    normalMap: textures.whiteStuccoNormal,
-    normalScale: new THREE.Vector2(0.32, 0.32),
-    roughnessMap: textures.whiteStuccoRough,
-    color: 0xf9f7f2,
-    roughness: 0.78,
-    metalness: 0.02,
-  });
   const bronzeMat = new THREE.MeshStandardMaterial({
     map: textures.agedBronzeMap,
     normalMap: textures.agedBronzeNormal,
@@ -3337,10 +3315,10 @@ export function createLumbiniPeaceParkland(
     group.add(endWall);
   }
 
-  // Axial brick approach walk linking Maya Devi West Gate across canal cleanly to Peace Stupa plaza rim
+  // Axial brick approach walk linking Maya Devi West Gate across Maitri Peace Bridge cleanly to West Parkland scenic road
   for (const [segX, segW] of [
     [-258.95, 10.1],
-    [-287.225, 14.45],
+    [-290.9, 21.8],
   ] as Array<[number, number]>) {
     const axisWalk = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.24, 5.2), brickPaverMat);
     axisWalk.position.set(segX, 0.23, bZ);
@@ -3353,6 +3331,10 @@ export function createLumbiniPeaceParkland(
       group.add(curb);
     }
   }
+  const westLoopLanding = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 5.6), chunarStoneMat);
+  westLoopLanding.position.set(-302.05, 0.24, bZ);
+  westLoopLanding.receiveShadow = true;
+  group.add(westLoopLanding);
 
   // 3. Arched Maitri Peace Bridge (spanning x = -280.2 .. -263.8 at z = 100.0)
   const bridgeGroup = new THREE.Group();
@@ -3515,322 +3497,6 @@ export function createLumbiniPeaceParkland(
     }
   }
   group.add(bridgeGroup);
-
-  // 4. Museum-Grade Western White Peace Stupa Overlook at (-304, 100)
-  const sx = LUMBINI_PEACE_CANAL.stupaCenterX;
-  const sz = LUMBINI_PEACE_CANAL.stupaCenterZ;
-  const stupaGroup = new THREE.Group();
-  stupaGroup.position.set(sx, 0, sz);
-
-  const plazaPad = new THREE.Mesh(
-    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius, LUMBINI_PEACE_CANAL.stupaPlazaRadius + 0.55, 0.32, 48),
-    chunarStoneMat,
-  );
-  plazaPad.position.y = 0.16; // top = +0.32m
-  plazaPad.receiveShadow = true;
-  const brickInlay = new THREE.Mesh(
-    new THREE.CylinderGeometry(LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, LUMBINI_PEACE_CANAL.stupaPlazaRadius - 1.1, 0.03, 48),
-    brickPaverMat,
-  );
-  brickInlay.position.y = 0.335; // bottom = 0.320m, top = +0.350m (zero Z-fighting)
-  brickInlay.receiveShadow = true;
-  stupaGroup.add(plazaPad, brickInlay);
-
-  // Octagonal stepped lime-stucco terraces, cardinal stairways, golden shrine niches & upper Pradakshina railing
-  const baseTier1 = new THREE.Mesh(new THREE.CylinderGeometry(4.65, 4.95, 0.72, 8), whiteStuccoMat);
-  baseTier1.rotation.y = Math.PI / 8;
-  baseTier1.position.y = 0.71;
-  baseTier1.castShadow = true;
-  baseTier1.receiveShadow = true;
-  const baseRim1 = new THREE.Mesh(new THREE.CylinderGeometry(4.74, 4.74, 0.10, 8), chunarStoneMat);
-  baseRim1.rotation.y = Math.PI / 8;
-  baseRim1.position.y = 1.07;
-
-  const baseTier2 = new THREE.Mesh(new THREE.CylinderGeometry(3.85, 4.10, 0.68, 8), whiteStuccoMat);
-  baseTier2.rotation.y = Math.PI / 8;
-  baseTier2.position.y = 1.43;
-  baseTier2.castShadow = true;
-  baseTier2.receiveShadow = true;
-  const baseRim2 = new THREE.Mesh(new THREE.CylinderGeometry(3.92, 3.92, 0.09, 8), chunarStoneMat);
-  baseRim2.rotation.y = Math.PI / 8;
-  baseRim2.position.y = 1.79;
-
-  // Upper terrace Pradakshina balustrade posts & rails
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    if (Math.abs(Math.sin(a)) < 0.16 || Math.abs(Math.cos(a)) < 0.16) continue;
-    const rx = Math.cos(a) * 3.74;
-    const rz = Math.sin(a) * 3.74;
-    const bPost = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.56, 0.14), whiteStuccoMat);
-    bPost.position.set(rx, 2.08, rz);
-    const bCap = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 6), goldMat);
-    bCap.position.set(rx, 2.40, rz);
-    stupaGroup.add(bPost, bCap);
-  }
-
-  // Four cardinal stairway flights ascending the stepped octagonal terrace
-  for (let dir = 0; dir < 4; dir++) {
-    const ang = (dir * Math.PI) / 2;
-    const stairGroup = new THREE.Group();
-    stairGroup.rotation.y = ang;
-    for (let st = 0; st < 6; st++) {
-      const tread = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.24, 0.38), chunarStoneMat);
-      tread.position.set(0, 0.44 + st * 0.22, 4.86 - st * 0.24);
-      tread.castShadow = true;
-      tread.receiveShadow = true;
-      stairGroup.add(tread);
-    }
-    for (const cx of [-0.82, 0.82]) {
-      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.42, 1.66), whiteStuccoMat);
-      cheek.position.set(cx, 1.05, 4.24);
-      cheek.rotation.x = 0.68;
-      const newel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), chunarStoneMat);
-      newel.position.set(cx, 0.66, 5.04);
-      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 8), goldMat);
-      orb.position.set(cx, 1.04, 5.04);
-      stairGroup.add(cheek, newel, orb);
-    }
-    stupaGroup.add(stairGroup);
-  }
-
-  // Recessed golden Dharma relief shrine niches on the octagonal terrace faces
-  for (let n = 0; n < 8; n++) {
-    if (n % 2 === 0) continue; // diagonal faces free of cardinal stairs
-    const na = (n / 8) * Math.PI * 2;
-    const niche = new THREE.Group();
-    niche.position.set(Math.sin(na) * 4.44, 0.78, Math.cos(na) * 4.44);
-    niche.rotation.y = na;
-    const nBack = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.56, 0.14), goldMat);
-    const nArch = new THREE.Mesh(createRectangularHipRoofGeometry(0.88, 0.22, 0.24, 0.2), goldMat);
-    nArch.position.y = 0.34;
-    niche.add(nBack, nArch);
-    stupaGroup.add(niche);
-  }
-
-  // Double-row 32-petal sculpted lotus drum base collar
-  const medhiDrum = new THREE.Mesh(new THREE.CylinderGeometry(3.38, 3.48, 0.26, 40), whiteStuccoMat);
-  medhiDrum.position.y = 1.94;
-  const medhiCollar = new THREE.Mesh(new THREE.TorusGeometry(3.26, 0.13, 12, 40), goldMat);
-  medhiCollar.rotation.x = Math.PI / 2;
-  medhiCollar.position.y = 2.06;
-
-  const stupaLotusPetalGeo = createRoundedSpoonLotusPetalGeo(0.36, 0.44, 0.068);
-  for (let row = 0; row < 2; row++) {
-    const pCount = 24;
-    for (let p = 0; p < pCount; p++) {
-      const pa = ((p + row * 0.5) / pCount) * Math.PI * 2;
-      const petal = new THREE.Mesh(stupaLotusPetalGeo, row === 0 ? whiteStuccoMat : goldMat);
-      petal.scale.setScalar(row === 0 ? 1.0 : 0.82);
-      petal.position.set(
-        Math.sin(pa) * (row === 0 ? 3.42 : 3.30),
-        row === 0 ? 1.88 : 2.04,
-        Math.cos(pa) * (row === 0 ? 3.42 : 3.30),
-      );
-      petal.rotation.y = pa;
-      petal.rotation.x = row === 0 ? 0.36 : 0.22;
-      stupaGroup.add(petal);
-    }
-  }
-
-  const domeGeo = new THREE.SphereGeometry(3.20, 48, 28, 0, Math.PI * 2, 0, Math.PI * 0.52);
-  const dome = new THREE.Mesh(domeGeo, whiteStuccoMat);
-  dome.position.y = 2.04;
-  dome.castShadow = true;
-  dome.receiveShadow = true;
-
-  // Harmika with custom Buddha Wisdom Eyes + Urna texture on all 4 cardinal faces
-  let harmikaSideMat: THREE.Material = goldMat;
-  if (typeof document !== 'undefined') {
-    harmikaSideMat = getCachedMaterial(textures, 'peace-stupa-harmika-mat', () => {
-      const hTex = getCachedTexture('peace-stupa-harmika-eyes', () => {
-        const hc = document.createElement('canvas');
-        hc.width = 256;
-        hc.height = 128;
-        const hctx = hc.getContext('2d');
-        if (hctx) {
-          hctx.fillStyle = '#f6f2e8';
-          hctx.fillRect(0, 0, 256, 128);
-          hctx.strokeStyle = '#c89b32';
-          hctx.lineWidth = 10;
-          hctx.strokeRect(5, 5, 246, 118);
-          // Paired serene Wisdom Eyes + eyebrows
-          hctx.strokeStyle = '#182442';
-          hctx.fillStyle = '#182442';
-          hctx.lineWidth = 4;
-          for (const ex of [72, 184]) {
-            hctx.beginPath();
-            hctx.moveTo(ex - 36, 44);
-            hctx.quadraticCurveTo(ex, 26, ex + 36, 44);
-            hctx.stroke();
-            hctx.beginPath();
-            hctx.ellipse(ex, 56, 28, 12, 0, 0, Math.PI * 2);
-            hctx.fillStyle = '#ffffff';
-            hctx.fill();
-            hctx.stroke();
-            hctx.beginPath();
-            hctx.arc(ex, 56, 9, 0, Math.PI * 2);
-            hctx.fillStyle = '#1b2b4c';
-            hctx.fill();
-          }
-          // Golden Urna third-eye dot & Nepali Aik numeral nose curl
-          hctx.fillStyle = '#b91c1c';
-          hctx.beginPath();
-          hctx.arc(128, 36, 7, 0, Math.PI * 2);
-          hctx.fill();
-          hctx.strokeStyle = '#b91c1c';
-          hctx.lineWidth = 5;
-          hctx.beginPath();
-          hctx.moveTo(128, 66);
-          hctx.quadraticCurveTo(124, 92, 116, 102);
-          hctx.arc(128, 100, 12, Math.PI, 0, false);
-          hctx.stroke();
-        }
-        const tex = new THREE.CanvasTexture(hc);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        return tex;
-      });
-      return new THREE.MeshStandardMaterial({ map: hTex, roughness: 0.35, metalness: 0.15 });
-    });
-  }
-
-  const harmikaBase = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.18, 1.72), whiteStuccoMat);
-  harmikaBase.position.y = 5.10;
-  const harmika = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.80, 1.48), [
-    harmikaSideMat,
-    harmikaSideMat,
-    goldMat,
-    goldMat,
-    harmikaSideMat,
-    harmikaSideMat,
-  ]);
-  harmika.position.y = 5.56;
-  harmika.castShadow = true;
-  const harmikaCap = new THREE.Mesh(
-    createRectangularHipRoofGeometry(1.76, 0.42, 1.76, 0.12),
-    goldMat,
-  );
-  harmikaCap.position.y = 5.98;
-
-  // 13-tier stepped golden Bhumi rings, Chhatri umbrella canopy & crystal-gold Gajur finial
-  for (let b = 0; b < 13; b++) {
-    const bt = b / 12;
-    const rad = THREE.MathUtils.lerp(0.68, 0.18, bt);
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.92, rad, 0.13, 24), goldMat);
-    ring.position.y = 6.26 + b * 0.135;
-    ring.castShadow = true;
-    stupaGroup.add(ring);
-  }
-  const chhatriDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.54, 0.62, 0.08, 24), goldMat);
-  chhatriDisc.position.y = 8.06;
-  const gajur = createDetailedGajurSpire(goldMat, bronzeMat, 0.82, 0.24);
-  gajur.position.y = 8.10;
-  stupaGroup.add(medhiDrum, chhatriDisc);
-
-  // Grand East-facing Torana Buddha Blessing Niche overlooking the Peace Canal & Maya Devi Temple
-  const nicheFrame = new THREE.Mesh(new THREE.BoxGeometry(0.56, 1.82, 1.56), goldMat);
-  nicheFrame.position.set(3.26, 2.22, 0);
-  for (const nz of [-0.66, 0.66]) {
-    const nCol = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.095, 1.54, 12), bronzeMat);
-    nCol.position.set(3.48, 2.10, nz);
-    stupaGroup.add(nCol);
-  }
-  const nichePediment = new THREE.Mesh(
-    createRectangularHipRoofGeometry(0.76, 0.44, 1.82, 0.18),
-    goldMat,
-  );
-  nichePediment.position.set(3.32, 3.24, 0);
-  const nicheCrown = createDetailedGajurSpire(goldMat, bronzeMat, 0.38);
-  nicheCrown.position.set(3.32, 3.46, 0);
-  const nicheAlcove = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32, 1.46, 1.06),
-    new THREE.MeshStandardMaterial({ color: 0x24160e, roughness: 0.78 }),
-  );
-  nicheAlcove.position.set(3.38, 2.22, 0);
-  const nicheSill = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 1.46), chunarStoneMat);
-  nicheSill.position.set(3.46, 1.42, 0);
-
-  const stupaNicheBuddha = createDetailedNicheSeatedBuddha(goldMat, bronzeMat);
-  stupaNicheBuddha.scale.setScalar(1.0);
-  stupaNicheBuddha.rotation.y = Math.PI / 2; // faces +X toward Maya Devi Temple
-  stupaNicheBuddha.position.set(3.54, 1.50, 0);
-
-  const stupaLight = new THREE.PointLight(0xffcb78, 1.65, 24, 1.6);
-  stupaLight.position.set(2.4, 3.4, 0);
-  stupaLight.userData.intensityScale = 1.25;
-  stupaLight.userData.flickerAmp = 0.06;
-  stupaLight.userData.flickerPhase = 1.7;
-  stupaLight.userData.warmFlicker = true;
-  beaconLights.push(stupaLight);
-
-  stupaGroup.add(
-    baseTier1,
-    baseRim1,
-    baseTier2,
-    baseRim2,
-    medhiCollar,
-    dome,
-    harmikaBase,
-    harmika,
-    harmikaCap,
-    gajur,
-    nicheFrame,
-    nichePediment,
-    nicheCrown,
-    nicheAlcove,
-    nicheSill,
-    stupaNicheBuddha,
-    stupaLight,
-  );
-
-  // Two detailed sculpted granite & teak meditation benches flanking the Peace Stupa overlook
-  for (const bzBench of [-6.4, 6.4]) {
-    const bench = buildDetailedLumbiniBench();
-    bench.position.set(5.4, 0.35, bzBench);
-    bench.rotation.y = bzBench < 0 ? -0.32 : 0.32;
-    stupaGroup.add(bench);
-  }
-
-  // 4 Oiled-Teak Lungta prayer flag poles anchored in carved stone collars with waving cloth banners + garlands
-  const stupaPoleMat = new THREE.MeshStandardMaterial({ color: 0x9e7444, roughness: 0.72, metalness: 0.12 });
-  const poleCoords: Array<[number, number]> = [
-    [-6.6, -6.6],
-    [6.6, -6.6],
-    [6.6, 6.6],
-    [-6.6, 6.6],
-  ];
-  poleCoords.forEach(([px, pz]) => {
-    const pSocket = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.26, 0.24, 12), chunarStoneMat);
-    pSocket.position.set(px, 0.44, pz);
-    pSocket.castShadow = true;
-    stupaGroup.add(pSocket);
-
-    const poleBanner = createWavingPoleBanner({
-      height: 5.4,
-      bannerWidth: 2.15,
-      bannerHeight: 0.68,
-      baseYaw: Math.atan2(-px, -pz),
-      poleMaterial: stupaPoleMat,
-      finialMaterial: goldMat,
-    });
-    poleBanner.group.position.set(px, 0.35, pz);
-    poleBanner.group.userData.nonCollidable = true;
-    poleBanner.group.userData.noSpin = true;
-    stupaGroup.add(poleBanner.group);
-
-    const garland = createWavingPrayerFlagGarland(
-      new THREE.Vector3(px, 5.45, pz),
-      new THREE.Vector3(0, 5.95, 0),
-      {
-        flagCount: 8,
-        flagWidth: 0.28,
-        flagHeight: 0.34,
-        sag: 0.24,
-      },
-    );
-    stupaGroup.add(garland.group);
-  });
-
-  group.add(stupaGroup);
   mergeStaticMeshesByMaterial(group, { preserveCustomShaderMaterials: true });
 
   return {

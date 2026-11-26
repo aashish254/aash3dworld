@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type * as THREE from 'three';
 import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
@@ -1073,23 +1074,22 @@ test('Monumental 88m x 96m Lumbini Maya Devi Temple & Sacred Garden west of Jana
   );
 });
 
-test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace Stupa, and ambience lighting/audio presets behave coherently', async () => {
+test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Parkland Loop, and ambience lighting/audio presets behave coherently', async () => {
   const THREE = await import('three');
   const {
     createDioramaTerrain,
-    createInstancedGrassField,
     createLumbiniPeaceParkland,
     sampleTerrainMeshHeight,
   } = await import('./mountainAndTerrain');
 
-  // Peace Canal blocks wading, Maitri Peace Bridge carries visitor cleanly across, and Western Stupa plaza stays open around core
+  // Peace Canal blocks wading, Maitri Peace Bridge carries visitor cleanly across, and former Stupa site (-304, 100) is open parkland road
   assert.equal(isWalkablePosition(LUMBINI_PEACE_CANAL.centerX, 76), false, 'Peace Canal basin must block walking');
   assert.equal(isOnLumbiniCanalBridge(-272, 100), true);
   assert.equal(isWalkablePosition(-272, 100), true, 'Maitri Peace Bridge deck center must be walkable');
   assert.ok(groundHeightAt(-272, 100) > 0.9, 'Arched Maitri Peace Bridge rises cleanly over Peace Canal');
   assert.equal(getFootstepSurfaceKind(-272, 100), 'stone');
-  assert.equal(isWalkablePosition(-298.5, 100), true, 'Western Shanti Peace Stupa Overlook plaza stays walkable');
-  assert.equal(isWalkablePosition(LUMBINI_PEACE_CANAL.stupaCenterX, LUMBINI_PEACE_CANAL.stupaCenterZ), false, 'Shanti Peace Stupa masonry blocks pass-through');
+  assert.equal(isWalkablePosition(-298.5, 100), true, 'Western Maitri walk stays walkable');
+  assert.equal(isWalkablePosition(-304, 100), true, 'Former Shanti Peace Stupa site is now an open walkable scenic loop');
   assert.equal(getFootstepSurfaceKind(-298.5, 100), 'stone');
 
   // Effective lighting state blends smoothly at Lumbini across all presets without bleaching snow/stucco or leaking to Kathmandu
@@ -1117,7 +1117,7 @@ test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace St
   assert.ok(vigilAudio.bowlActivity > 0.6);
   assert.equal(outsideAudio.chimeActivity, 0);
 
-  // Parkland 3D builder & terrain depression + wild flora exclusion
+  // Parkland 3D builder & terrain depression (zero Stupa geometry!)
   const tex = new THREE.Texture();
   const mockTextures = new Proxy(
     {
@@ -1132,39 +1132,18 @@ test('Expanded Lumbini Western Peace Canal, Maitri Peace Bridge, Shanti Peace St
 
   const terrainMesh = createDioramaTerrain(mockTextures);
   assert.ok(sampleTerrainMeshHeight(terrainMesh, LUMBINI_PEACE_CANAL.centerX, 76) <= -0.85, 'Peace Canal basin depressed in terrain');
-  assert.ok(sampleTerrainMeshHeight(terrainMesh, -298.5, 100) <= 0.16, 'Western Peace Stupa plaza depressed below paving');
-
-  const grassCtrl = createInstancedGrassField(terrainMesh);
-  const grassIms = grassCtrl.group.children.filter(
-    (c): c is import('three').InstancedMesh => c instanceof THREE.InstancedMesh,
-  );
-  const mat = new THREE.Matrix4();
-  const pos = new THREE.Vector3();
-  const quat = new THREE.Quaternion();
-  const scl = new THREE.Vector3();
-  for (const im of grassIms) {
-    for (let i = 0; i < im.count; i++) {
-      im.getMatrixAt(i, mat);
-      mat.decompose(pos, quat, scl);
-      assert.equal(
-        Math.hypot(pos.x - LUMBINI_PEACE_CANAL.stupaCenterX, pos.z - LUMBINI_PEACE_CANAL.stupaCenterZ) <=
-          LUMBINI_PEACE_CANAL.stupaPlazaRadius + 1.0,
-        false,
-        `Wild flora spawned inside Western Peace Stupa plaza at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`,
-      );
-    }
-  }
 
   const parkland = createLumbiniPeaceParkland(mockTextures);
-  assert.ok(parkland.beaconLights.length >= 5, 'Expected Maitri bridge & Shanti Stupa beacon lights');
+  assert.equal(parkland.beaconLights.length, 4, 'Expected exactly the 4 Maitri Peace Bridge beacon lights (zero Stupa light)');
   let stupaFlags = 0;
   parkland.group.traverse((o) => {
     if (typeof o.userData?.prayerFlagMode === 'string') {
       stupaFlags++;
-      assert.equal(o.userData.nonCollidable, true);
     }
   });
-  assert.ok(stupaFlags >= 8, 'Expected waving Lungta flags around Western Shanti Peace Stupa');
+  assert.equal(stupaFlags, 0, 'Expected zero Shanti Peace Stupa prayer flags after Stupa removal');
+  const parkBb = new THREE.Box3().setFromObject(parkland.group);
+  assert.ok(parkBb.min.x > -303.0, `Expected parkland geometry to stop cleanly at west loop apron, got min.x=${parkBb.min.x.toFixed(2)}`);
 });
 
 test('Lumbini spatial ambient audio localizes bird chirps and rustling leaves with HRTF panning and distance attenuation', async () => {
@@ -2530,6 +2509,146 @@ test('Lumbini realism fixes: Thai sanctuary Buddha headroom, Peace Lanterns lit,
   });
   assert.equal(stoneCairnCount, 0);
 });
+
+test('Urli offering-bowl craft: planar water UVs, sculpted lily pads, 3 flame rigs, and generous bench clearance', async () => {
+  const THREE = await import('three');
+  const { OUTER_TEMPLE_ARTIFACT_SPOTS } = await import('./worldLogic');
+  const {
+    UrliOfferingBowlSuite,
+    createUrliWaterDiscGeo,
+    createUrliSculptedLilyPadGeo,
+    createUrliFlameTeardropGeo,
+  } = await import('./urliLotusCraft');
+
+  // 1. Planar water disc has upward +Y normals and centered planar UVs (no polar pinch)
+  const waterGeo = createUrliWaterDiscGeo(0.432, 10, 32);
+  const waterNormals = waterGeo.getAttribute('normal');
+  const waterUvs = waterGeo.getAttribute('uv');
+  assert.equal(waterNormals.getY(0), 1);
+  assert.ok(Math.abs(waterUvs.getX(0) - 0.5) < 1e-6);
+  assert.ok(Math.abs(waterUvs.getY(0) - 0.5) < 1e-6);
+  waterGeo.dispose();
+
+  // 2. Sculpted lily pad & teardrop flame geometries generate valid normals and bounds
+  const padGeo = createUrliSculptedLilyPadGeo(0.106, 20);
+  const padNormals = padGeo.getAttribute('normal');
+  assert.ok(padNormals.count > 40);
+  padGeo.dispose();
+
+  const flameGeo = createUrliFlameTeardropGeo(0.017, 0.084);
+  flameGeo.computeBoundingBox();
+  assert.ok(flameGeo.boundingBox!.max.y > 0.08);
+  flameGeo.dispose();
+
+  // 3. Urli suite constructs assembly cleanly in Node with 3 animated flames + water shader uniforms
+  const suite = new UrliOfferingBowlSuite(1);
+  const stdMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const built = suite.createOfferingBowlAssembly({
+    whiteMarbleMat: stdMat,
+    tealMarbleMat: stdMat,
+    weatheredStoneMat: stdMat,
+    agedBronzeMat: stdMat,
+    brightBrassMat: stdMat,
+  });
+  assert.equal(built.flames.length, 3);
+  assert.equal(typeof built.waterUniforms.uTime.value, 'number');
+  assert.ok(built.group.children.length >= 15);
+
+  // 4. Lumbini South Outer Promenade benches and Urli pots maintain >= 4.0m center separation & open mid-gap
+  const southPots = OUTER_TEMPLE_ARTIFACT_SPOTS.filter(
+    (s) => s.kind === 'offering-bowl' && Math.abs(s.z - 157.55) < 0.5 && s.x < -190 && s.x > -230,
+  );
+  assert.equal(southPots.length, 2, 'Expected both Lumbini South Outer Promenade Urli pots');
+
+  const benchCoords = [
+    { x: -210 - 16.1, z: 96 + 62.55 },
+    { x: -210 + 16.1, z: 96 + 62.55 },
+  ];
+  for (const bench of benchCoords) {
+    // Bench collider itself blocks walking
+    assert.equal(isWalkablePosition(bench.x, bench.z), false);
+    // Nearest Urli pot sits at least 4.0m away center-to-center (leaving >2.5m open space)
+    const minDist = Math.min(...southPots.map((p) => Math.hypot(p.x - bench.x, p.z - bench.z)));
+    assert.ok(minDist >= 4.0, `Expected >=4.0m bench-to-pot clearance, got ${minDist.toFixed(2)}m`);
+  }
+
+  // Midpoint between west bench (-226.1, 158.55) and west pot (-221.8, 157.55) is clearly walkable
+  assert.equal(isWalkablePosition(-223.95, 158.05), true);
+  // Midpoint between east bench (-193.9, 158.55) and east pot (-198.2, 157.55) is clearly walkable
+  assert.equal(isWalkablePosition(-196.05, 158.05), true);
+});
+
+test('Unified Lumbini complex perimeter fence encloses Temple + Sacred Lake and every lantern carries active warm light', async () => {
+  const THREE = await import('three');
+  const { LANDMARKS } = await import('../data/portfolioData');
+  const { createLumbiniBuddha } = await import('./lumbiniTemple');
+  const { createCurbedRoads, createDioramaTerrain } = await import('./mountainAndTerrain');
+  const { buildDetailedPeaceLantern } = await import('./lumbiniGardenCraft');
+
+  const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha')!;
+  const lx = lumbini.position.x;
+  const lz = lumbini.position.z;
+
+  // 1. Unified outer complex perimeter fence blocks pass-through around Temple + Sacred Lake, while 4 gates stay wide open
+  assert.equal(isWalkablePosition(lx - 20.0, lz + 63.475), false, 'South outer perimeter fence must block crossing');
+  assert.equal(isWalkablePosition(lx + 20.0, lz - 55.475), false, 'North outer perimeter fence must block crossing');
+  assert.equal(isWalkablePosition(lx - 51.075, lz + 25.0), false, 'West outer perimeter fence must block crossing');
+  assert.equal(isWalkablePosition(lx + 50.575, lz - 20.0), false, 'East outer perimeter fence must block crossing');
+  assert.equal(isWalkablePosition(lx, lz + 63.475), true, 'South outer gate entrance must remain open');
+  assert.equal(isWalkablePosition(lx, lz - 55.475), true, 'North outer gate entrance must remain open');
+  assert.equal(isWalkablePosition(lx - 51.075, lz + 4.0), true, 'West outer gate entrance must remain open');
+  assert.equal(isWalkablePosition(lx + 50.575, lz + 4.0), true, 'East outer gate entrance must remain open');
+
+  // Inner garden-to-lake transition has no dividing brick wall (only water edge blocks wading)
+  assert.equal(isWalkablePosition(lx - 20.0, lz + 51.4), true, 'Inner south lawn edge to pond ghat stays open without dividing brick wall');
+  assert.equal(isWalkablePosition(lx + 20.0, lz - 43.4), true, 'Inner north lawn edge to pond ghat stays open without dividing brick wall');
+
+  // 2. Unified perimeter fence & all 18 Peace Garden stone lanterns present in built Lumbini group
+  const tex = new THREE.DataTexture(new Uint8Array([200, 180, 160, 255]), 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  const mockTextures = new Proxy(
+    {
+      lumbini: new Proxy({}, { get: () => tex }),
+      janaki: new Proxy({}, { get: () => tex }),
+    },
+    { get: (target, prop) => (prop in target ? (target as Record<string | symbol, unknown>)[prop] : tex) },
+  ) as unknown as import('./proceduralTextures').ProceduralTextureSet;
+
+  const built = createLumbiniBuddha(mockTextures, true);
+  assert.ok(
+    built.beaconLights.length >= 26,
+    `Expected all 18 Peace Garden lanterns + shrine lights in beaconLights (>= 26), got ${built.beaconLights.length}`,
+  );
+  let hasFence = false;
+  built.group.traverse((o) => {
+    if (o.name === 'lumbini-complex-perimeter-fence') hasFence = true;
+  });
+  assert.equal(hasFence, true, 'Expected unified lumbini-complex-perimeter-fence in Lumbini complex');
+
+  // 3. Every roadside Peace Lantern carries a pooled warm PointLight (zero unlit lanterns!)
+  const terrainMesh = createDioramaTerrain(mockTextures);
+  const roads = createCurbedRoads(mockTextures, terrainMesh);
+  assert.equal(
+    roads.lanternLights.length,
+    ROAD_LANTERN_COORDS.length,
+    `Expected every roadside lantern (${ROAD_LANTERN_COORDS.length}) to have an active PointLight, got ${roads.lanternLights.length}`,
+  );
+
+  // 4. Peace Lantern flame core uses bright HDR emissive MeshStandardMaterial (not flat white MeshBasicMaterial)
+  const stdMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const lanternMeshGroup = buildDetailedPeaceLantern(stdMat, stdMat, stdMat);
+  let emissiveFlameMeshes = 0;
+  lanternMeshGroup.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      const m = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      if (m.isMeshStandardMaterial && m.emissiveIntensity >= 2.0) {
+        emissiveFlameMeshes++;
+      }
+    }
+  });
+  assert.ok(emissiveFlameMeshes >= 2, `Expected HDR emissive inner + outer flame meshes in Peace Lantern, got ${emissiveFlameMeshes}`);
+});
+
 
 
 
