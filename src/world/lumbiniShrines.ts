@@ -30,6 +30,7 @@ import {
 } from './waterShader';
 import { createWavingPrayerFlagGarland } from './prayerFlags';
 import {
+  LUMBINI_FENCE_BOUNDS,
   LUMBINI_PUSHKARINI_POND,
   LUMBINI_SACRED_POND,
   LotusFlowerPlacement,
@@ -705,7 +706,11 @@ export function buildPushkariniPond(
     shallowTint: 0x206762,
     reflectivity: 0.80,
     rippleStrength: 0.020,
-    anchorWorldPos: new THREE.Vector3(-200, 0.21, 112.5),
+    anchorWorldPos: new THREE.Vector3(
+      LUMBINI_PUSHKARINI_POND.centerX,
+      LUMBINI_PUSHKARINI_POND.waterLevel,
+      LUMBINI_PUSHKARINI_POND.centerZ,
+    ),
   });
   waterMesh.rotation.x = -Math.PI / 2;
   waterMesh.position.y = -0.14;
@@ -1971,34 +1976,41 @@ export function buildSacredGardenSurroundingPond(
     addBankWall(stepX0, stepX1, 6.8, outMaxZ - 0.604, -0.28, -1.02, brickMat);
   }
 
-  // 3. Outer Sacred Pond Pilgrim Promenades (top at ly = +0.09 -> world +0.34m, strictly non-overlapping with bankWall!)
-  const addPromenadeWalk = (x0: number, x1: number, z0: number, z1: number) => {
+  // 3. Clean Cardinal Axial Pilgrim Gate Avenues (top at ly = +0.10 -> world +0.35m)
+  // Connects each Sacred Pond bridge directly to its expanded outer fence gate without excess red brick sprawl around the lawn.
+  const addAxialAvenue = (x0: number, x1: number, z0: number, z1: number) => {
     const sx = x1 - x0;
     const sz = z1 - z0;
     const walk = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.22, sz), terracottaMat);
-    walk.position.set((x0 + x1) * 0.5, -0.02, (z0 + z1) * 0.5);
+    walk.position.set((x0 + x1) * 0.5, -0.01, (z0 + z1) * 0.5);
     walk.receiveShadow = true;
     g.add(walk);
   };
-  addPromenadeWalk(-51.2, 50.7, 60.55, 63.6); // South outer pilgrim trail (starts cleanly outside South bankWall 60.55)
-  addPromenadeWalk(-51.2, 50.7, -55.6, -52.55); // North outer pilgrim trail (ends cleanly outside North bankWall -52.55)
-  addPromenadeWalk(-51.2, -50.55, -52.55, 60.55); // West outer coping walk (strictly outside West bankWall -50.55)
-  addPromenadeWalk(50.55, 50.7, -52.55, 60.55); // East outer coping trim (strictly outside East bankWall 50.55)
-
-  // Outer Chunar sandstone curb border rails cleanly seated atop +0.090 deck & inset 1.5cm from outer vertical faces (zero Z-fighting)
   const addCurbRun = (x0: number, x1: number, z0: number, z1: number) => {
     const sx = x1 - x0;
     const sz = z1 - z0;
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.024, sz), chunarMat);
-    curb.position.set((x0 + x1) * 0.5, 0.102, (z0 + z1) * 0.5);
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.25, sz), chunarMat);
+    curb.position.set((x0 + x1) * 0.5, -0.01, (z0 + z1) * 0.5);
     curb.receiveShadow = true;
     curb.userData.nonCollidable = true;
     g.add(curb);
   };
-  for (const cz of [60.425, -52.425]) {
-    addCurbRun(-50.96, -3.45, cz - 0.11, cz + 0.11);
-    addCurbRun(3.45, 50.46, cz - 0.11, cz + 0.11);
-  }
+
+  const fenceS = LUMBINI_FENCE_BOUNDS.localMaxZ; // +74.0
+  const fenceN = LUMBINI_FENCE_BOUNDS.localMinZ; // -66.0
+  const fenceE = LUMBINI_FENCE_BOUNDS.localMaxX; // +64.0
+  // South Gate Avenue (South Sacred Bridge -> South Perimeter Gate)
+  addAxialAvenue(-3.4, 3.4, 60.55, fenceS);
+  addCurbRun(-3.64, -3.4, 60.55, fenceS);
+  addCurbRun(3.4, 3.64, 60.55, fenceS);
+  // North Gate Avenue (North Sacred Bridge -> North Perimeter Gate)
+  addAxialAvenue(-3.4, 3.4, fenceN, -52.55);
+  addCurbRun(-3.64, -3.4, fenceN, -52.55);
+  addCurbRun(3.4, 3.64, fenceN, -52.55);
+  // East Gate Avenue (East Sacred Bridge -> East Perimeter Gate)
+  addAxialAvenue(50.55, fenceE, 1.4, 6.6);
+  addCurbRun(50.55, fenceE, 1.16, 1.4);
+  addCurbRun(50.55, fenceE, 6.6, 6.84);
 
   // 4. Single Combined Real-Time Planar Reflector Water Surface across all 4 surrounding pond channels
   const waterPositions: number[] = [];
@@ -2022,7 +2034,11 @@ export function buildSacredGardenSurroundingPond(
     shallowTint: 0x1c5c5a,
     reflectivity: 0.78,
     rippleStrength: 0.018,
-    anchorWorldPos: new THREE.Vector3(-210, LUMBINI_SACRED_POND.waterLevel, 96),
+    anchorWorldPos: new THREE.Vector3(
+      LUMBINI_SACRED_POND.centerX,
+      LUMBINI_SACRED_POND.waterLevel,
+      LUMBINI_SACRED_POND.centerZ,
+    ),
   });
   surroundingWater.rotation.x = -Math.PI / 2;
   surroundingWater.position.y = -0.22; // world y = +0.03m

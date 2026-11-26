@@ -2679,8 +2679,8 @@ export class WorldEngine {
         flowZ: 0,
       };
     }
-    const ldx = x + 210;
-    const ldz = z - 96;
+    const ldx = x - LUMBINI_SACRED_POND.centerX;
+    const ldz = z - LUMBINI_SACRED_POND.centerZ;
     if (ldx >= -1.0 && ldx <= 21.0 && ldz >= 9.8 && ldz <= 23.2) {
       return {
         inWater: true,
@@ -4017,7 +4017,9 @@ export class WorldEngine {
       this.character.root.rotation.y = this.playerYaw;
       const inCourtyard =
         (Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6) ||
-        (Math.abs(safe.x + 210) <= 17.2 && safe.z >= 62.8 && safe.z <= 85.2);
+        (Math.abs(safe.x - LUMBINI_SACRED_POND.centerX) <= 17.2 &&
+          safe.z >= LUMBINI_SACRED_POND.centerZ - 33.2 &&
+          safe.z <= LUMBINI_SACRED_POND.centerZ - 10.8);
       this.currentLookAt.set(safe.x, this.playerPos.y + (inCourtyard ? 1.5 : 1.8), safe.z);
       if (inCourtyard) {
         this.currentCamPos.set(safe.x, this.playerPos.y + 4.4, safe.z + 6.5);
@@ -4065,9 +4067,9 @@ export class WorldEngine {
     );
     this.writeDataset(
       'insideMayaDevi',
-      Math.abs(this.playerPos.x + 210) <= 17.2 &&
-        this.playerPos.z >= 62.8 &&
-        this.playerPos.z <= 85.2
+      Math.abs(this.playerPos.x - LUMBINI_SACRED_POND.centerX) <= 17.2 &&
+        this.playerPos.z >= LUMBINI_SACRED_POND.centerZ - 33.2 &&
+        this.playerPos.z <= LUMBINI_SACRED_POND.centerZ - 10.8
         ? 'true'
         : 'false',
     );
@@ -4161,9 +4163,9 @@ export class WorldEngine {
     }
 
     const inMayaDeviSanctum =
-      Math.abs(lightingAnchor.x + 210) <= 17.8 &&
-      lightingAnchor.z >= 62.2 &&
-      lightingAnchor.z <= 85.8;
+      Math.abs(lightingAnchor.x - LUMBINI_SACRED_POND.centerX) <= 17.8 &&
+      lightingAnchor.z >= LUMBINI_SACRED_POND.centerZ - 33.8 &&
+      lightingAnchor.z <= LUMBINI_SACRED_POND.centerZ - 10.2;
     if (inMayaDeviSanctum) {
       this.hemiLight.color.set(state.hemiSkyColor).lerp(_targetColor.set(0xffebd0), 0.72);
       this.hemiLight.groundColor.set(state.hemiGroundColor).lerp(_targetColor.set(0x7d4c2c), 0.78);
@@ -4331,7 +4333,13 @@ export class WorldEngine {
     );
     const pixelScale = this.getPixelScale();
     if (this.lumbiniFireflies) {
-      const nearFireflies = isWithinSleepDistanceSq(lx, lz, -210, 88, 14400);
+      const nearFireflies = isWithinSleepDistanceSq(
+        lx,
+        lz,
+        LUMBINI_SACRED_POND.centerX,
+        LUMBINI_SACRED_POND.centerZ - 8,
+        14400,
+      );
       this.lumbiniFireflies.points.visible = nearFireflies && fireflyIntensity > 0.01;
       if (nearFireflies) {
         this.lumbiniFireflies.update(elapsed, fireflyIntensity, pixelScale);
@@ -4344,7 +4352,13 @@ export class WorldEngine {
     const ritualGlow =
       this.butterLampEntries.length > 0 ? litLampCount / this.butterLampEntries.length : 0;
     if (this.lumbiniIncenseSmoke) {
-      const nearSmoke = isWithinSleepDistanceSq(lx, lz, -210, 74, 8100);
+      const nearSmoke = isWithinSleepDistanceSq(
+        lx,
+        lz,
+        LUMBINI_SACRED_POND.centerX,
+        LUMBINI_SACRED_POND.centerZ - 22,
+        8100,
+      );
       this.lumbiniIncenseSmoke.points.visible = nearSmoke;
       if (nearSmoke) {
         this.lumbiniIncenseSmoke.update(
@@ -5528,9 +5542,9 @@ export class WorldEngine {
     }
 
     const inMayaDeviInterior =
-      Math.abs(this.playerPos.x + 210) <= 17.2 &&
-      this.playerPos.z >= 62.8 &&
-      this.playerPos.z <= 85.2;
+      Math.abs(this.playerPos.x - LUMBINI_SACRED_POND.centerX) <= 17.2 &&
+      this.playerPos.z >= LUMBINI_SACRED_POND.centerZ - 33.2 &&
+      this.playerPos.z <= LUMBINI_SACRED_POND.centerZ - 10.8;
 
     const lookLambda = this.cameraMode === 'first-person' ? 18.0 : 12.0;
     this.cameraYaw = dampCameraValue(this.cameraYaw, this.targetCameraYaw, lookLambda, dt);
@@ -5627,7 +5641,7 @@ export class WorldEngine {
     const showLumbiniPresets =
       zoneName === 'Lumbini Sacred Garden' ||
       this.focusedLandmark?.id === 'lumbini-buddha' ||
-      (this.playerPos.x <= -152 && this.playerPos.z >= 15 && this.playerPos.z <= 185);
+      (this.playerPos.x <= -195 && this.playerPos.z >= 15 && this.playerPos.z <= 192);
 
     const nextDiscrete: DiscreteHudState = {
       zoneName,

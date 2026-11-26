@@ -7,7 +7,9 @@ import {
   BRIDGE_BOUNDS,
   GLACIAL_LAKE,
   GraphicsQualityPreset,
+  LUMBINI_FENCE_BOUNDS,
   LUMBINI_PEACE_CANAL,
+  LUMBINI_SACRED_POND,
   OUTER_TEMPLE_ARTIFACT_SPOTS,
   ROAD_LANTERN_COORDS,
   ROAD_PATHS,
@@ -780,7 +782,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 68 : 20,
+      r: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 92 : 20,
     })),
   ];
 
@@ -809,8 +811,8 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       (jx >= -52.8 && jx <= -34.0 && jz >= 2.8 && jz <= 25.5) ||
       (jx >= -34.2 && jx <= -28.4 && jz >= 14.1 && jz <= 17.9);
     const underGangaSagarBasin = jx >= -51.6 && jx <= -37.4 && jz >= 7.2 && jz <= 24.8;
-    const lx = x + 210;
-    const lz = z - 96;
+    const lx = x - LUMBINI_SACRED_POND.centerX;
+    const lz = z - LUMBINI_SACRED_POND.centerZ;
     const underPushkariniBasin = lx >= -3.2 && lx <= 23.2 && lz >= 7.5 && lz <= 25.5;
     const underMayaPit = Math.abs(lx) <= 17.5 && lz >= -33.5 && lz <= -10.5;
     const underMayaRamp = Math.abs(lx) <= 2.35 && lz > -10.5 && lz <= -1.8;
@@ -822,23 +824,30 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       !inSurroundingPond &&
       !onSacredBridge &&
       !onBridgePier &&
-      ((x >= -261.8 && x <= -158.6 && z >= 39.8 && z <= 160.2) ||
-        (Math.abs(x + 210.0) <= 4.5 && z >= 36.6 && z <= 163.4) ||
-        (Math.abs(z - 100.0) <= 3.6 && x >= -265.0 && x <= -155.6));
+      ((Math.abs(lx) <= 4.2 && lz >= 59.8 && lz <= LUMBINI_FENCE_BOUNDS.localMaxZ + 2.2) ||
+        (Math.abs(lx) <= 4.2 && lz >= LUMBINI_FENCE_BOUNDS.localMinZ - 2.2 && lz <= -51.8) ||
+        (Math.abs(lz - 4.0) <= 3.2 && lx >= 49.8 && lx <= LUMBINI_FENCE_BOUNDS.localMaxX + 2.2) ||
+        (x >= LUMBINI_SACRED_POND.outerMinX - 1.2 &&
+          x <= LUMBINI_SACRED_POND.outerMaxX + 1.2 &&
+          z >= LUMBINI_SACRED_POND.outerMinZ - 1.2 &&
+          z <= LUMBINI_SACRED_POND.outerMaxZ + 1.2));
+    // Carve Peace Canal continuously underneath Maitri Peace Bridge so water flows visibly below the arch
     const underPeaceCanal =
-      !isOnLumbiniCanalBridge(x, z) &&
-      x >= LUMBINI_PEACE_CANAL.minX - 0.8 &&
-      x <= LUMBINI_PEACE_CANAL.maxX + 0.8 &&
-      z >= LUMBINI_PEACE_CANAL.minZ - 0.8 &&
-      z <= LUMBINI_PEACE_CANAL.maxZ + 0.8;
+      x >= LUMBINI_PEACE_CANAL.minX - 1.2 &&
+      x <= LUMBINI_PEACE_CANAL.maxX + 1.2 &&
+      z >= LUMBINI_PEACE_CANAL.minZ - 1.2 &&
+      z <= LUMBINI_PEACE_CANAL.maxZ + 1.2;
     const underWestPeaceWalk =
-      (x >= -302.4 && x <= -253.5 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 3.0) ||
-      (z >= LUMBINI_PEACE_CANAL.minZ - 0.5 &&
-        z <= LUMBINI_PEACE_CANAL.maxZ + 0.5 &&
-        ((x >= -265.6 && x <= -260.8) || (x >= -283.2 && x <= -278.4)));
+      (x >= LUMBINI_FENCE_BOUNDS.minX - 2.2 &&
+        x <= LUMBINI_SACRED_POND.outerMinX + 0.5 &&
+        Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 3.3) ||
+      (z >= LUMBINI_PEACE_CANAL.minZ - 1.0 &&
+        z <= LUMBINI_PEACE_CANAL.maxZ + 1.0 &&
+        ((x >= LUMBINI_PEACE_CANAL.maxX - 0.2 && x <= LUMBINI_PEACE_CANAL.maxX + 1.4) ||
+          (x >= LUMBINI_PEACE_CANAL.minX - 1.4 && x <= LUMBINI_PEACE_CANAL.minX + 0.2)));
 
     const roadDist =
-      x > -325 && x < 115 && z > -118 && z < 185 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
+      x > -410 && x < 115 && z > -118 && z < 195 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
     roadDistCache[i] = roadDist;
     const inWaterBasin =
       underPeaceCanal || inSurroundingPond || underPushkariniBasin || underGangaSagarBasin;
@@ -882,14 +891,14 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       underWestPeaceWalk
     ) {
       y = 0.14;
-    } else if (roadDist < 2.25) {
+    } else if (roadDist < 2.85) {
       // Depress roadbed sub-grade cleanly beneath the level stone road deck so grass triangles never pierce the pavers
-      y -= (1 - THREE.MathUtils.smoothstep(roadDist, 0.8, 2.25)) * 0.09;
+      y -= (1 - THREE.MathUtils.smoothstep(roadDist, 1.1, 2.85)) * 0.12;
     } else {
       // High-density subtle micro-relief across natural valley turf, riverbanks & rocky foothills
       const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
       const distRiver = Math.abs(x - getRiverCenterX(z));
-      const inPark = x >= -324 && x <= -162 && z >= 26 && z <= 174;
+      const inPark = x >= -392 && x <= -196 && z >= 12 && z <= 188;
       let landmarkClear = 1.0;
       for (let li = 0; li < landmarkClearZones.length; li++) {
         const lzZone = landmarkClearZones[li];
@@ -911,11 +920,11 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       const roadFade = THREE.MathUtils.smoothstep(roadDist, 3.6, 7.2);
       const lakeFade = THREE.MathUtils.smoothstep(distLake, GLACIAL_LAKE.basinRadius + 1.5, GLACIAL_LAKE.basinRadius + 7);
       const riverFade = THREE.MathUtils.smoothstep(distRiver, 3.5, 9.5);
-      const parkScale = inPark ? 0.25 : 1.0;
+      const parkScale = inPark ? 0.0 : 1.0;
       const reliefMask = landmarkClear * roadFade * lakeFade * riverFade * riverBridgeClear * parkScale;
 
       if (reliefMask > 0.005) {
-        const foothillBoost = 1 + THREE.MathUtils.smoothstep(Math.hypot(x, z), 280, 420) * 1.65;
+        const foothillBoost = 1 + THREE.MathUtils.smoothstep(Math.hypot(x, z), 385, 495) * 1.65;
         const undulation =
           Math.sin(x * 0.23 + z * 0.16) * 0.105 +
           Math.cos(x * 0.51 - z * 0.41) * 0.068 +
@@ -948,7 +957,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const riverCenterX = getRiverCenterX(z);
     const distRiver = Math.abs(x - riverCenterX);
     const eastBankBlend = THREE.MathUtils.smoothstep(x - riverCenterX, 4.5, 22.0);
-    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 335, 430);
+    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 415, 500);
     const northSlopeBlend = THREE.MathUtils.smoothstep(-z, 118, 195);
     const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
 
@@ -1020,10 +1029,26 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
         THREE.MathUtils.lerp(0.92, 0.92, eastBankBlend),
         THREE.MathUtils.lerp(0.75, 0.68, eastBankBlend),
       );
-      if (x >= -324 && x <= -162 && z >= 26 && z <= 174 && clearFlag === 0) {
-        const parkDx = x < -314 ? -314 - x : x > -168 ? x + 168 : 0;
-        const parkDz = z < 34 ? 34 - z : z > 164 ? z - 164 : 0;
-        const parkLawnBlend = 1 - THREE.MathUtils.smoothstep(Math.hypot(parkDx, parkDz), 0, 14);
+      if (
+        x >= LUMBINI_FENCE_BOUNDS.minX - 6 &&
+        x <= LUMBINI_FENCE_BOUNDS.maxX + 6 &&
+        z >= LUMBINI_FENCE_BOUNDS.minZ - 6 &&
+        z <= LUMBINI_FENCE_BOUNDS.maxZ + 6 &&
+        clearFlag === 0
+      ) {
+        const parkDx =
+          x < LUMBINI_FENCE_BOUNDS.minX
+            ? LUMBINI_FENCE_BOUNDS.minX - x
+            : x > LUMBINI_FENCE_BOUNDS.maxX
+              ? x - LUMBINI_FENCE_BOUNDS.maxX
+              : 0;
+        const parkDz =
+          z < LUMBINI_FENCE_BOUNDS.minZ
+            ? LUMBINI_FENCE_BOUNDS.minZ - z
+            : z > LUMBINI_FENCE_BOUNDS.maxZ
+              ? z - LUMBINI_FENCE_BOUNDS.maxZ
+              : 0;
+        const parkLawnBlend = 1 - THREE.MathUtils.smoothstep(Math.hypot(parkDx, parkDz), 0, 10);
         _color.lerp(parkTint, parkLawnBlend * 0.34);
       }
       if (roadDist < 4.0) {
@@ -1077,7 +1102,7 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 56 : lm.id === 'boudhanath-stupa' ? 12 : 11,
+      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 60 : lm.id === 'boudhanath-stupa' ? 12 : 11,
     })),
   ];
 
@@ -1288,25 +1313,15 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     ) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    // Keep ENTIRE Janaki Mandir, Lumbini Maya Devi Temple, Peace Canal promenades & Western Peace Stupa plaza free of wild grass, flowers & pebbles
+    // Keep ENTIRE Janaki Mandir compound and entire expanded fenced Lumbini Sacred Garden + Peace Canal free of wild grass, flowers & pebbles
     if (px > -152 && px < -50 && pz > 54.5 && pz < 153) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    if (px > -263 && px < -157 && pz > 39 && pz < 161) {
-      return { excluded: true, roadD: 99, distRiver };
-    }
     if (
-      px >= LUMBINI_PEACE_CANAL.minX - 5.2 &&
-      px <= LUMBINI_PEACE_CANAL.maxX + 5.2 &&
-      pz >= LUMBINI_PEACE_CANAL.minZ - 2.2 &&
-      pz <= LUMBINI_PEACE_CANAL.maxZ + 2.2
-    ) {
-      return { excluded: true, roadD: 99, distRiver };
-    }
-    if (
-      px >= -302.8 &&
-      px <= -254 &&
-      Math.abs(pz - LUMBINI_PEACE_CANAL.bridgeCenterZ) <= 4.6
+      px >= LUMBINI_FENCE_BOUNDS.minX - 2.5 &&
+      px <= LUMBINI_FENCE_BOUNDS.maxX + 2.5 &&
+      pz >= LUMBINI_FENCE_BOUNDS.minZ - 2.5 &&
+      pz <= LUMBINI_FENCE_BOUNDS.maxZ + 2.5
     ) {
       return { excluded: true, roadD: 99, distRiver };
     }
@@ -1326,11 +1341,11 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   };
 
   const goldenAngle = 2.39996323;
-  const maxAttempts = 36000;
-  for (let i = 0; i < maxAttempts && grassSpots.length < 17500; i++) {
+  const maxAttempts = 38000;
+  for (let i = 0; i < maxAttempts && grassSpots.length < 18500; i++) {
     const angle = i * goldenAngle;
     const t = (i + 0.5) / maxAttempts;
-    const radius = 7.4 + Math.sqrt(t) * 345.0;
+    const radius = 7.4 + Math.sqrt(t) * 395.0;
     const jx = Math.sin(i * 12.9898) * 1.45;
     const jz = Math.cos(i * 78.233) * 1.45;
     const x = Math.cos(angle) * radius + jx;
@@ -1927,7 +1942,6 @@ export function createCurbedRoads(
 
   const trimPlazas = [
     ...aprons,
-    { x: -304, z: 100, r: 9.6 }, // Western Peace Stupa Plaza
   ];
 
   for (const rawPts of ROAD_PATHS) {
@@ -2043,18 +2057,17 @@ export function createCurbedRoads(
         const inChowk =
           baseX > -131.5 && baseX < -53.0 && baseZ > 70 && baseZ < 150.4;
         const inLumbini =
-          baseX > -261.5 && baseX < -159.0 && baseZ > 40.0 && baseZ < 160.2;
-        const atSouthGateApron =
-          baseX > -214.0 && baseX < -206.0 && baseZ > 159.5 && baseZ < 164.6;
-        const atNorthGateApron =
-          baseX > -214.0 && baseX < -206.0 && baseZ > 34.8 && baseZ < 40.2;
+          baseX > LUMBINI_FENCE_BOUNDS.minX - 0.5 &&
+          baseX < LUMBINI_FENCE_BOUNDS.maxX + 0.5 &&
+          baseZ > LUMBINI_FENCE_BOUNDS.minZ - 0.5 &&
+          baseZ < LUMBINI_FENCE_BOUNDS.maxZ + 0.5;
         const atEastCorridorTJunction =
-          baseX > -159.2 && baseX < -153.8 && baseZ > 161.2 && baseZ < 164.8;
+          baseX > -208.0 &&
+          baseX < -202.0 &&
+          ((baseZ > 175.0 && baseZ < 180.0) || (baseZ > 19.0 && baseZ < 24.5));
         if (
           inChowk ||
           inLumbini ||
-          atSouthGateApron ||
-          atNorthGateApron ||
           atEastCorridorTJunction ||
           rm.deckY <= -0.1
         ) {
@@ -3301,10 +3314,7 @@ export function createLumbiniPeaceParkland(
       copingWall.castShadow = true;
       copingWall.receiveShadow = true;
 
-      const promenade = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.22, rLen), brickPaverMat);
-      promenade.position.set(LUMBINI_PEACE_CANAL.centerX + side * (canalWidthX * 0.5 + 2.8), 0.21, rMid);
-      promenade.receiveShadow = true;
-      group.add(lowerStep, copingWall, promenade);
+      group.add(lowerStep, copingWall);
     }
   }
   for (const endZ of [LUMBINI_PEACE_CANAL.minZ - 0.25, LUMBINI_PEACE_CANAL.maxZ + 0.25]) {
@@ -3315,10 +3325,10 @@ export function createLumbiniPeaceParkland(
     group.add(endWall);
   }
 
-  // Axial brick approach walk linking Maya Devi West Gate across Maitri Peace Bridge cleanly to West Parkland scenic road
+  // Axial brick approach walk linking West Sacred Bridge across Maitri Peace Bridge cleanly to West Perimeter Gate
   for (const [segX, segW] of [
-    [-258.95, 10.1],
-    [-290.9, 21.8],
+    [-335.2, 9.6],
+    [-362.0, 12.0],
   ] as Array<[number, number]>) {
     const axisWalk = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.24, 5.2), brickPaverMat);
     axisWalk.position.set(segX, 0.23, bZ);
@@ -3331,10 +3341,6 @@ export function createLumbiniPeaceParkland(
       group.add(curb);
     }
   }
-  const westLoopLanding = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 5.6), chunarStoneMat);
-  westLoopLanding.position.set(-302.05, 0.24, bZ);
-  westLoopLanding.receiveShadow = true;
-  group.add(westLoopLanding);
 
   // 3. Arched Maitri Peace Bridge (spanning x = -280.2 .. -263.8 at z = 100.0)
   const bridgeGroup = new THREE.Group();
@@ -3458,10 +3464,10 @@ export function createLumbiniPeaceParkland(
       }
     }
   }
-  // Twin underwater canal bridge piers supporting arch spans
+  // Twin submerged canal bridge footings supporting arch spans cleanly beneath water level (-0.26m)
   for (const pierX of [LUMBINI_PEACE_CANAL.centerX - 4.0, LUMBINI_PEACE_CANAL.centerX + 4.0]) {
-    const canalPier = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.35, 5.2), brickPaverMat);
-    canalPier.position.set(pierX, -0.52, bZ);
+    const canalPier = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.72, 5.2), brickPaverMat);
+    canalPier.position.set(pierX, -0.78, bZ);
     canalPier.receiveShadow = true;
     bridgeGroup.add(canalPier);
   }

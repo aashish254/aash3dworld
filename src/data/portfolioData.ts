@@ -127,12 +127,12 @@ export const LANDMARKS: LandmarkData[] = [
     era: 'Lumbini, Nepal · UNESCO World Heritage',
     category: 'heritage',
     zoneName: 'Lumbini Sacred Garden',
-    position: { x: -210, z: 96 },
-    approachOffset: { x: 0, z: 62.5 },
-    interactRadius: 72,
+    position: { x: -280, z: 96 },
+    approachOffset: { x: 0, z: 76.5 },
+    interactRadius: 88,
     accentColor: '#10b981',
     summary:
-      'True-to-life 88m × 96m recreation of UNESCO Lumbini’s Sacred Garden on the western plains beside Janaki Mandir: the monumental 36m × 24m white-painted brick Maya Devi Temple with 12×8 multi-pane clerestory windows, terracotta-capped parapet piers, central skylight dome and golden Chaitya spire, sloped Dharmachakra ramp, and walkable interior boardwalk overlooking the 21-chamber Mauryan ruins and Marker Stone, fronted by the 26m Pushkarini Sacred Pond, Ashoka Pillar, Baby Buddha monument, Myanmar Golden Pagoda, Royal Thai Marble Pavilion, Bodhi Tree, and Eternal Peace Flame.',
+      'True-to-life 88m × 96m recreation of UNESCO Lumbini’s Sacred Garden across a generous green parkland west of Janaki Mandir: the monumental 36m × 24m white-painted brick Maya Devi Temple with 12×8 multi-pane clerestory windows, terracotta-capped parapet piers, central skylight dome and golden Chaitya spire, sloped Dharmachakra ramp, and walkable interior boardwalk overlooking the 21-chamber Mauryan ruins and Marker Stone, fronted by the 26m Pushkarini Sacred Pond, Ashoka Pillar, Baby Buddha monument, Myanmar Golden Pagoda, Royal Thai Marble Pavilion, Bodhi Tree, Eternal Peace Flame, and enclosed Central Reflection Peace Canal.',
     highlights: [
       'Monumental 36m × 24m Maya Devi Temple with walkable interior boardwalk over 21-chamber Mauryan ruins & Marker Stone',
       'Authentic 26m stepped Pushkarini Sacred Pond, 249 BCE Ashoka Pillar & skyward-pointing Golden Baby Buddha',

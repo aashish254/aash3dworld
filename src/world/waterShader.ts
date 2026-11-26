@@ -87,7 +87,7 @@ export function createReflectivePondSurface(
   const shallowColor = new THREE.Color(options.shallowTint ?? 0x226863);
   const reflectivity = options.reflectivity ?? 0.86;
   const rippleStrength = options.rippleStrength ?? 0.022;
-  const anchorPos = (options.anchorWorldPos ?? new THREE.Vector3(-210, 0, 96)).clone();
+  const anchorPos = (options.anchorWorldPos ?? new THREE.Vector3(-280, 0, 96)).clone();
   const maxActiveDist = options.maxActiveDistance ?? 225;
 
   const customShader = {

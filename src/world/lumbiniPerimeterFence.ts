@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getLumbiniGardenCraftMaterials } from './lumbiniGardenCraft';
 import { createDetailedGajurSpire, createRectangularHipRoofGeometry } from './janakiMandirCraft';
+import { LUMBINI_FENCE_BOUNDS } from './worldLogic';
 
 export interface LumbiniPerimeterFenceMaterials {
   brickMat: THREE.Material;
@@ -169,14 +170,14 @@ export function buildLumbiniComplexPerimeterFence(
     return new THREE.Matrix4().compose(tmpPos, tmpQuat, tmpScale);
   };
 
-  // Outer perimeter line (aligns flush along outer promenade borders around Temple + Sacred Lake)
-  const xMin = -51.075;
-  const xMax = 50.575;
-  const zMin = -55.475;
-  const zMax = 63.475;
-  const gateXHalf = 3.65;
-  const gateZ0 = 1.05;
-  const gateZ1 = 6.95;
+  // Expanded outer perimeter enclosing Temple + Sacred Pond + Peace Canal with generous green lawn margin
+  const xMin = LUMBINI_FENCE_BOUNDS.localMinX; // -88.0 (encloses Maitri Peace Canal at -68.0 with 14m west lawn)
+  const xMax = LUMBINI_FENCE_BOUNDS.localMaxX; // +64.0 (14m east lawn outside Sacred Pond)
+  const zMin = LUMBINI_FENCE_BOUNDS.localMinZ; // -66.0 (14m north lawn outside Sacred Pond)
+  const zMax = LUMBINI_FENCE_BOUNDS.localMaxZ; // +74.0 (14m south lawn outside Sacred Pond)
+  const gateXHalf = LUMBINI_FENCE_BOUNDS.gateXHalf; // 3.65
+  const gateZ0 = LUMBINI_FENCE_BOUNDS.gateZ0; // 1.05
+  const gateZ1 = LUMBINI_FENCE_BOUNDS.gateZ1; // 6.95
 
   const addFenceRun = (
     x0: number,
