@@ -58,6 +58,17 @@ export interface LumbiniTextureSet {
   plaqueMarkerMap: THREE.CanvasTexture;
   plaqueChambersMap: THREE.CanvasTexture;
   plaqueNativityMap: THREE.CanvasTexture;
+  stairStoneMap: THREE.CanvasTexture;
+  stairStoneNormal: THREE.CanvasTexture;
+  stairStoneRough: THREE.CanvasTexture;
+  carvedFriezeMap: THREE.CanvasTexture;
+  carvedFriezeNormal: THREE.CanvasTexture;
+  velvetRunnerMap: THREE.CanvasTexture;
+  velvetRunnerNormal: THREE.CanvasTexture;
+  velvetRunnerRough: THREE.CanvasTexture;
+  moonstoneMap: THREE.CanvasTexture;
+  moonstoneNormal: THREE.CanvasTexture;
+  moonstoneRough: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -1494,6 +1505,291 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
   const carvedSandstoneRough = toTex(csR, false, 2, 2);
   allTex.push(carvedSandstoneMap, carvedSandstoneNormal, carvedSandstoneRough);
 
+  // 22. Dressed & Honed Chunar Sandstone Stair Treads (chisel tooling, strata, center wear polish)
+  const [ssC, ssCtx] = makeCanvas(512, 256);
+  const [ssH, ssHCtx] = makeCanvas(512, 256);
+  const [ssR, ssRCtx] = makeCanvas(512, 256);
+  const ssGrad = ssCtx.createLinearGradient(0, 0, 512, 0);
+  ssGrad.addColorStop(0, '#bfa07c');
+  ssGrad.addColorStop(0.25, '#ceb18e');
+  ssGrad.addColorStop(0.5, '#d6bc9b');
+  ssGrad.addColorStop(0.75, '#ceb18e');
+  ssGrad.addColorStop(1, '#bda07c');
+  ssCtx.fillStyle = ssGrad;
+  ssCtx.fillRect(0, 0, 512, 256);
+  ssHCtx.fillStyle = '#a8a8a8';
+  ssHCtx.fillRect(0, 0, 512, 256);
+  ssRCtx.fillStyle = '#c8c8c8';
+  ssRCtx.fillRect(0, 0, 512, 256);
+  // Subtle polished foot-traffic sheen in center
+  const wearRough = ssRCtx.createLinearGradient(0, 0, 512, 0);
+  wearRough.addColorStop(0, 'rgba(220,220,220,0.45)');
+  wearRough.addColorStop(0.5, 'rgba(130,130,130,0.55)');
+  wearRough.addColorStop(1, 'rgba(220,220,220,0.45)');
+  ssRCtx.fillStyle = wearRough;
+  ssRCtx.fillRect(0, 0, 512, 256);
+
+  // Diagonal chisel dressing marks & natural sandstone sedimentary strata
+  for (let i = 0; i < 2400; i++) {
+    const x = seededNoise(i, 3, 1201) * 512;
+    const y = seededNoise(i, 7, 1213) * 256;
+    const len = 8 + seededNoise(i, 11, 1217) * 24;
+    const tone = seededNoise(i, 13, 1223);
+    ssCtx.strokeStyle = tone > 0.5 ? 'rgba(244, 226, 200, 0.14)' : 'rgba(104, 78, 52, 0.14)';
+    ssCtx.lineWidth = 1.0 + tone * 1.4;
+    ssCtx.beginPath();
+    ssCtx.moveTo(x, y);
+    ssCtx.lineTo(x + len, y + (tone - 0.5) * 4);
+    ssCtx.stroke();
+
+    const hv = Math.round(138 + tone * 58);
+    ssHCtx.strokeStyle = `rgba(${hv},${hv},${hv},0.34)`;
+    ssHCtx.lineWidth = 1.1;
+    ssHCtx.beginPath();
+    ssHCtx.moveTo(x, y);
+    ssHCtx.lineTo(x + len * 0.8, y + (tone - 0.5) * 3);
+    ssHCtx.stroke();
+  }
+  // Subtle stone margin tooling band at front & back edges
+  ssCtx.fillStyle = 'rgba(110, 84, 56, 0.12)';
+  ssCtx.fillRect(0, 0, 512, 16);
+  ssCtx.fillRect(0, 240, 512, 16);
+  ssHCtx.fillStyle = 'rgba(120, 120, 120, 0.45)';
+  ssHCtx.fillRect(0, 0, 512, 14);
+  ssHCtx.fillRect(0, 242, 512, 14);
+
+  const stairStoneMap = toTex(ssC, true, 1, 1);
+  const stairStoneNormal = toTex(heightCanvasToNormal(ssH, 1.85), false, 1, 1);
+  const stairStoneRough = toTex(ssR, false, 1, 1);
+
+  // 23. Carved Newari / Mauryan Lotus-Petal & Scrollwork Stone Frieze (risers & cheek-wall panels)
+  const [frC, frCtx] = makeCanvas(512, 128);
+  const [frH, frHCtx] = makeCanvas(512, 128);
+  frCtx.fillStyle = '#9a7b58';
+  frCtx.fillRect(0, 0, 512, 128);
+  frHCtx.fillStyle = '#484848';
+  frHCtx.fillRect(0, 0, 512, 128);
+  // Recessed border molding
+  frCtx.strokeStyle = '#6f5539';
+  frCtx.lineWidth = 6;
+  frCtx.strokeRect(4, 4, 504, 120);
+  frHCtx.strokeStyle = '#d4d4d4';
+  frHCtx.lineWidth = 6;
+  frHCtx.strokeRect(4, 4, 504, 120);
+  // Repeating carved lotus petals & bead moldings
+  const petalRepeat = 16;
+  const pw = 512 / petalRepeat;
+  for (let i = 0; i < petalRepeat; i++) {
+    const cx = (i + 0.5) * pw;
+    for (const ctx of [frCtx, frHCtx]) {
+      const isH = ctx === frHCtx;
+      ctx.fillStyle = isH ? '#dcdcdc' : '#ceb08a';
+      ctx.beginPath();
+      ctx.moveTo(cx - pw * 0.44, 114);
+      ctx.quadraticCurveTo(cx - pw * 0.40, 40, cx, 22);
+      ctx.quadraticCurveTo(cx + pw * 0.40, 40, cx + pw * 0.44, 114);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = isH ? '#a8a8a8' : '#b5946d';
+      ctx.beginPath();
+      ctx.moveTo(cx - pw * 0.24, 110);
+      ctx.quadraticCurveTo(cx - pw * 0.20, 56, cx, 42);
+      ctx.quadraticCurveTo(cx + pw * 0.20, 56, cx + pw * 0.24, 110);
+      ctx.closePath();
+      ctx.fill();
+
+      // Top pearl bead chain
+      ctx.fillStyle = isH ? '#efefef' : '#d8bc96';
+      ctx.beginPath();
+      ctx.arc(cx, 13, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Fine sandstone speckle on frieze
+  for (let i = 0; i < 900; i++) {
+    const x = seededNoise(i, 5, 1259) * 512;
+    const y = seededNoise(i, 9, 1277) * 128;
+    const t = seededNoise(i, 13, 1283);
+    frCtx.fillStyle = t > 0.5 ? 'rgba(245, 224, 194, 0.12)' : 'rgba(72, 52, 34, 0.14)';
+    frCtx.fillRect(x, y, 2, 2);
+  }
+  const carvedFriezeMap = toTex(frC, true, 2, 1);
+  const carvedFriezeNormal = toTex(heightCanvasToNormal(frH, 2.8), false, 2, 1);
+
+  // 24. Woven Royal Crimson Temple Runner with Golden Newari Endless-Knot Border
+  const [vrC, vrCtx] = makeCanvas(512, 512);
+  const [vrH, vrHCtx] = makeCanvas(512, 512);
+  const [vrR, vrRCtx] = makeCanvas(512, 512);
+  const vrGrad = vrCtx.createLinearGradient(0, 0, 512, 0);
+  vrGrad.addColorStop(0, '#5a1210');
+  vrGrad.addColorStop(0.14, '#7d1c18');
+  vrGrad.addColorStop(0.5, '#8e231d');
+  vrGrad.addColorStop(0.86, '#7d1c18');
+  vrGrad.addColorStop(1, '#5a1210');
+  vrCtx.fillStyle = vrGrad;
+  vrCtx.fillRect(0, 0, 512, 512);
+  vrHCtx.fillStyle = '#929292';
+  vrHCtx.fillRect(0, 0, 512, 512);
+  vrRCtx.fillStyle = '#dcdcdc';
+  vrRCtx.fillRect(0, 0, 512, 512);
+
+  // Woven warp & weft wool grain
+  for (let y = 0; y < 512; y += 3) {
+    const n = seededNoise(y, 1, 1301);
+    vrCtx.fillStyle = n > 0.5 ? 'rgba(42, 6, 5, 0.16)' : 'rgba(186, 62, 48, 0.10)';
+    vrCtx.fillRect(0, y, 512, 1.5);
+    const hv = Math.round(130 + n * 48);
+    vrHCtx.fillStyle = `rgb(${hv},${hv},${hv})`;
+    vrHCtx.fillRect(0, y, 512, 1.5);
+  }
+  for (let x = 0; x < 512; x += 3) {
+    const n = seededNoise(x, 7, 1307);
+    vrCtx.fillStyle = n > 0.5 ? 'rgba(34, 4, 4, 0.12)' : 'rgba(202, 74, 58, 0.08)';
+    vrCtx.fillRect(x, 0, 1.5, 512);
+  }
+  // Golden brocade double border & geometric Newari diamond motif on both left & right edges
+  for (const bx of [18, 466]) {
+    vrCtx.fillStyle = '#c89634';
+    vrCtx.fillRect(bx, 0, 28, 512);
+    vrCtx.fillStyle = '#4f100e';
+    vrCtx.fillRect(bx + 5, 0, 18, 512);
+    vrHCtx.fillStyle = '#cfcfcf';
+    vrHCtx.fillRect(bx, 0, 28, 512);
+    vrRCtx.fillStyle = '#888888';
+    vrRCtx.fillRect(bx, 0, 28, 512);
+    for (let dy = 16; dy < 512; dy += 32) {
+      vrCtx.fillStyle = '#e5b954';
+      vrCtx.beginPath();
+      vrCtx.moveTo(bx + 14, dy - 10);
+      vrCtx.lineTo(bx + 22, dy);
+      vrCtx.lineTo(bx + 14, dy + 10);
+      vrCtx.lineTo(bx + 6, dy);
+      vrCtx.closePath();
+      vrCtx.fill();
+
+      vrHCtx.fillStyle = '#efefef';
+      vrHCtx.beginPath();
+      vrHCtx.moveTo(bx + 14, dy - 9);
+      vrHCtx.lineTo(bx + 21, dy);
+      vrHCtx.lineTo(bx + 14, dy + 9);
+      vrHCtx.lineTo(bx + 7, dy);
+      vrHCtx.closePath();
+      vrHCtx.fill();
+    }
+  }
+  // Subtle woven center rosette medallions
+  for (let my = 64; my < 512; my += 128) {
+    vrCtx.strokeStyle = 'rgba(218, 168, 72, 0.24)';
+    vrCtx.lineWidth = 3;
+    vrCtx.beginPath();
+    vrCtx.arc(256, my, 36, 0, Math.PI * 2);
+    vrCtx.stroke();
+    vrCtx.beginPath();
+    vrCtx.arc(256, my, 20, 0, Math.PI * 2);
+    vrCtx.stroke();
+  }
+  const velvetRunnerMap = toTex(vrC, true, 1, 1);
+  const velvetRunnerNormal = toTex(heightCanvasToNormal(vrH, 1.9), false, 1, 1);
+  const velvetRunnerRough = toTex(vrR, false, 1, 1);
+
+  // 25. Carved Chandrasila (Moonstone) Concentric Sandstone Mandala
+  const [moC, moCtx] = makeCanvas(512, 512);
+  const [moH, moHCtx] = makeCanvas(512, 512);
+  const [moR, moRCtx] = makeCanvas(512, 512);
+  moCtx.fillStyle = '#c8aa86';
+  moCtx.fillRect(0, 0, 512, 512);
+  moHCtx.fillStyle = '#888888';
+  moHCtx.fillRect(0, 0, 512, 512);
+  moRCtx.fillStyle = '#b8b8b8';
+  moRCtx.fillRect(0, 0, 512, 512);
+
+  const mcx = 256;
+  const mcy = 256;
+  const rings: Array<[number, string, string, number]> = [
+    [248, '#a68764', '#606060', 10],
+    [232, '#d1b591', '#c8c8c8', 18],
+    [194, '#9b7c59', '#525252', 8],
+    [176, '#c8aa86', '#b8b8b8', 22],
+    [122, '#967754', '#565656', 8],
+    [104, '#d4b895', '#cfcfcf', 18],
+  ];
+  for (const [rad, col, hCol, lw] of rings) {
+    moCtx.strokeStyle = col;
+    moCtx.lineWidth = lw;
+    moCtx.beginPath();
+    moCtx.arc(mcx, mcy, rad, 0, Math.PI * 2);
+    moCtx.stroke();
+    moHCtx.strokeStyle = hCol;
+    moHCtx.lineWidth = lw;
+    moHCtx.beginPath();
+    moHCtx.arc(mcx, mcy, rad, 0, Math.PI * 2);
+    moHCtx.stroke();
+  }
+  // Outer scalloped flame-scroll petals (32) + inner lotus petals (16)
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2;
+    const px = mcx + Math.cos(a) * 212;
+    const py = mcy + Math.sin(a) * 212;
+    moCtx.fillStyle = '#dfcaa8';
+    moCtx.beginPath();
+    moCtx.arc(px, py, 13, 0, Math.PI * 2);
+    moCtx.fill();
+    moHCtx.fillStyle = '#e0e0e0';
+    moHCtx.beginPath();
+    moHCtx.arc(px, py, 12, 0, Math.PI * 2);
+    moHCtx.fill();
+  }
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    moCtx.save();
+    moCtx.translate(mcx, mcy);
+    moCtx.rotate(a);
+    moCtx.fillStyle = '#dec29c';
+    moCtx.beginPath();
+    moCtx.moveTo(0, -34);
+    moCtx.quadraticCurveTo(16, -68, 0, -98);
+    moCtx.quadraticCurveTo(-16, -68, 0, -34);
+    moCtx.fill();
+    moCtx.restore();
+
+    moHCtx.save();
+    moHCtx.translate(mcx, mcy);
+    moHCtx.rotate(a);
+    moHCtx.fillStyle = '#e6e6e6';
+    moHCtx.beginPath();
+    moHCtx.moveTo(0, -34);
+    moHCtx.quadraticCurveTo(15, -68, 0, -96);
+    moHCtx.quadraticCurveTo(-15, -68, 0, -34);
+    moHCtx.fill();
+    moHCtx.restore();
+  }
+  // Fine stone patina noise across moonstone
+  for (let i = 0; i < 2400; i++) {
+    const x = seededNoise(i, 3, 1361) * 512;
+    const y = seededNoise(i, 7, 1367) * 512;
+    const t = seededNoise(i, 11, 1373);
+    moCtx.fillStyle = t > 0.5 ? 'rgba(248, 232, 206, 0.11)' : 'rgba(92, 68, 44, 0.11)';
+    moCtx.fillRect(x, y, 2, 2);
+  }
+  const moonstoneMap = toTex(moC, true, 1, 1, true);
+  const moonstoneNormal = toTex(heightCanvasToNormal(moH, 2.4), false, 1, 1, true);
+  const moonstoneRough = toTex(moR, false, 1, 1, true);
+
+  allTex.push(
+    stairStoneMap,
+    stairStoneNormal,
+    stairStoneRough,
+    carvedFriezeMap,
+    carvedFriezeNormal,
+    velvetRunnerMap,
+    velvetRunnerNormal,
+    velvetRunnerRough,
+    moonstoneMap,
+    moonstoneNormal,
+    moonstoneRough,
+  );
+
   const clampedAniso = Math.min(16, Math.max(1, maxAnisotropy));
   for (const t of allTex) {
     t.anisotropy = clampedAniso;
@@ -1557,6 +1853,17 @@ export function createLumbiniTextures(maxAnisotropy = 4): LumbiniTextureSet {
     plaqueMarkerMap,
     plaqueChambersMap,
     plaqueNativityMap,
+    stairStoneMap,
+    stairStoneNormal,
+    stairStoneRough,
+    carvedFriezeMap,
+    carvedFriezeNormal,
+    velvetRunnerMap,
+    velvetRunnerNormal,
+    velvetRunnerRough,
+    moonstoneMap,
+    moonstoneNormal,
+    moonstoneRough,
     dispose: () => {
       for (const t of allTex) t.dispose();
     },

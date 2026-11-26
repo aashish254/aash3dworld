@@ -7,6 +7,12 @@ import {
   getDetailedPrayerWheelCapGeo,
 } from './janakiMandirCraft';
 import { BuddhaMaterials, createMonumentalBabyBuddhaMonument } from './lumbiniBuddhaSculpt';
+import {
+  buildDetailedLumbiniBench,
+  buildDetailedLumbiniBollards,
+  buildDetailedOverlookBalustrade,
+  buildRealisticLumbiniHedges,
+} from './lumbiniGardenCraft';
 import { buildMayaDeviTemple } from './lumbiniMayaDevi';
 import {
   buildAuthenticAshokaPillar,
@@ -84,6 +90,19 @@ export function createLumbiniBuddha(
     aoMapIntensity: 0.86,
     color: 0xba6a49,
     roughness: 0.92,
+    metalness: 0.02,
+  });
+
+  // Sunlit archaeological brick material (0xffffff multiplier preserves true mortar, ochre, and moss detail)
+  const archaeoBrickMat = new THREE.MeshStandardMaterial({
+    map: lTex.mauryaBrickMap,
+    normalMap: lTex.mauryaBrickNormal,
+    normalScale: new THREE.Vector2(1.08, 1.08),
+    roughnessMap: lTex.mauryaBrickRough,
+    aoMap: lTex.mauryaBrickAo,
+    aoMapIntensity: 0.82,
+    color: 0xf4e4d8,
+    roughness: 0.89,
     metalness: 0.02,
   });
 
@@ -371,24 +390,11 @@ export function createLumbiniBuddha(
     group.add(outerRing, innerDisc);
   }
 
-  // Pushkarini West Overlook Balustrade guarding the reflective pond edge (ldx = -3.15, ldz 7.7..25.3)
-  const overlookRail = new THREE.Group();
-  for (let i = 0; i <= 8; i++) {
-    const pz = 7.8 + (i / 8) * 17.4;
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.72, 0.18), chunarStoneMat);
-    post.position.set(-3.15, 0.46, pz);
-    post.castShadow = true;
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), giltGoldMat);
-    cap.position.set(-3.15, 0.86, pz);
-    overlookRail.add(post, cap);
-  }
-  const overlookHandrail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 17.55), chunarStoneMat);
-  overlookHandrail.position.set(-3.15, 0.78, 16.5);
-  overlookHandrail.castShadow = true;
-  overlookRail.add(overlookHandrail);
+  // Pushkarini West Overlook Balustrade guarding the reflective pond edge (ldx = -3.15, ldz 7.8..25.2)
+  const overlookRail = buildDetailedOverlookBalustrade(-3.15, 7.8, 25.2, 8, warmBronzeMat, giltGoldMat);
   group.add(overlookRail);
 
-  // Brass-capped Chunar sandstone trail bollards flanking South Approach & Outer Promenade (InstancedMesh)
+  // Carved speckled Himalayan granite, dark basalt & bronze Kalash trail bollards with draped chain swags
   const bollardCoords: Array<[number, number]> = [
     [-6.4, 48.5], [6.4, 48.5],
     [-6.4, 45.5], [6.4, 45.5],
@@ -400,45 +406,24 @@ export function createLumbiniBuddha(
     [-29.5, 60.55], [29.5, 60.55],
     [-39.5, 60.55], [39.5, 60.55],
   ];
-  const bollardPostGeo = new THREE.CylinderGeometry(0.085, 0.11, 0.68, 10);
-  const bollardCapGeo = new THREE.SphereGeometry(0.095, 10, 8);
-  const bollardPosts = new THREE.InstancedMesh(bollardPostGeo, chunarStoneMat, bollardCoords.length);
-  const bollardCaps = new THREE.InstancedMesh(bollardCapGeo, giltGoldMat, bollardCoords.length);
-  bollardPosts.castShadow = true;
-  bollardPosts.userData.nonCollidable = true;
-  bollardCaps.userData.nonCollidable = true;
-  bollardCoords.forEach(([bx, bz], idx) => {
-    _v3.set(bx, 0.42, bz);
-    _q.identity();
-    _s.setScalar(1);
-    _m4.compose(_v3, _q, _s);
-    bollardPosts.setMatrixAt(idx, _m4);
-    _v3.set(bx, 0.78, bz);
-    _m4.compose(_v3, _q, _s);
-    bollardCaps.setMatrixAt(idx, _m4);
+  const bollards = buildDetailedLumbiniBollards(bollardCoords, {
+    baseY: 0.08,
+    bronzeMat: warmBronzeMat,
+    giltMat: giltGoldMat,
+    chainLinks: [
+      [0, 2], [2, 4],
+      [1, 3], [3, 5],
+      [6, 8],
+      [7, 9],
+    ],
   });
-  bollardPosts.instanceMatrix.needsUpdate = true;
-  bollardCaps.instanceMatrix.needsUpdate = true;
-  bollardPosts.computeBoundingSphere();
-  bollardCaps.computeBoundingSphere();
-  group.add(bollardPosts, bollardCaps);
+  group.add(bollards);
 
-  // Carved Chunar sandstone pilgrim meditation benches along paths & overlooks
+  // Detailed sculpted Himalayan granite & oiled Burmese teak heritage garden benches
   const addPilgrimBench = (bx: number, bz: number, rotY: number) => {
-    const bg = new THREE.Group();
+    const bg = buildDetailedLumbiniBench();
     bg.position.set(bx, 0.10, bz);
     bg.rotation.y = rotY;
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.12, 0.56), chunarStoneMat);
-    seat.position.y = 0.42;
-    seat.castShadow = true;
-    seat.receiveShadow = true;
-    for (const lx of [-0.72, 0.72]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.48), brickMat);
-      leg.position.set(lx, 0.19, 0);
-      leg.castShadow = true;
-      bg.add(leg);
-    }
-    bg.add(seat);
     group.add(bg);
   };
   addPilgrimBench(-7.6, 44.5, Math.PI * 0.5);
@@ -485,31 +470,13 @@ export function createLumbiniBuddha(
     [-16.4, 31.2, 13.8, 0.68],
     [16.4, 31.2, 13.8, 0.68],
   ];
-  const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
-  const hedgeInst = new THREE.InstancedMesh(unitBoxGeo, hedgeMat, hedgeCoords.length);
-  hedgeInst.castShadow = true;
-  hedgeInst.receiveShadow = true;
-  const hedgeCrownInst = new THREE.InstancedMesh(unitBoxGeo, hedgeMat, hedgeCoords.length);
-  hedgeCrownInst.castShadow = true;
-  hedgeCrownInst.receiveShadow = true;
-  hedgeCrownInst.userData.nonCollidable = true;
-  hedgeCoords.forEach(([hx, hz, sx, sz], idx) => {
-    _v3.set(hx, 0.28, hz);
-    _q.identity();
-    _s.set(sx, 0.52, sz);
-    _m4.compose(_v3, _q, _s);
-    hedgeInst.setMatrixAt(idx, _m4);
-
-    _v3.set(hx, 0.60, hz);
-    _s.set(Math.max(0.42, sx - 0.14), 0.16, Math.max(0.42, sz - 0.14));
-    _m4.compose(_v3, _q, _s);
-    hedgeCrownInst.setMatrixAt(idx, _m4);
-  });
-  hedgeInst.instanceMatrix.needsUpdate = true;
-  hedgeInst.computeBoundingSphere();
-  hedgeCrownInst.instanceMatrix.needsUpdate = true;
-  hedgeCrownInst.computeBoundingSphere();
-  group.add(hedgeInst, hedgeCrownInst);
+  const realisticHedges = buildRealisticLumbiniHedges(
+    hedgeCoords,
+    brickMat,
+    jTex.shrubFoliageMap,
+    jTex.shrubFoliageNormal,
+  );
+  group.add(realisticHedges);
 
   // =========================================================================
   // 3. PERIMETER GARDEN BRICK WALL (88m x 96m) & 4 CARDINAL GATES
@@ -617,7 +584,11 @@ export function createLumbiniBuddha(
   // =========================================================================
   // 6. MONUMENTAL GOLDEN BABY BUDDHA (South Forecourt: 0, +39.0)
   // =========================================================================
-  const babyBuddha = createMonumentalBabyBuddhaMonument(heroMats, hedgeMat);
+  const babyBuddha = createMonumentalBabyBuddhaMonument(heroMats, hedgeMat, {
+    shrubMap: jTex.shrubFoliageMap,
+    shrubNormal: jTex.shrubFoliageNormal,
+    waterNormal: textures.waterNormal,
+  });
   babyBuddha.scale.setScalar(1.28);
   babyBuddha.position.set(0, 0.10, 39.0);
   const babyLight = new THREE.PointLight(0xffdca0, 2.4, 18, 1.3);
@@ -708,11 +679,16 @@ export function createLumbiniBuddha(
     [-14.5, -38.5, 3.4, 0.98, 2.8],
     [14.5, -38.5, 3.4, 0.98, 2.8],
   ];
-  for (const [rx, rz, rw, rh, rd] of ruinSpecs) {
-    const ruin = buildExcavatedBrickRuin(brickMat, rw, rh, rd);
+  ruinSpecs.forEach(([rx, rz, rw, rh, rd], idx) => {
+    const ruin = buildExcavatedBrickRuin(archaeoBrickMat, rw, rh, rd, {
+      stoneMat: chunarStoneMat,
+      bronzeMat: warmBronzeMat,
+      flameMat: flameGlowMat,
+      variantIndex: idx,
+    });
     ruin.position.set(rx, 0.03, rz);
     group.add(ruin);
-  }
+  });
 
   // Interactive Sacred Peace Bell Pavilion (-13.0, +30.5)
   const bellPav = new THREE.Group();

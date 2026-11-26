@@ -4,6 +4,7 @@ import {
   createDetailedGajurSpire,
   createRectangularHipRoofGeometry,
 } from './janakiMandirCraft';
+import { buildDetailedLumbiniBench } from './lumbiniGardenCraft';
 import { buildPeaceLantern } from './lumbiniShrines';
 import { createWavingPoleBanner, createWavingPrayerFlagGarland } from './prayerFlags';
 import { ProceduralTextureSet } from './proceduralTextures';
@@ -3486,21 +3487,11 @@ export function createLumbiniPeaceParkland(
     stupaLight,
   );
 
-  // Two quiet Chunar stone meditation benches flanking the overlook
+  // Two detailed sculpted granite & teak meditation benches flanking the Peace Stupa overlook
   for (const bzBench of [-6.4, 6.4]) {
-    const bench = new THREE.Group();
+    const bench = buildDetailedLumbiniBench();
     bench.position.set(5.4, 0.35, bzBench);
     bench.rotation.y = bzBench < 0 ? -0.32 : 0.32;
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.14, 0.68), chunarStoneMat);
-    seat.position.y = 0.44;
-    seat.castShadow = true;
-    for (const lx of [-0.75, 0.75]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.44, 0.56), chunarStoneMat);
-      leg.position.set(lx, 0.22, 0);
-      leg.castShadow = true;
-      bench.add(leg);
-    }
-    bench.add(seat);
     stupaGroup.add(bench);
   }
 

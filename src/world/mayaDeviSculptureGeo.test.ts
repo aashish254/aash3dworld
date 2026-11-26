@@ -164,10 +164,11 @@ test('createSanctumAtmosphereParticles spawns finite shaft dust and statue/stone
   }
 });
 
-import { buildPeaceLantern } from './lumbiniShrines';
+import { buildExcavatedBrickRuin, buildPeaceLantern } from './lumbiniShrines';
+import { buildDetailedLumbiniBench } from './lumbiniGardenCraft';
 import { REFLECTIVE_WATER_ENV_UNIFORMS } from './waterShader';
 
-test('buildPeaceLantern constructs ornate multi-part pagoda lantern without extra lights', () => {
+test('buildPeaceLantern constructs ornate multi-material pagoda lantern without extra lights', () => {
   const stoneMat = new THREE.MeshStandardMaterial({ color: 0xcab08f });
   const bronzeMat = new THREE.MeshStandardMaterial({ color: 0xba8438 });
   const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff5cb });
@@ -185,9 +186,46 @@ test('buildPeaceLantern constructs ornate multi-part pagoda lantern without extr
     if ((obj as THREE.Light).isLight) lightCount++;
   });
 
-  assert.ok(meshCount >= 5, `Expected multi-part pagoda lantern (stone, bronze, amber glass, chimney, flame), got ${meshCount}`);
-  assert.ok(totalVerts > 1200, `Expected high-detail Chaitya-Dipa lantern geometry (>1200 vertices), got ${totalVerts}`);
+  assert.ok(meshCount >= 8, `Expected multi-material Chaitya pagoda lantern (>=8 meshes), got ${meshCount}`);
+  assert.ok(totalVerts > 4000, `Expected high-detail Chaitya-Dipa lantern geometry (>4000 vertices), got ${totalVerts}`);
   assert.equal(lightCount, 0, 'Peace lantern should not spawn extra unpooled PointLights');
+});
+
+test('buildDetailedLumbiniBench builds sculpted granite legs, oiled teak slats, and bronze hardware', () => {
+  const bench = buildDetailedLumbiniBench();
+  let meshCount = 0;
+  let totalVerts = 0;
+  bench.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      const pos = (obj as THREE.Mesh).geometry.getAttribute('position');
+      if (pos) totalVerts += pos.count;
+    }
+  });
+  const bb = new THREE.Box3().setFromObject(bench);
+  assert.ok(meshCount >= 5, `Expected multi-material bench (>=5 meshes), got ${meshCount}`);
+  assert.ok(totalVerts > 2500, `Expected complex carved bench geometry (>2500 vertices), got ${totalVerts}`);
+  assert.ok(bb.min.y >= -0.01 && bb.min.y <= 0.02, `Bench should sit grounded at y=0, got ${bb.min.y}`);
+  assert.ok(bb.max.y >= 0.85, `Bench backrest should reach >=0.85m, got ${bb.max.y}`);
+});
+
+test('buildExcavatedBrickRuin constructs Triratha votive stupa ruin with world-scaled UVs and shrine niches', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf4e4d8 });
+  const ruin = buildExcavatedBrickRuin(mat, 3.6, 1.05, 3.0, { variantIndex: 2 });
+  let meshCount = 0;
+  let totalVerts = 0;
+  ruin.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      const pos = (obj as THREE.Mesh).geometry.getAttribute('position');
+      if (pos) totalVerts += pos.count;
+    }
+  });
+  const bb = new THREE.Box3().setFromObject(ruin);
+  assert.ok(meshCount >= 6, `Expected multi-material votive stupa ruin (>=6 meshes), got ${meshCount}`);
+  assert.ok(totalVerts > 3500, `Expected detailed archaeological stupa geometry (>3500 vertices), got ${totalVerts}`);
+  assert.ok(bb.min.y >= -0.01 && bb.min.y <= 0.02, `Ruin sits grounded at y=0, got ${bb.min.y}`);
+  assert.ok(bb.max.y > 1.6, `Votive stupa drum & Chaitya crown should rise >1.6m, got ${bb.max.y}`);
 });
 
 test('REFLECTIVE_WATER_ENV_UNIFORMS exposes player proximity & speed wave uniforms', () => {
@@ -232,6 +270,111 @@ test('buildDetailedNativitySteleEnsemble constructs high-detail 3-statue ensembl
   assert.ok(meshCount >= 110, `Expected high-detail 3-statue ensemble (>=110 meshes), got ${meshCount}`);
   assert.ok(totalVerts >= 35000, `Expected high-resolution statue geometry (>=35000 vertices), got ${totalVerts}`);
   tex.dispose();
+});
+
+import { createMonumentalBabyBuddhaMonument } from './lumbiniBuddhaSculpt';
+import {
+  buildDetailedLumbiniBollards,
+  buildDetailedOverlookBalustrade,
+  buildRealisticLumbiniHedges,
+} from './lumbiniGardenCraft';
+
+test('createMonumentalBabyBuddhaMonument builds realistic Golden Baby Buddha, basalt lotus basin, marigold garlands & shrub ring', () => {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd4a342 });
+  const mats = {
+    skinMat: mat,
+    robeMat: mat,
+    hairMat: mat,
+    goldMat: mat,
+    bronzeMat: mat,
+    stonePlinthMat: mat,
+    crimsonLacquerMat: mat,
+    flameMat: mat,
+  };
+  const monument = createMonumentalBabyBuddhaMonument(mats, mat);
+  let meshCount = 0;
+  let instCount = 0;
+  let totalVerts = 0;
+  monument.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+      const im = obj as THREE.InstancedMesh;
+      instCount += im.count;
+      const pos = im.geometry.getAttribute('position');
+      if (pos) totalVerts += pos.count;
+    } else if ((obj as THREE.Mesh).isMesh) {
+      meshCount++;
+      const pos = (obj as THREE.Mesh).geometry.getAttribute('position');
+      if (pos) totalVerts += pos.count;
+    }
+  });
+  const bb = new THREE.Box3().setFromObject(monument);
+  assert.ok(meshCount >= 40, `Expected high-detail multi-part Baby Buddha & lotus pool (>=40 meshes), got ${meshCount}`);
+  assert.ok(instCount >= 550, `Expected >=550 instanced curls/marigolds/shrub sprigs/petals, got ${instCount}`);
+  assert.ok(totalVerts >= 15000, `Expected rich curved sculpture geometry (>=15000 unique verts), got ${totalVerts}`);
+  assert.ok(bb.min.y >= -0.02 && bb.min.y <= 0.05, `Monument should sit grounded near y=0, got ${bb.min.y}`);
+  assert.ok(bb.max.y >= 4.2, `Baby Buddha monument should rise >4.2m, got ${bb.max.y}`);
+});
+
+test('buildDetailedLumbiniBollards and buildDetailedOverlookBalustrade construct intricate carved granite & bronze details', () => {
+  const bollards = buildDetailedLumbiniBollards(
+    [
+      [-6.4, 48.5],
+      [-6.4, 45.5],
+    ],
+    { chainLinks: [[0, 1]] },
+  );
+  let bInst = 0;
+  let bMesh = 0;
+  bollards.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+      bInst++;
+      assert.equal(obj.userData.nonCollidable, true);
+    } else if ((obj as THREE.Mesh).isMesh) {
+      bMesh++;
+      assert.equal(obj.userData.nonCollidable, true);
+    }
+  });
+  assert.equal(bInst, 4, 'Expected 4 instanced layers (basalt plinth, granite shaft, bronze collar, brass Kalash)');
+  assert.equal(bMesh, 1, 'Expected draped catenary chain swag mesh');
+
+  const rail = buildDetailedOverlookBalustrade(-3.15, 7.8, 25.2, 8);
+  let rMeshes = 0;
+  let rVerts = 0;
+  rail.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      rMeshes++;
+      rVerts += (obj as THREE.Mesh).geometry.getAttribute('position').count;
+    }
+  });
+  const rbb = new THREE.Box3().setFromObject(rail);
+  assert.equal(rMeshes, 4, 'Expected 4 material meshes (basalt curb, granite piers/balusters, bronze, gilt)');
+  assert.ok(rVerts > 15000, `Expected high-detail carved balustrade (>15000 verts), got ${rVerts}`);
+  assert.ok(rbb.min.y <= 0.03, `Overlook curb must rest flush on terrace pavers (min.y=${rbb.min.y})`);
+});
+
+test('buildRealisticLumbiniHedges builds planter curbs, compact BVH core, and instanced 3D leaf sprigs', () => {
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0xba6a49 });
+  const hedges = buildRealisticLumbiniHedges(
+    [
+      [-8.9, 35.1, 0.68, 7.6],
+      [-16.4, 31.2, 13.8, 0.68],
+    ],
+    brickMat,
+  );
+  let collidableCoreCount = 0;
+  let sprigCount = 0;
+  hedges.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+      const im = obj as THREE.InstancedMesh;
+      if (im.userData.nonCollidable) {
+        sprigCount += im.count;
+      } else {
+        collidableCoreCount += im.count;
+      }
+    }
+  });
+  assert.equal(collidableCoreCount, 2, 'Expected exact collidable core count matching hedge entries');
+  assert.ok(sprigCount >= 90, `Expected dense 3D botanical sprig instances (>=90), got ${sprigCount}`);
 });
 
 
