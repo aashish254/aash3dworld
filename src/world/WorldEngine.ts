@@ -96,13 +96,19 @@ import {
   getPashupatinathSurfaceY,
   getPashupatinathWaterAt,
 } from './pashupatinathData';
+import { createBoudhanathComplex } from './boudhanathComplex';
+import {
+  BOUDHA_COMPLEX,
+  BOUDHA_HIGHLIGHTS,
+  BOUDHA_INTERACTIVE_SPOTS,
+  getBoudha108PrayerWheelPlacements,
+} from './boudhanathData';
 import {
   ExplorerCharacterRig,
   InteractiveProp,
   create3DNameSign,
   createAgentCitadel,
   createAniFlowStudio,
-  createBoudhanathStupa,
   createBreathSensorLab,
   createCustomWaypointFlag,
   createExplorerCharacter,
@@ -362,6 +368,12 @@ export class WorldEngine {
   private pashupatiTriggerAaratiFn: (() => void) | null = null;
   private pashupatiOfferingsCount = 0;
   private bagmatiAaratiCount = 0;
+  private boudhaGompaBowlHitTarget: THREE.Mesh | null = null;
+  private boudhaAjimaHitTarget: THREE.Mesh | null = null;
+  private boudhaKoraBrassInst: THREE.InstancedMesh | null = null;
+  private boudhaTriggerKoraWaveFn: ((startIdx?: number) => void) | null = null;
+  private boudhaTriggerGompaBlessingFn: (() => void) | null = null;
+  private boudhaTriggerAjimaOfferingFn: (() => void) | null = null;
   private activeTossedPebbles: TossedPebbleEntry[] = [];
   private tossedPebbleGeo: THREE.BufferGeometry | null = null;
   private tossedPebbleMat: THREE.MeshStandardMaterial | null = null;
@@ -1048,7 +1060,7 @@ export class WorldEngine {
   private buildLandmarks(): void {
     const builders: Record<string, () => ReturnType<typeof createPashupatinathComplex>> = {
       'kathmandu-stupa': () => createPashupatinathComplex(this.textures),
-      'boudhanath-stupa': () => createBoudhanathStupa(this.textures),
+      'boudhanath-stupa': () => createBoudhanathComplex(this.textures),
       'pumdikot-shiva': () => createPumdikotShiva(this.textures),
       'janaki-mandir': () =>
         createJanakiMandir(this.textures, () => {
@@ -1074,7 +1086,11 @@ export class WorldEngine {
       if (!builder) continue;
 
       const built = builder();
-      const y = lm.id === 'kathmandu-stupa' ? 0 : groundHeightAt(lm.position.x, lm.position.z);
+      const y =
+        lm.id === 'kathmandu-stupa' ||
+        lm.id === 'boudhanath-stupa'
+          ? 0
+          : groundHeightAt(lm.position.x, lm.position.z);
       built.group.position.set(lm.position.x, y, lm.position.z);
       built.hitMesh.userData.landmarkId = lm.id;
       this.scene.add(built.group);
@@ -1094,10 +1110,10 @@ export class WorldEngine {
           }
         }
       }
-      if (lm.id === 'lumbini-buddha') {
-        if (typeof built.group.userData.lotusCount === 'number') {
-          this.lumbiniLotusCount = built.group.userData.lotusCount;
-        }
+      if (
+        lm.id === 'lumbini-buddha' ||
+        lm.id === 'boudhanath-stupa'
+      ) {
         const rawWheels = built.group.userData.prayerWheelSpinners as THREE.Object3D[] | undefined;
         if (rawWheels && rawWheels.length > 0) {
           built.group.updateMatrixWorld(true);
@@ -1122,6 +1138,39 @@ export class WorldEngine {
             this.scene.add(hitSphere);
             this.prayerWheelHitTargets.push(hitSphere);
           }
+        }
+      }
+      if (lm.id === 'boudhanath-stupa') {
+        const koraBrass = built.group.userData.boudhaKoraBrassInst as THREE.InstancedMesh | undefined;
+        if (koraBrass) {
+          koraBrass.layers.enable(2);
+          this.boudhaKoraBrassInst = koraBrass;
+        }
+        if (typeof built.group.userData.triggerBoudhaKoraWave === 'function') {
+          this.boudhaTriggerKoraWaveFn = built.group.userData.triggerBoudhaKoraWave as (startIdx?: number) => void;
+        }
+        const bowlHit = built.group.userData.gompaBowlHitTarget as THREE.Mesh | undefined;
+        if (bowlHit) {
+          bowlHit.layers.set(2);
+          bowlHit.userData.nonCollidable = true;
+          this.boudhaGompaBowlHitTarget = bowlHit;
+        }
+        const ajimaHit = built.group.userData.ajimaHitTarget as THREE.Mesh | undefined;
+        if (ajimaHit) {
+          ajimaHit.layers.set(2);
+          ajimaHit.userData.nonCollidable = true;
+          this.boudhaAjimaHitTarget = ajimaHit;
+        }
+        if (typeof built.group.userData.triggerGompaBlessing === 'function') {
+          this.boudhaTriggerGompaBlessingFn = built.group.userData.triggerGompaBlessing as () => void;
+        }
+        if (typeof built.group.userData.triggerAjimaOffering === 'function') {
+          this.boudhaTriggerAjimaOfferingFn = built.group.userData.triggerAjimaOffering as () => void;
+        }
+      }
+      if (lm.id === 'lumbini-buddha') {
+        if (typeof built.group.userData.lotusCount === 'number') {
+          this.lumbiniLotusCount = built.group.userData.lotusCount;
         }
         if (Array.isArray(built.group.userData.pebbleSpots)) {
           this.pebbleSpots = built.group.userData.pebbleSpots;
@@ -2872,6 +2921,8 @@ export class WorldEngine {
     if (this.pashupatiNandiHitTarget) exclude.add(this.pashupatiNandiHitTarget);
     if (this.pashupatiAaratiHitTarget) exclude.add(this.pashupatiAaratiHitTarget);
     for (const hit of this.pashupatiGheeLampHitTargets) exclude.add(hit);
+    if (this.boudhaGompaBowlHitTarget) exclude.add(this.boudhaGompaBowlHitTarget);
+    if (this.boudhaAjimaHitTarget) exclude.add(this.boudhaAjimaHitTarget);
     for (const prop of this.interactiveProps) exclude.add(prop.mesh);
     return exclude;
   }
@@ -3450,10 +3501,33 @@ export class WorldEngine {
       this.pashupatiLingamHitTarget !== null ||
       this.pashupatiNandiHitTarget !== null ||
       this.pashupatiGheeLampHitTargets.length > 0 ||
-      this.pashupatiAaratiHitTarget !== null
+      this.pashupatiAaratiHitTarget !== null ||
+      this.boudhaGompaBowlHitTarget !== null ||
+      this.boudhaAjimaHitTarget !== null ||
+      this.boudhaKoraBrassInst !== null
     ) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
+      if (this.boudhaGompaBowlHitTarget) {
+        if (this.raycaster.intersectObject(this.boudhaGompaBowlHitTarget, false).length > 0) {
+          this.ringBoudhaSingingBowl();
+          return;
+        }
+      }
+      if (this.boudhaAjimaHitTarget) {
+        if (this.raycaster.intersectObject(this.boudhaAjimaHitTarget, false).length > 0) {
+          this.triggerBoudhaAjimaOffering();
+          return;
+        }
+      }
+      if (this.boudhaKoraBrassInst) {
+        const koraHits = this.raycaster.intersectObject(this.boudhaKoraBrassInst, false);
+        if (koraHits.length > 0) {
+          const idx = typeof koraHits[0].instanceId === 'number' ? koraHits[0].instanceId : 0;
+          this.triggerBoudhaKoraWheelWave(idx);
+          return;
+        }
+      }
       if (this.pashupatiLingamHitTarget) {
         if (this.raycaster.intersectObject(this.pashupatiLingamHitTarget, false).length > 0) {
           this.triggerPashupatiLingamOffering();
@@ -3836,6 +3910,49 @@ export class WorldEngine {
     this.scheduleImmediateRender();
   }
 
+  public triggerBoudhaKoraWheelWave(startIdx = 0): void {
+    this.boudhaTriggerKoraWaveFn?.(startIdx);
+    const placements = getBoudha108PrayerWheelPlacements();
+    const w = placements[(startIdx + placements.length) % placements.length];
+    if (w) {
+      this.spawnPrayerWheelParticles(w.worldX, w.localY + 0.15, w.worldZ, 1.35);
+    }
+    this.prayerWheelSpinsCount += 1;
+    this.writeDataset('prayerWheelSpins', String(this.prayerWheelSpinsCount));
+    soundEngine.playBoudhaKoraWaveChimes();
+  }
+
+  public ringBoudhaSingingBowl(): void {
+    this.boudhaTriggerGompaBlessingFn?.();
+    this.ritualOfferingsCount += 1;
+    const spot = BOUDHA_INTERACTIVE_SPOTS.gompaBowl;
+    this.spawnButterLampOfferingParticles(spot.x, BOUDHA_COMPLEX.gompaFloorY + 1.05, spot.z);
+    soundEngine.playTibetanSingingBowl();
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.(BOUDHA_HIGHLIGHTS.gompaAltar);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public triggerBoudhaAjimaOffering(): void {
+    this.boudhaTriggerAjimaOfferingFn?.();
+    this.ritualOfferingsCount += 1;
+    this.spawnButterLampOfferingParticles(
+      BOUDHA_COMPLEX.centerX + BOUDHA_COMPLEX.ajimaLocalX,
+      BOUDHA_COMPLEX.plazaY + 1.38,
+      BOUDHA_COMPLEX.centerZ + BOUDHA_COMPLEX.ajimaLocalZ + 2.7,
+    );
+    soundEngine.playRitualButterLampOffering(1);
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.({
+      title: 'Ajima (Hariti) Shrine · Boudhanath',
+      subtitle: 'Sacred Protector Pagoda on the Kora Courtyard',
+      description:
+        'A two-tier gilded pagoda flanking the southern approach of Boudhanath Kora, honoring Hariti Mata with continuous incense and glowing butter lamps.',
+    });
+  }
+
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
 
@@ -3911,6 +4028,14 @@ export class WorldEngine {
     const action = this.getContextualAction();
     if (!action) return;
 
+    if (action.kind === 'spin-boudha-kora-wheels') {
+      this.triggerBoudhaKoraWheelWave(action.index ?? 0);
+      return;
+    }
+    if (action.kind === 'ring-boudha-singing-bowl') {
+      this.ringBoudhaSingingBowl();
+      return;
+    }
     if (action.kind === 'inspect-shiva-lingam') {
       this.triggerPashupatiLingamOffering();
       return;
@@ -4000,10 +4125,10 @@ export class WorldEngine {
         ? 8.2
         : isPagoda
           ? 10.5
-          : isTallTower
-            ? 5.0
-            : isBoudha
-              ? 3.9
+          : isBoudha
+            ? 14.0
+            : isTallTower
+              ? 5.0
               : isPumdikot
                 ? 3.6
                 : 2.8;
@@ -4013,9 +4138,9 @@ export class WorldEngine {
         ? 68.0
         : isPagoda
           ? 72.0
-          : isTallTower
-            ? 16.5
-            : isBoudha
+          : isBoudha
+            ? 70.0
+            : isTallTower
               ? 16.5
               : isPumdikot
                 ? 15.2
@@ -4024,11 +4149,11 @@ export class WorldEngine {
       ? 8.5
       : isLumbini
         ? 10.5
-        : isPagoda
+        : isPagoda || isBoudha
           ? 14.5
           : isTallTower
             ? 5.2
-            : isBoudha || isPumdikot
+            : isPumdikot
               ? 4.8
               : 4.5;
     const azimuthOffset = isJanaki ? 0.2 : isLumbini ? 0.34 : isPagoda ? -0.52 : 0.32;
@@ -4204,6 +4329,9 @@ export class WorldEngine {
       const atPashupatiWestPlaza =
         Math.abs(safe.x - (PASHUPATI_COMPLEX.minX - 10.0)) <= 10.0 &&
         Math.abs(safe.z - PASHUPATI_COMPLEX.centerZ) <= 12.0;
+      const atBoudhaSouthPlaza =
+        Math.abs(safe.x - BOUDHA_COMPLEX.centerX) <= 14.0 &&
+        Math.abs(safe.z - (BOUDHA_COMPLEX.centerZ + BOUDHA_COMPLEX.halfSize + 6.0)) <= 10.0;
       const inPashupatiSanctum =
         Math.abs(safe.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
         Math.abs(safe.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
@@ -4214,6 +4342,13 @@ export class WorldEngine {
         this.targetCameraYaw = -Math.PI * 0.5;
         this.cameraPitch = 0.24;
         this.targetCameraPitch = 0.24;
+      } else if (atBoudhaSouthPlaza) {
+        // Face North directly toward Boudhanath Kora Dwar & Great Stupa spire
+        this.playerYaw = Math.PI;
+        this.cameraYaw = 0;
+        this.targetCameraYaw = 0;
+        this.cameraPitch = 0.22;
+        this.targetCameraPitch = 0.22;
       } else if (inPashupatiSanctum) {
         const toCenterX = PASHUPATI_COMPLEX.centerX - safe.x;
         const toCenterZ = PASHUPATI_COMPLEX.centerZ - safe.z;
@@ -4240,6 +4375,8 @@ export class WorldEngine {
       this.currentLookAt.set(safe.x, this.playerPos.y + (inCourtyard ? 1.5 : 1.8), safe.z);
       if (atPashupatiWestPlaza) {
         this.currentCamPos.set(safe.x - 14.5, this.playerPos.y + 6.5, safe.z + 2.5);
+      } else if (atBoudhaSouthPlaza) {
+        this.currentCamPos.set(safe.x + 2.5, this.playerPos.y + 6.5, safe.z + 14.5);
       } else if (inPashupatiSanctum) {
         this.currentCamPos.set(
           safe.x + Math.sin(this.cameraYaw) * 3.2,

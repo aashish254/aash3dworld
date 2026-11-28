@@ -27,6 +27,10 @@ import {
   isOnLumbiniCanalBridge,
   isOnLumbiniSacredBridge,
 } from './worldLogic';
+import {
+  isInBoudhaHardSurface,
+  isInBoudhaPrecinct,
+} from './boudhanathData';
 import { applyRealisticWaterShader } from './waterShader';
 import { getCachedMaterial, getCachedTexture, mergeStaticMeshesByMaterial } from './meshOptimization';
 
@@ -763,11 +767,11 @@ export function sampleTerrainMeshHeight(
  * across exposed river shingle/silt to sun-baked Tamil Nadu laterite loam (East).
  */
 export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh {
-  textures.meadowMap.repeat.set(138, 138);
-  textures.meadowNormal.repeat.set(138, 138);
-  textures.meadowRough.repeat.set(138, 138);
+  textures.meadowMap.repeat.set(162, 162);
+  textures.meadowNormal.repeat.set(162, 162);
+  textures.meadowRough.repeat.set(162, 162);
 
-  const size = 1040;
+  const size = 1220;
   const segs = 512;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
@@ -789,7 +793,9 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
             ? 92
             : lm.id === 'kathmandu-stupa'
               ? 88
-              : 20,
+              : lm.id === 'boudhanath-stupa'
+                ? 68
+                : 20,
     })),
   ];
 
@@ -854,7 +860,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
           (x >= LUMBINI_PEACE_CANAL.minX - 1.4 && x <= LUMBINI_PEACE_CANAL.minX + 0.2)));
 
     const roadDist =
-      x > -410 && x < 115 && z > -118 && z < 390 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
+      x > -470 && x < 240 && z > -118 && z < 405 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
     roadDistCache[i] = roadDist;
 
     const underPashupatiAryaghat =
@@ -864,6 +870,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       (Math.abs(x + 28.0) <= 4.8 &&
         ((z >= 232.0 && z < 236.0) || (z > 364.0 && z <= 368.0))) ||
       (x >= 41.5 && x <= 62.5 && z >= 236.0 && z <= 364.0);
+    const inBoudhaClear = isInBoudhaPrecinct(x, z, 2.5);
 
     const inWaterBasin =
       underPeaceCanal ||
@@ -884,12 +891,15 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       underLumbiniOuterPromenade ||
       underWestPeaceWalk ||
       underPashupatiAryaghat ||
-      underPashupatiDeck;
+      underPashupatiDeck ||
+      inBoudhaClear;
     if (isStructuralClear) {
       pondMaskCache[i] = inWaterBasin ? 2 : 1;
     }
 
-    if (underPashupatiAryaghat) {
+    if (inBoudhaClear) {
+      // Preserve carved flat Boudhanath Kora plaza
+    } else if (underPashupatiAryaghat) {
       // Preserve smooth carved Bagmati river channel & 14m transitions from carvePashupatinathGround
       y = Math.min(y, 0.25);
     } else if (underPashupatiDeck) {
@@ -951,7 +961,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       const reliefMask = landmarkClear * roadFade * lakeFade * riverFade * riverBridgeClear * parkScale;
 
       if (reliefMask > 0.005) {
-        const foothillBoost = 1 + THREE.MathUtils.smoothstep(Math.hypot(x, z), 385, 495) * 1.65;
+        const foothillBoost = 1 + THREE.MathUtils.smoothstep(Math.hypot(x, z), 475, 585) * 1.65;
         const undulation =
           Math.sin(x * 0.23 + z * 0.16) * 0.105 +
           Math.cos(x * 0.51 - z * 0.41) * 0.068 +
@@ -984,7 +994,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     const riverCenterX = getRiverCenterX(z);
     const distRiver = Math.abs(x - riverCenterX);
     const eastBankBlend = THREE.MathUtils.smoothstep(x - riverCenterX, 4.5, 22.0);
-    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 415, 500);
+    const outerFoothillBlend = THREE.MathUtils.smoothstep(Math.hypot(x, z), 505, 585);
     const northSlopeBlend = THREE.MathUtils.smoothstep(-z, 118, 195);
     const distLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
 
@@ -995,6 +1005,9 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     if (clearFlag === 2) {
       wPebble = 0.86;
       wRock = 0.14;
+    } else if (clearFlag === 3) {
+      wPebble = 0.08;
+      wRock = THREE.MathUtils.smoothstep(slope, 0.14, 0.42) * 0.52;
     } else if (distRiver < 9.6 || distLake < GLACIAL_LAKE.basinRadius + 2.4) {
       const riverPeb =
         distRiver < 9.6 ? 1 - THREE.MathUtils.smoothstep(distRiver, 5.2, 9.6) : 0;
@@ -1044,6 +1057,11 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     // Color tint per layer so grass has valley biome warmth while pebble & rock keep clean mineral hues
     if (clearFlag === 2) {
       _color.setRGB(0.56, 0.64, 0.64);
+    } else if (clearFlag === 3) {
+      _color.setRGB(0.76, 0.90, 0.68).lerp(parkTint, 0.34);
+      if (nr > 0.05) {
+        _color.lerp(rockSlopeTint, nr * 0.68);
+      }
     } else if (distRiver < 8.4 || distLake < GLACIAL_LAKE.basinRadius) {
       const shoreT =
         distLake < GLACIAL_LAKE.basinRadius
@@ -1126,10 +1144,10 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   const roadGrid = buildRoadSampleGrid(roadSamples, 10);
   const plazas = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 8.5 },
-    ...LANDMARKS.map((lm) => ({
+    ...LANDMARKS.filter((lm) => lm.id !== 'boudhanath-stupa').map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 60 : lm.id === 'boudhanath-stupa' ? 12 : 11,
+      r: lm.id === 'janaki-mandir' ? 32 : lm.id === 'lumbini-buddha' ? 60 : 11,
     })),
   ];
 
@@ -1356,6 +1374,10 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     if (px >= -102 && px <= 63 && pz >= 230 && pz <= 370) {
       return { excluded: true, roadD: 99, distRiver };
     }
+    // Keep Boudhanath Kora Plaza free of wild grass
+    if (isInBoudhaHardSurface(px, pz)) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
     for (const art of OUTER_TEMPLE_ARTIFACT_SPOTS) {
       if (Math.hypot(px - art.x, pz - art.z) <= 1.95 * art.scale) {
         return { excluded: true, roadD: 99, distRiver };
@@ -1372,11 +1394,11 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
   };
 
   const goldenAngle = 2.39996323;
-  const maxAttempts = 38000;
-  for (let i = 0; i < maxAttempts && grassSpots.length < 18500; i++) {
+  const maxAttempts = 44000;
+  for (let i = 0; i < maxAttempts && grassSpots.length < 22000; i++) {
     const angle = i * goldenAngle;
     const t = (i + 0.5) / maxAttempts;
-    const radius = 7.4 + Math.sqrt(t) * 395.0;
+    const radius = 7.4 + Math.sqrt(t) * 485.0;
     const jx = Math.sin(i * 12.9898) * 1.45;
     const jz = Math.cos(i * 78.233) * 1.45;
     const x = Math.cos(angle) * radius + jx;
@@ -1952,11 +1974,12 @@ export function createCurbedRoads(
       (lm) =>
         lm.id !== 'janaki-mandir' &&
         lm.id !== 'lumbini-buddha' &&
-        lm.id !== 'kathmandu-stupa',
+        lm.id !== 'kathmandu-stupa' &&
+        lm.id !== 'boudhanath-stupa',
     ).map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'boudhanath-stupa' ? 8.2 : lm.id === 'pumdikot-shiva' ? 7.6 : 7.0,
+      r: lm.id === 'pumdikot-shiva' ? 7.6 : 7.0,
       mat: lm.id === 'vit-vellore-tower' ? sandstonePlazaMat : roadMat,
     })),
   ];
@@ -2104,10 +2127,12 @@ export function createCurbedRoads(
           baseX > -208.0 &&
           baseX < -202.0 &&
           ((baseZ > 175.0 && baseZ < 180.0) || (baseZ > 19.0 && baseZ < 24.5));
+        const inBoudhaGate = isInBoudhaPrecinct(baseX, baseZ, 4.5);
         if (
           inChowk ||
           inLumbini ||
           atEastCorridorTJunction ||
+          inBoudhaGate ||
           rm.deckY <= -0.1
         ) {
           prevRingStart = -1;
@@ -2289,7 +2314,13 @@ export function createCurbedRoads(
       x: -97.0,
       z: 276.0,
       rotY: 1.57,
-      lines: ['PASCHIM DWAR ->', 'PASHUPATINATH', 'BAGMATI GHATS ->'],
+      lines: ['PASCHIM DWAR ->', 'PASHUPATINATH', '<- BOUDHANATH'],
+    },
+    {
+      x: -168.0,
+      z: 293.0,
+      rotY: 1.57,
+      lines: ['<- BOUDHANATH', 'KORA PLAZA', 'PASHUPATI ->'],
     },
   ];
   for (const mp of milepostSpecs) {

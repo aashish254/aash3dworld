@@ -56,7 +56,7 @@ import {
 import { LANDMARKS } from '../data/portfolioData';
 
 test('spawn and all landmark plazas sit on walkable terrain above water', () => {
-  assert.equal(WORLD_RADIUS, 475);
+  assert.equal(WORLD_RADIUS, 560);
   assert.equal(isWalkablePosition(SPAWN_POSITION.x, SPAWN_POSITION.z), true);
   assert.ok(groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) > -0.2);
   assert.equal(LANDMARKS.length, 10);

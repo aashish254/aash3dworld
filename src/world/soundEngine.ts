@@ -1704,6 +1704,55 @@ class SoundEngine {
     }
   }
 
+  public playBoudhaKoraWaveChimes(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const notes = [528.0, 660.0, 792.0, 1056.0, 1320.0];
+    notes.forEach((f, idx) => {
+      const st = t + idx * 0.055;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, st);
+      gain.gain.setValueAtTime(0.0004, st);
+      gain.gain.linearRampToValueAtTime(0.024, st + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0003, st + 0.85);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.9);
+    });
+  }
+
+  public playTibetanSingingBowl(): void {
+    this.ritualOfferingSoundCount += 1;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const partials = [
+      { f: 174.0, g: 0.048, dur: 4.1, delay: 0.0 },
+      { f: 175.4, g: 0.034, dur: 4.0, delay: 0.0 },
+      { f: 348.0, g: 0.026, dur: 3.4, delay: 0.02 },
+      { f: 522.0, g: 0.017, dur: 2.6, delay: 0.04 },
+      { f: 870.0, g: 0.009, dur: 1.9, delay: 0.06 },
+    ];
+    for (const p of partials) {
+      const st = t + p.delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(p.f, st);
+      gain.gain.setValueAtTime(0.0004, st);
+      gain.gain.linearRampToValueAtTime(p.g, st + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0003, st + p.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + p.dur + 0.05);
+    }
+  }
+
   public playClick(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;

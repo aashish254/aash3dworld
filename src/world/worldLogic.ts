@@ -9,6 +9,15 @@ import {
   isOnPashupatiBagmatiBridge,
   isPashupatinathWalkable,
 } from './pashupatinathData';
+import {
+  BOUDHA_INTERACTIVE_SPOTS,
+  carveBoudhanathGround,
+  getBoudha108PrayerWheelPlacements,
+  getBoudhanathSurfaceY,
+  isBoudhanathWalkable,
+  isInBoudhaHardSurface,
+  isInBoudhaPrecinct,
+} from './boudhanathData';
 
 export type WeatherKind = 'clear' | 'mist' | 'foggy' | 'rain' | 'snow';
 export type TimePreset = 'live' | 'dawn' | 'noon' | 'dusk' | 'night';
@@ -125,7 +134,7 @@ export interface ContactValidationResult {
   errors: Partial<Record<keyof ContactPayload, string>>;
 }
 
-export const WORLD_RADIUS = 475;
+export const WORLD_RADIUS = 560;
 export const SPAWN_POSITION = { x: 0, z: 6 };
 
 export const BRIDGE_BOUNDS = {
@@ -223,6 +232,10 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[-92.0, 168.0], [-92.0, 212.0], [-92.0, 256.0], [-92.0, 300.0], [-84.0, 300.0]],
   // Pashupatinath North Gate Avenue from Janaki East Boulevard -> North Gate (-28, 238)
   [[-46.5, 128.5], [-34.0, 168.0], [-28.0, 206.0], [-28.0, 236.5]],
+  // Boudhanath Stupa & Kora Plaza East, North & South Gate Avenues (-308, 302)
+  [[-92.0, 300.0], [-132.0, 296.0], [-172.0, 298.0], [-212.0, 301.0], [-245.0, 302.0]],
+  [[-308.0, 178.5], [-308.0, 208.0], [-308.0, 239.0]],
+  [[-212.0, 301.0], [-228.0, 336.0], [-244.0, 368.0], [-276.0, 376.0], [-302.0, 375.0], [-308.0, 371.0], [-308.0, 366.0]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -265,6 +278,13 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-96.5, 294.0],
   [-24.0, 220.0],
   [-32.0, 188.0],
+  // Boudhanath Approach Avenues
+  [-132.0, 291.5],
+  [-172.0, 293.5],
+  [-212.0, 296.5],
+  [-240.0, 306.5],
+  [-303.5, 208.0],
+  [-276.0, 371.0],
 ];
 
 export const PRAYER_FLAG_POLES: Array<[number, number]> = [
@@ -328,11 +348,11 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -93.0, z: 289.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
   { x: -97.5, z: 312.5, kind: 'prayer-flags', rotY: 0.5, scale: 1.0 },
   { x: -95.0, z: 312.5, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
-  // Boudhanath Stupa outer kora grounds (-108, 4)
-  { x: -119.5, z: -5.5, kind: 'offering-bowl', rotY: 0.4, scale: 1.05 },
-  { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
-  { x: -118.5, z: 14.5, kind: 'offering-bowl', rotY: 0.2, scale: 1.05 },
-  { x: -97.5, z: 13.5, kind: 'incense-stand', rotY: -0.2, scale: 1.0 },
+  // Boudhanath Stupa & Kora Plaza outer gate aprons (-308, 302)
+  { x: -314.5, z: 364.2, kind: 'offering-bowl', rotY: 0.35, scale: 1.05 },
+  { x: -301.5, z: 364.2, kind: 'prayer-flags', rotY: -0.35, scale: 1.05 },
+  { x: -245.2, z: 295.8, kind: 'incense-stand', rotY: 0.25, scale: 1.0 },
+  { x: -245.2, z: 308.2, kind: 'offering-bowl', rotY: -0.25, scale: 1.05 },
   // Lumbini Sacred Garden outer lawns & Peace Canal Parkland inside unified fence (-280, 96)
   { x: -285.8, z: 159.5, kind: 'offering-bowl', rotY: 0.25, scale: 1.05 },
   { x: -274.2, z: 159.5, kind: 'offering-bowl', rotY: -0.25, scale: 1.05 },
@@ -404,10 +424,10 @@ export function getWorldTreeSpots(): TreeSpot[] {
   const goldenAngle = 2.39996323;
   const treeSpots: TreeSpot[] = [];
 
-  for (let i = 0; i < 4200 && treeSpots.length < 660; i++) {
+  for (let i = 0; i < 2400 && treeSpots.length < 660; i++) {
     const angle = i * goldenAngle;
-    const t = (i + 0.5) / 4200;
-    const radius = 14.5 + Math.sqrt(t) * 395;
+    const t = ((i % 1200) + 0.5) / 1200;
+    const radius = 14.5 + Math.sqrt(t) * 485;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
 
@@ -422,6 +442,9 @@ export function getWorldTreeSpots(): TreeSpot[] {
       }
       if (lm.id === 'kathmandu-stupa') {
         return isInPashupatiPrecinct(x, z);
+      }
+      if (lm.id === 'boudhanath-stupa') {
+        return isInBoudhaPrecinct(x, z, 5);
       }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
@@ -512,7 +535,7 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
   const rockSpots: BoulderSpot[] = [];
   for (let i = 0; i < 520 && rockSpots.length < 116; i++) {
     const a = i * goldenAngle + 0.4;
-    const r = 18 + Math.sqrt((i + 1) / 520) * 385;
+    const r = 18 + Math.sqrt((i + 1) / 520) * 465;
     const rx = Math.cos(a) * r;
     const rz = Math.sin(a) * r;
     const nearLandmark = LANDMARKS.some((lm) =>
@@ -522,7 +545,9 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
           ? rx - lm.position.x > -92 && rx - lm.position.x < 68 && rz - lm.position.z > -70 && rz - lm.position.z < 78
           : lm.id === 'kathmandu-stupa'
             ? isInPashupatiPrecinct(rx, rz)
-            : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
+            : lm.id === 'boudhanath-stupa'
+              ? isInBoudhaPrecinct(rx, rz, 5)
+              : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
     const riverCenterX = getRiverCenterX(rz);
@@ -656,8 +681,8 @@ export function groundHeightAt(x: number, z: number): number {
 
   // Foothill rim around outer valley basin pushed generously outward to preserve open western Lumbini plains
   const radial = Math.hypot(x, z);
-  if (radial > 425 && z > -135) {
-    const outerT = Math.min(1, (radial - 425) / 95);
+  if (radial > 515 && z > -135) {
+    const outerT = Math.min(1, (radial - 515) / 95);
     const northFade = smoothstep(-135, -60, z);
     h += outerT * outerT * 6.5 * northFade;
   }
@@ -669,7 +694,7 @@ export function groundHeightAt(x: number, z: number): number {
   // Flatten spawn plaza and landmark terraces smoothly
   const flatAnchors: Array<{ x: number; z: number; radius: number; targetY: number }> = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, radius: 16, targetY: 0.15 },
-    ...LANDMARKS.map((lm) => ({
+    ...LANDMARKS.filter((lm) => lm.id !== 'boudhanath-stupa').map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
       radius: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 92 : 18,
@@ -822,6 +847,7 @@ export function groundHeightAt(x: number, z: number): number {
 
   // Carve monumental 108m x 124m Pashupatinath courtyard, Bagmati River channel, and East Bank Pandra Shivalaya
   h = carvePashupatinathGround(x, z, h);
+  h = carveBoudhanathGround(x, z, h);
 
   return h;
 }
@@ -891,14 +917,25 @@ export function getSurfaceHeightAt(x: number, z: number): number {
   if (pashupatiY !== null) {
     return pashupatiY;
   }
+  const boudhaY = getBoudhanathSurfaceY(x, z);
+  if (boudhaY !== null) {
+    return boudhaY;
+  }
 
-  // Raised circular stone plaza aprons at Spawn & non-Janaki/non-Lumbini/non-Pashupati landmarks
+  // Raised circular stone plaza aprons at Spawn & small non-precinct landmarks
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.45) {
     surfaceY = Math.max(surfaceY, groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) + 0.105);
   }
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa') continue;
-    const r = lm.id === 'boudhanath-stupa' ? 8.25 : lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
+    if (
+      lm.id === 'janaki-mandir' ||
+      lm.id === 'lumbini-buddha' ||
+      lm.id === 'kathmandu-stupa' ||
+      lm.id === 'boudhanath-stupa'
+    ) {
+      continue;
+    }
+    const r = lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
     if (Math.hypot(x - lm.position.x, z - lm.position.z) <= r) {
       surfaceY = Math.max(surfaceY, groundHeightAt(lm.position.x, lm.position.z) + 0.105);
     }
@@ -979,7 +1016,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     x <= LUMBINI_FENCE_BOUNDS.maxX + 0.5 &&
     z >= LUMBINI_FENCE_BOUNDS.minZ - 0.5 &&
     z <= LUMBINI_FENCE_BOUNDS.maxZ + 0.5;
-  if (!inJanakiChowk && !inLumbiniPrecinct) {
+  if (!inJanakiChowk && !inLumbiniPrecinct && !isInBoudhaPrecinct(x, z)) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
     let bestDeckY = surfaceY;
@@ -1083,19 +1120,23 @@ export function isWalkablePosition(x: number, z: number): boolean {
   }
 
   if (!isPashupatinathWalkable(x, z)) return false;
+  if (!isBoudhanathWalkable(x, z)) return false;
 
-  // Non-Janaki landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
+  // Non-precinct landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa') continue;
+    if (
+      lm.id === 'janaki-mandir' ||
+      lm.id === 'lumbini-buddha' ||
+      lm.id === 'kathmandu-stupa' ||
+      lm.id === 'boudhanath-stupa'
+    ) {
+      continue;
+    }
     const dx = x - lm.position.x;
     const dz = z - lm.position.z;
     if (Math.hypot(dx, dz) > 12.0) continue;
 
     switch (lm.id) {
-      case 'boudhanath-stupa':
-        if (Math.abs(dx) <= 4.05 && Math.abs(dz) <= 4.05) return false;
-        if (Math.hypot(dx - 3.85, dz - 4.4) <= 0.95) return false;
-        break;
       case 'pumdikot-shiva':
         if (Math.hypot(dx, dz) <= 3.1) return false;
         if (
@@ -2471,6 +2512,16 @@ export const FOREST_LANDMARK_AREAS: ForestLandmarkArea[] = [
     rustleDensity: 0.76,
   },
   {
+    id: 'boudha-kora-grove',
+    name: 'Boudhanath Kora Courtyard Park',
+    x: -308,
+    z: 302,
+    innerRadius: 24,
+    outerRadius: 72,
+    birdDensity: 0.78,
+    rustleDensity: 0.66,
+  },
+  {
     id: 'bagmati-willow-woods',
     name: 'Bagmati Willow & Birch Woods',
     x: 20,
@@ -2708,6 +2759,7 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
   if (isOnPashupatiBagmatiBridge(x, z)) return 'stone';
   const pashuY = getPashupatinathSurfaceY(x, z);
   if (pashuY !== null && x <= PASHUPATI_COMPLEX.eastBankMaxX) return 'stone';
+  if (isInBoudhaHardSurface(x, z)) return 'stone';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
 
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
@@ -2844,7 +2896,7 @@ export function computeSpatialAmbienceMix(
   );
   const stupaSanctuaryFactor = Math.max(
     1 - smoothstep(8, 22, dKtm),
-    1 - smoothstep(10, 26, dBoudha),
+    1 - smoothstep(18, 64, dBoudha),
   );
   const riverFactor = 1 - smoothstep(6, 26, dRiver);
   const peaceCanalWaterFactor = (1 - smoothstep(4, 18, dPeaceCanal)) * 0.42;
@@ -4741,6 +4793,8 @@ export type ContextualWorldActionKind =
   | 'inspect-golden-nandi'
   | 'light-pashupati-lamps'
   | 'perform-bagmati-aarati'
+  | 'spin-boudha-kora-wheels'
+  | 'ring-boudha-singing-bowl'
   | 'light-butter-lamp'
   | 'spin-prayer-wheel'
   | 'ring-temple-bell'
@@ -4804,6 +4858,36 @@ export function computeContextualWorldAction(
     aaratiTerrace?: { x: number; z: number };
   } = {},
 ): ContextualWorldAction | null {
+  // 0a. Boudhanath Interactive Ritual Spots
+  const gompaBowl = BOUDHA_INTERACTIVE_SPOTS.gompaBowl;
+  if (Math.hypot(playerX - gompaBowl.x, playerZ - gompaBowl.z) <= 3.6) {
+    return {
+      kind: 'ring-boudha-singing-bowl',
+      label: gompaBowl.label,
+      targetX: gompaBowl.x,
+      targetZ: gompaBowl.z,
+    };
+  }
+  const boudhaWheels = getBoudha108PrayerWheelPlacements();
+  let bestKoraIdx = -1;
+  let bestKoraDist = 2.95;
+  for (let i = 0; i < boudhaWheels.length; i++) {
+    const d = Math.hypot(playerX - boudhaWheels[i].worldX, playerZ - boudhaWheels[i].worldZ);
+    if (d < bestKoraDist) {
+      bestKoraDist = d;
+      bestKoraIdx = i;
+    }
+  }
+  if (bestKoraIdx >= 0) {
+    return {
+      kind: 'spin-boudha-kora-wheels',
+      label: 'Spin 108 Kora Brass Prayer Wheels',
+      targetX: boudhaWheels[bestKoraIdx].worldX,
+      targetZ: boudhaWheels[bestKoraIdx].worldZ,
+      index: bestKoraIdx,
+    };
+  }
+
   // 0. Pashupatinath Sacred Interactions (Chaturmukha Shiva Lingam, Golden Nandi, Ghee-Lamp Racks, Bagmati Aarati)
   const lingamCenter = PASHUPATI_INTERACTIVE_SPOTS.shivaLingamCenter;
   if (
