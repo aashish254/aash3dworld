@@ -26,6 +26,15 @@ import {
   isInPumdikotPrecinct,
   isPumdikotWalkable,
 } from './pumdikotData';
+import {
+  TREK_KEY_SPOTS,
+  TREK_PLATEAUS,
+  computeHimalayaTrekAmbience,
+  getTrekFootstepSurface,
+  getTrekSurfaceHeightAt,
+  isInsideTrekMountainFootprint,
+  isTrekPositionWalkable,
+} from './himalayaTrekData';
 
 export type WeatherKind = 'clear' | 'mist' | 'foggy' | 'rain' | 'snow';
 export type TimePreset = 'live' | 'dawn' | 'noon' | 'dusk' | 'night';
@@ -246,6 +255,8 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[-212.0, 301.0], [-228.0, 336.0], [-244.0, 368.0], [-276.0, 376.0], [-302.0, 375.0], [-308.0, 371.0], [-308.0, 366.0]],
   // Pumdikot Mahadev South Crimson Gate Approach Spur (-50, -28)
   [[-48, -24], [-49.5, -25.0], [-50, -28]],
+  // North Himalayan Trailhead Approach Spur connecting Spawn Vista directly to Sagarmatha Trek Gate (6, -144)
+  [[0, 6], [4, -40], [6, -92], [6, -142]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -298,6 +309,10 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-240.0, 306.5],
   [-303.5, 208.0],
   [-276.0, 371.0],
+  // North Himalayan Trailhead Spur lanterns
+  [1.2, -52.0],
+  [9.8, -102.0],
+  [1.8, -138.0],
 ];
 
 export const PRAYER_FLAG_POLES: Array<[number, number]> = [
@@ -479,6 +494,9 @@ export function getWorldTreeSpots(): TreeSpot[] {
       x >= -370 && x <= -324 && Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) < 6.2;
     const nearRoad = minDistToRoadSamples(x, z, roadSamples) < 4.6;
     const nearArtifact = OUTER_TEMPLE_ARTIFACT_SPOTS.some((a) => Math.hypot(x - a.x, z - a.z) < 3.0);
+    const inSagarmathaPeak =
+      (x >= -112 && x <= 186 && z <= -135) ||
+      Math.hypot(x - TREK_PLATEAUS.trailhead.x, z - TREK_PLATEAUS.trailhead.z) < 16;
 
     if (
       nearLandmark ||
@@ -488,7 +506,8 @@ export function getWorldTreeSpots(): TreeSpot[] {
       nearPeaceCanal ||
       nearWestCanalWalk ||
       nearRoad ||
-      nearArtifact
+      nearArtifact ||
+      inSagarmathaPeak
     ) {
       continue;
     }
@@ -573,7 +592,10 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
     const nearLake = Math.hypot(rx - GLACIAL_LAKE.x, rz - GLACIAL_LAKE.z) < GLACIAL_LAKE.basinRadius + 2.5;
     const nearPeaceParkland = rx >= -376 && rx <= -210 && rz >= 24 && rz <= 176;
     const nearRoad = minDistToRoadSamples(rx, rz, roadSamples) < 4.5;
-    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearPeaceParkland || nearRoad) continue;
+    const inSagarmathaPeak =
+      (rx >= -112 && rx <= 186 && rz <= -135) ||
+      Math.hypot(rx - TREK_PLATEAUS.trailhead.x, rz - TREK_PLATEAUS.trailhead.z) < 15;
+    if (nearLandmark || nearSpawn || nearRiver || nearLake || nearPeaceParkland || nearRoad || inSagarmathaPeak) continue;
     rockSpots.push({ x: rx, z: rz, idx: i });
   }
   cachedBoulderSpots = rockSpots;
@@ -704,8 +726,9 @@ export function groundHeightAt(x: number, z: number): number {
     const northFade = smoothstep(-135, -60, z);
     h += outerT * outerT * 6.5 * northFade;
   }
-  if (z < -150) {
-    const underMountain = smoothstep(-150, -210, z);
+  if (z < -158) {
+    const trailFade = smoothstep(8.5, 18.0, Math.hypot(x - TREK_PLATEAUS.trailhead.x, z - TREK_PLATEAUS.trailhead.z));
+    const underMountain = smoothstep(-158, -218, z) * trailFade;
     h = lerp(h, -3.2, underMountain);
   }
 
@@ -853,10 +876,10 @@ export function groundHeightAt(x: number, z: number): number {
     h = lerp(h, -1.85, lakeBlend);
   }
 
-  // Carve serene mountain river channel winding through the valley
+  // Carve serene mountain river channel winding through the valley south of Sagarmatha Trek Peak spring
   const riverCenterX = getRiverCenterX(z);
   const distToRiver = Math.abs(x - riverCenterX);
-  if (distToRiver < 8.4) {
+  if (z >= -156 && distToRiver < 8.4) {
     const bankBlend = 1 - smoothstep(3.2, 8.4, distToRiver);
     h = lerp(h, -1.85, bankBlend);
   }
@@ -929,6 +952,13 @@ export function getSurfaceHeightAt(x: number, z: number, refY = 0): number {
   }
 
   let surfaceY = base;
+
+  if (refY >= 2.2 || (z <= -139 && isInsideTrekMountainFootprint(x, z, refY))) {
+    const trekY = getTrekSurfaceHeightAt(x, z, refY);
+    if (trekY !== null) {
+      return trekY;
+    }
+  }
 
   const pashupatiY = getPashupatinathSurfaceY(x, z);
   if (pashupatiY !== null) {
@@ -1063,6 +1093,9 @@ export function getSurfaceHeightAt(x: number, z: number, refY = 0): number {
  * solid palace masonry walls, or outside the open-world boundary.
  */
 export function isWalkablePosition(x: number, z: number, refY = 0): boolean {
+  if (refY >= 2.2 || (z <= -140 && isInsideTrekMountainFootprint(x, z, refY))) {
+    return isTrekPositionWalkable(x, z, refY);
+  }
   if (Math.hypot(x, z) > WORLD_RADIUS - 3.0) return false;
   if (isOnBridgeDeck(x, z)) {
     // Bridge end truss pylons flanking the deck entry at ±3.2m
@@ -1802,8 +1835,8 @@ export function computeTimeLightingState(
   let skyTopColor = lerpHexColor(a.skyTop, b.skyTop, t);
   let skyHorizonColor = lerpHexColor(a.skyHorizon, b.skyHorizon, t);
   let sunIntensity = lerp(a.sunInt, b.sunInt, t);
-  let fogDensity = 0.0018;
-  let cameraFar = 780;
+  let fogDensity = 0.0014;
+  let cameraFar = 2200;
   let bloomStrength = lerp(a.bloomStrength, b.bloomStrength, t);
   let bloomRadius = lerp(a.bloomRadius, b.bloomRadius, t);
   let bloomThreshold = lerp(a.bloomThreshold, b.bloomThreshold, t);
@@ -1814,31 +1847,31 @@ export function computeTimeLightingState(
     skyHorizonColor = lerpHexColor(skyHorizonColor, '#c4cdd6', 0.55);
     skyTopColor = lerpHexColor(skyTopColor, '#8293a6', 0.45);
     sunIntensity *= 0.68;
-    fogDensity = 0.0068;
-    cameraFar = 540;
+    fogDensity = 0.0056;
+    cameraFar = 1650;
     bloomStrength *= 1.1;
     bloomRadius += 0.08;
   } else if (weather === 'foggy') {
     skyHorizonColor = lerpHexColor(skyHorizonColor, '#aeb6bf', 0.72);
     skyTopColor = lerpHexColor(skyTopColor, '#7a8490', 0.65);
     sunIntensity *= 0.54;
-    fogDensity = 0.0102;
-    cameraFar = 250;
+    fogDensity = 0.0092;
+    cameraFar = 780;
     bloomStrength *= 1.15;
     bloomRadius += 0.14;
   } else if (weather === 'rain') {
     skyHorizonColor = lerpHexColor(skyHorizonColor, '#64707d', 0.62);
     skyTopColor = lerpHexColor(skyTopColor, '#333e4c', 0.6);
     sunIntensity *= 0.52;
-    fogDensity = 0.0062;
-    cameraFar = 520;
+    fogDensity = 0.0054;
+    cameraFar = 1500;
     bloomStrength *= 1.05;
   } else if (weather === 'snow') {
     skyHorizonColor = lerpHexColor(skyHorizonColor, '#c7d1dc', 0.45);
     skyTopColor = lerpHexColor(skyTopColor, '#7b8ca2', 0.35);
     sunIntensity *= 0.74;
-    fogDensity = 0.0054;
-    cameraFar = 520;
+    fogDensity = 0.0046;
+    cameraFar = 1550;
     bloomThreshold = Math.min(1.6, bloomThreshold + 0.1);
   }
 
@@ -2471,7 +2504,7 @@ export function decodeWaypointsFromHash(hash: string): CustomWaypoint[] {
   }
 }
 
-export type FootstepSurfaceKind = 'stone' | 'wood' | 'grass';
+export type FootstepSurfaceKind = 'stone' | 'wood' | 'grass' | 'snow' | 'ice';
 
 export interface ForestLandmarkArea {
   id: string;
@@ -2766,7 +2799,11 @@ function pointToSegmentDist(
 /**
  * Classifies ground surface at (x, z) for footstep dust vs grass-displacement effects and audio.
  */
-export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKind {
+export function getFootstepSurfaceKind(x: number, z: number, refY = 0): FootstepSurfaceKind {
+  if (refY >= 2.0 || (z <= -140 && isInsideTrekMountainFootprint(x, z, refY))) {
+    const trekSurf = getTrekFootstepSurface(x, refY, z);
+    if (trekSurf) return trekSurf;
+  }
   if (isOnBridgeDeck(x, z)) return 'wood';
   if (isOnLumbiniCanalBridge(x, z) || isOnLumbiniSacredBridge(x, z)) return 'stone';
   if (isOnPashupatiBagmatiBridge(x, z)) return 'stone';
@@ -2898,12 +2935,14 @@ export function computeSpatialAmbienceMix(
       ? Math.abs(x - LUMBINI_PEACE_CANAL.centerX)
       : 999;
 
+  const trekAmbience = computeHimalayaTrekAmbience(x, elevation, z);
   const ridgeFactor = Math.max(
     1 - smoothstep(10, 38, dPumdikot),
     1 - smoothstep(10, 38, Math.hypot(x + 108, z + 74)),
     1 - smoothstep(24, 52, dLake),
     smoothstep(-95, -145, z) * 0.72,
     smoothstep(1.1, 3.0, elevation) * 0.58,
+    trekAmbience.onMountain ? trekAmbience.windStrength : 0,
   );
   const peaceGardenFactor = Math.max(
     1 - smoothstep(14, 54, dLumbini),
@@ -2913,7 +2952,7 @@ export function computeSpatialAmbienceMix(
     1 - smoothstep(8, 22, dKtm),
     1 - smoothstep(18, 64, dBoudha),
   );
-  const riverFactor = 1 - smoothstep(6, 26, dRiver);
+  const riverFactor = elevation > 8 ? 0 : 1 - smoothstep(6, 26, dRiver);
   const peaceCanalWaterFactor = (1 - smoothstep(4, 18, dPeaceCanal)) * 0.42;
 
   const forestInfo = computeForestProximity(x, z);
@@ -2939,7 +2978,7 @@ export function computeSpatialAmbienceMix(
 
   let windLevel =
     0.14 +
-    ridgeFactor * 0.74 +
+    ridgeFactor * 0.78 +
     riverFactor * 0.22 +
     peaceGardenFactor * 0.08 +
     forestInfo.forestProximity * 0.12;
@@ -2966,7 +3005,7 @@ export function computeSpatialAmbienceMix(
     inJanakiChowk * 0.34 +
     riverFactor * 0.26 +
     (1 - smoothstep(26, 48, dLake)) * 0.18;
-  birdLevel *= 1 - ridgeFactor * 0.38;
+  birdLevel *= 1 - ridgeFactor * 0.48;
   birdLevel = Math.max(0, Math.min(1, birdLevel));
 
   const streamLevel = Math.max(
@@ -2974,10 +3013,11 @@ export function computeSpatialAmbienceMix(
     Math.min(
       1,
       Math.max(
-        (1 - smoothstep(4, 24, dRiver)) * 0.95,
+        (elevation > 10 ? 0 : 1 - smoothstep(4, 24, dRiver)) * 0.95,
         (1 - smoothstep(20, 44, dLake)) * 0.85,
         nearJanakiWater,
         peaceCanalWaterFactor,
+        trekAmbience.waterfallGain * 0.98,
       ),
     ),
   );
@@ -4083,6 +4123,16 @@ export const LANDMARK_APPROACH_CUE_SPECS: Record<string, LandmarkApproachCueSpec
     shimmerRatio: 2.0,
     baseGain: 0.03,
   },
+  'himalayan-trek': {
+    landmarkId: 'himalayan-trek',
+    motifName: 'Sagarmatha Alpine Horn',
+    notesHz: [293.66, 392.0, 587.33],
+    waveType: 'sine',
+    stepSec: 0.2,
+    noteDurSec: 1.15,
+    shimmerRatio: 2.0,
+    baseGain: 0.032,
+  },
 };
 
 export function getLandmarkApproachCueRadius(lm: (typeof LANDMARKS)[number]): number {
@@ -4819,6 +4869,10 @@ export type ContextualWorldActionKind =
   | 'ring-temple-bell'
   | 'toss-pebble'
   | 'sit-meditate'
+  | 'drink-butter-tea'
+  | 'use-scenic-telescope'
+  | 'rest-high-camp'
+  | 'hoist-summit-flag'
   | 'landmark';
 
 export interface ContextualWorldAction {
@@ -4878,6 +4932,46 @@ export function computeContextualWorldAction(
   } = {},
   playerY = 0,
 ): ContextualWorldAction | null {
+  // 00. Sagarmatha Trek High-Altitude Interactions (Zone 5 Teahouse, Zone 6 High Camp, Zone 7 Summit Spire)
+  if (playerY >= 209.0 && Math.hypot(playerX - TREK_PLATEAUS.summit.x, playerZ - TREK_PLATEAUS.summit.z) <= 6.2) {
+    return {
+      kind: 'hoist-summit-flag',
+      label: 'Hoist Prayer Flag & Celebrate Summit',
+      targetX: TREK_KEY_SPOTS.summitPlaque.x,
+      targetZ: TREK_KEY_SPOTS.summitPlaque.z,
+    };
+  }
+  if (
+    playerY >= 168.0 &&
+    playerY <= 185.0 &&
+    Math.hypot(playerX - TREK_KEY_SPOTS.highCampTent.x, playerZ - TREK_KEY_SPOTS.highCampTent.z) <= 6.5
+  ) {
+    return {
+      kind: 'rest-high-camp',
+      label: 'Rest at Himalayan High Camp (176m)',
+      targetX: TREK_KEY_SPOTS.highCampTent.x,
+      targetZ: TREK_KEY_SPOTS.highCampTent.z,
+    };
+  }
+  if (playerY >= 134.0 && playerY <= 151.0) {
+    if (Math.hypot(playerX - TREK_KEY_SPOTS.teahouseTelescope.x, playerZ - TREK_KEY_SPOTS.teahouseTelescope.z) <= 3.6) {
+      return {
+        kind: 'use-scenic-telescope',
+        label: 'Look Through Brass Scenic Telescope',
+        targetX: TREK_KEY_SPOTS.teahouseTelescope.x,
+        targetZ: TREK_KEY_SPOTS.teahouseTelescope.z,
+      };
+    }
+    if (Math.hypot(playerX - TREK_KEY_SPOTS.teahouseKettle.x, playerZ - TREK_KEY_SPOTS.teahouseKettle.z) <= 4.6) {
+      return {
+        kind: 'drink-butter-tea',
+        label: 'Drink Hot Yak Butter Tea & Warm Up',
+        targetX: TREK_KEY_SPOTS.teahouseKettle.x,
+        targetZ: TREK_KEY_SPOTS.teahouseKettle.z,
+      };
+    }
+  }
+
   // 0a. Boudhanath Interactive Ritual Spots
   const gompaBowl = BOUDHA_INTERACTIVE_SPOTS.gompaBowl;
   if (Math.hypot(playerX - gompaBowl.x, playerZ - gompaBowl.z) <= 3.6) {
@@ -5226,7 +5320,14 @@ export function recordFootprintDecal(
   slot.yaw = playerYaw;
   slot.side = side;
   slot.age = 0;
-  slot.maxAge = surfaceKind === 'wood' ? 4.8 : surfaceKind === 'grass' ? 6.8 : 8.2;
+  slot.maxAge =
+    surfaceKind === 'wood'
+      ? 4.8
+      : surfaceKind === 'snow' || surfaceKind === 'ice'
+        ? 9.2
+        : surfaceKind === 'grass'
+          ? 6.8
+          : 8.2;
   slot.surfaceKind = surfaceKind;
   slot.active = true;
   return slot;

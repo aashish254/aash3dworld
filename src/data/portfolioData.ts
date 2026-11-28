@@ -246,4 +246,25 @@ export const LANDMARKS: LandmarkData[] = [
     stack: ['Full-Stack', 'AI Systems', 'Three.js', 'Architecture'],
     links: [{ label: 'Open Contact Form', url: '#contact' }],
   },
+  {
+    id: 'himalayan-trek',
+    title: 'Sagarmatha Trek Peak (216m)',
+    subtitle: '7-Zone Himalayan Ascent · Trailhead to Summit Spire',
+    era: 'High-Altitude Expedition',
+    category: 'heritage',
+    zoneName: 'Sagarmatha Trek Trailhead',
+    position: { x: 6, z: -144 },
+    approachOffset: { x: 0, z: 5.5 },
+    interactRadius: 12,
+    accentColor: '#38bdf8',
+    summary:
+      'A 1,100-meter continuous Himalayan switchback ascent climbing 216 vertical meters across terraced foothills, cascading glacial waterfalls, twin Hillary suspension bridges, cliffside iron chains, a warm Sherpa Teahouse, High Camp dome tents, crevasse ladders, and the prayer-flag-crowned Summit Spire.',
+    highlights: [
+      '7 sculpted alpine zones: Mani Gate, Ulleri Stairs, Twin Suspension Bridges, Monal Cliff Ledge, Sagarmatha View Lodge, High Camp & Summit Spire',
+      'Interactive Yak Butter Tea warmup, Brass Scenic Telescope valley sightseeing & Summit Prayer Flag Hoist',
+      'Unlockable fast-travel checkpoints at Sherpa Teahouse (142m) and Summit Spire (216m)',
+    ],
+    stack: ['GLSL Tri-Planar Terrain', '3D Spline Physics', 'Dynamic Alpenglow', 'Procedural Alpine'],
+    links: [{ label: 'View World Explorer', url: '#top' }],
+  },
 ];

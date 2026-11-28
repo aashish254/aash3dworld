@@ -28,6 +28,7 @@ import {
   evaluateAchievements,
   recordVisitHistory,
 } from './data/achievementsData';
+import { TrekCheckpointId } from './world/himalayaTrekData';
 import { Achievements } from './components/Achievements';
 import { TitleOverlay } from './components/TitleOverlay';
 import { WorldHud } from './components/WorldHud';
@@ -48,7 +49,11 @@ interface PersistedState {
   visitHistory: VisitHistoryEntry[];
   totalDistanceWalked: number;
   bellRingsCount: number;
+  unlockedTrekCheckpoints: TrekCheckpointId[];
+  summitFlagHoisted: boolean;
 }
+
+const VALID_TREK_CHECKPOINTS: TrekCheckpointId[] = ['trailhead', 'teahouse', 'summit'];
 
 function loadPersistedState(): PersistedState {
   let discoveredIds: string[] = [];
@@ -56,6 +61,8 @@ function loadPersistedState(): PersistedState {
   let visitHistory: VisitHistoryEntry[] = [];
   let totalDistanceWalked = 0;
   let bellRingsCount = 0;
+  let unlockedTrekCheckpoints: TrekCheckpointId[] = ['trailhead'];
+  let summitFlagHoisted = false;
   try {
     const raw = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (raw) {
@@ -89,6 +96,17 @@ function loadPersistedState(): PersistedState {
       ) {
         bellRingsCount = parsed.bellRingsCount;
       }
+      if (Array.isArray(parsed.unlockedTrekCheckpoints)) {
+        const valid = parsed.unlockedTrekCheckpoints.filter(
+          (id): id is TrekCheckpointId =>
+            typeof id === 'string' && VALID_TREK_CHECKPOINTS.includes(id as TrekCheckpointId),
+        );
+        if (!valid.includes('trailhead')) valid.unshift('trailhead');
+        unlockedTrekCheckpoints = valid;
+      }
+      if (typeof parsed.summitFlagHoisted === 'boolean') {
+        summitFlagHoisted = parsed.summitFlagHoisted;
+      }
     }
   } catch {
     // Ignore storage read errors
@@ -111,6 +129,8 @@ function loadPersistedState(): PersistedState {
     visitHistory,
     totalDistanceWalked,
     bellRingsCount,
+    unlockedTrekCheckpoints,
+    summitFlagHoisted,
   };
 }
 
@@ -183,6 +203,9 @@ export default function App() {
     distanceWalked: persisted.totalDistanceWalked,
     timeState: computeTimeLightingState(getPresetHour('live'), 'clear'),
     coords: { x: 0, z: 6 },
+    altitudeM: 0,
+    telescopeActive: false,
+    telescopeTargetIndex: 0,
     contextualAction: null,
     isMeditating: false,
   }));
@@ -200,6 +223,7 @@ export default function App() {
       totalDistanceWalked: Math.max(persisted.totalDistanceWalked, Math.round(latestDistanceRef.current)),
       customWaypointCount: persisted.customWaypoints.length,
       bellRingsCount: persisted.bellRingsCount,
+      summitFlagHoisted: persisted.summitFlagHoisted,
     }),
     [persisted],
   );
@@ -242,6 +266,14 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.syncDiscoveredLandmarks(persisted.discoveredIds);
   }, [persisted.discoveredIds]);
+
+  useEffect(() => {
+    engineRef.current?.syncUnlockedTrekCheckpoints(persisted.unlockedTrekCheckpoints);
+  }, [persisted.unlockedTrekCheckpoints]);
+
+  useEffect(() => {
+    engineRef.current?.syncSummitFlagHoisted(persisted.summitFlagHoisted);
+  }, [persisted.summitFlagHoisted]);
 
   // Flush walked distance synchronously on page hide / unload / unmount
   useEffect(() => {
@@ -373,6 +405,24 @@ export default function App() {
     onInspectHighlight: (highlight: { title: string; subtitle: string; description: string }) => {
       setActiveHighlight(highlight);
     },
+    onTrekCheckpointUnlocked: (id: TrekCheckpointId) => {
+      setPersisted((prev) => {
+        if (prev.unlockedTrekCheckpoints.includes(id)) return prev;
+        return {
+          ...prev,
+          unlockedTrekCheckpoints: [...prev.unlockedTrekCheckpoints, id],
+        };
+      });
+    },
+    onSummitHoisted: () => {
+      setPersisted((prev) => ({
+        ...prev,
+        summitFlagHoisted: true,
+        unlockedTrekCheckpoints: prev.unlockedTrekCheckpoints.includes('summit')
+          ? prev.unlockedTrekCheckpoints
+          : [...prev.unlockedTrekCheckpoints, 'summit'],
+      }));
+    },
     onWebglError: (msg: string) => setWebglError(msg),
   });
 
@@ -389,6 +439,8 @@ export default function App() {
       onBellRing: () => callbacksRef.current.onBellRing(),
       onPlaceWaypointRequest: (x, z) => callbacksRef.current.onPlaceWaypointRequest(x, z),
       onInspectHighlight: (hl) => callbacksRef.current.onInspectHighlight(hl),
+      onTrekCheckpointUnlocked: (id) => callbacksRef.current.onTrekCheckpointUnlocked(id),
+      onSummitHoisted: () => callbacksRef.current.onSummitHoisted(),
       onWebglError: (msg) => callbacksRef.current.onWebglError(msg),
     });
     engineRef.current = engine;
@@ -397,6 +449,8 @@ export default function App() {
     engine.setGameState(initialAutostart ? 'playing' : 'title');
     engine.syncCustomWaypoints(persisted.customWaypoints);
     engine.syncDiscoveredLandmarks(persisted.discoveredIds);
+    engine.syncUnlockedTrekCheckpoints(persisted.unlockedTrekCheckpoints);
+    engine.syncSummitFlagHoisted(persisted.summitFlagHoisted);
 
     return () => {
       delete (window as unknown as { __worldEngine?: WorldEngine }).__worldEngine;
@@ -535,6 +589,10 @@ export default function App() {
           setPendingWaypointCoords(null);
           return;
         }
+        if (hud.telescopeActive) {
+          engineRef.current?.closeTelescope();
+          return;
+        }
         if (activeHighlight) {
           setActiveHighlight(null);
           return;
@@ -577,6 +635,7 @@ export default function App() {
     hud.contextualAction,
     hud.isMeditating,
     hud.nearestLandmark,
+    hud.telescopeActive,
     openLandmark,
     pendingWaypointCoords,
     placementMode,
@@ -678,6 +737,12 @@ export default function App() {
           <>
             <WorldHud
               zoneName={hud.zoneName}
+              altitudeM={hud.altitudeM}
+              telescopeActive={hud.telescopeActive}
+              telescopeTargetIndex={hud.telescopeTargetIndex}
+              onTelescopePrev={() => engineRef.current?.cycleTelescopeTarget(-1)}
+              onTelescopeNext={() => engineRef.current?.cycleTelescopeTarget(1)}
+              onTelescopeClose={() => engineRef.current?.closeTelescope()}
               discoveredCount={persisted.discoveredIds.length}
               totalLandmarks={LANDMARKS.length}
               unlockedAchievementsCount={unlockedAchievementsCount}
@@ -767,8 +832,13 @@ export default function App() {
         open={atlasOpen}
         discoveredIds={persisted.discoveredIds}
         customWaypoints={persisted.customWaypoints}
+        unlockedTrekCheckpoints={persisted.unlockedTrekCheckpoints}
         onClose={() => setAtlasOpen(false)}
         onTeleportLandmark={handleTeleportLandmark}
+        onTeleportTrekCheckpoint={(id) => {
+          engineRef.current?.teleportToTrekCheckpoint(id);
+          setAtlasOpen(false);
+        }}
         onTeleportWaypoint={(wp) => {
           engineRef.current?.teleportTo(wp.x, wp.z);
           setAtlasOpen(false);

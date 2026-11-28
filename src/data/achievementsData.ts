@@ -10,6 +10,7 @@ export interface AchievementProgressInput {
   totalDistanceWalked: number;
   customWaypointCount: number;
   bellRingsCount: number;
+  summitFlagHoisted?: boolean;
 }
 
 export interface AchievementEvaluation {
@@ -110,7 +111,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
     id: 'world-explorer',
     title: 'Visited all landmarks',
-    description: 'Discover all 10 landmarks across the Kathmandu-to-Vellore world.',
+    description: `Discover all ${LANDMARKS.length} landmarks across the Kathmandu-to-Vellore world & Himalayas.`,
     category: 'exploration',
     requiredLandmarkIds: LANDMARKS.map((l) => l.id),
     evaluate: ({ discoveredIds }) =>
@@ -169,6 +170,22 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
         target: 1,
         ratio: current,
         progressLabel: `${current}/1 marker`,
+      };
+    },
+  },
+  {
+    id: 'himalayan-summit',
+    title: 'Himalayan Summit Conqueror',
+    description: 'Climb Sagarmatha Trek Peak (216m) and hoist a prayer flag at the Summit Spire.',
+    category: 'exploration',
+    evaluate: ({ summitFlagHoisted }) => {
+      const done = Boolean(summitFlagHoisted);
+      return {
+        unlocked: done,
+        current: done ? 1 : 0,
+        target: 1,
+        ratio: done ? 1 : 0,
+        progressLabel: done ? '216m Summit Reached' : '0/216m Summit',
       };
     },
   },

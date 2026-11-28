@@ -796,7 +796,7 @@ export function sanitizeSceneGeometry(
   let addedUv1Count = 0;
 
   scene.traverse((obj) => {
-    if (!obj.visible) return;
+    if (!obj.visible && !obj.userData?.forceCollidable) return;
     if (obj.layers.mask !== 1) return;
     if ((obj as THREE.Points).isPoints || (obj as THREE.Line).isLine || (obj as THREE.Sprite).isSprite) {
       return;
@@ -809,7 +809,7 @@ export function sanitizeSceneGeometry(
     if (!mesh.geometry) return;
 
     const isReported = matchesReportedTarget(mesh, targetNames, targetObjects);
-    if (!isReported && !isMaterialCollidable(mesh.material)) return;
+    if (!isReported && !mesh.userData?.forceCollidable && !isMaterialCollidable(mesh.material)) return;
 
     scannedMeshes++;
 
@@ -1061,7 +1061,7 @@ export class StaticPhysicsWorld {
     excludeSnapCategories: boolean,
   ): void {
     root.traverse((obj) => {
-      if (!obj.visible) return;
+      if (!obj.visible && !obj.userData?.forceCollidable) return;
       if (obj.layers.mask !== 1) return; // skip raycast hitMeshes (layers 1, 2)
       if ((obj as THREE.Points).isPoints || (obj as THREE.Line).isLine || (obj as THREE.Sprite).isSprite) {
         return;
@@ -1080,7 +1080,7 @@ export class StaticPhysicsWorld {
   }
 
   private extractMesh(mesh: THREE.Mesh): void {
-    if (!mesh.geometry || !isMaterialCollidable(mesh.material)) return;
+    if (!mesh.geometry || (!mesh.userData?.forceCollidable && !isMaterialCollidable(mesh.material))) return;
     const isTerrainGrid = Boolean(mesh.userData?.terrainGrid);
     const skipNavMesh = Boolean(mesh.userData?.skipNavMesh);
     const skipNavSubdiv = isTerrainGrid || Boolean(mesh.userData?.skipNavSubdiv);

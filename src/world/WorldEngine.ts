@@ -86,6 +86,16 @@ import {
   createSculptedHimalayas,
   sampleTerrainMeshHeight,
 } from './mountainAndTerrain';
+import { HIMALAYA_TERRAIN_UNIFORMS } from './himalayaAmphitheater';
+import {
+  TREK_CHECKPOINTS,
+  TREK_TELESCOPE_TARGETS,
+  TrekCheckpointId,
+  computeHimalayaTrekAmbience,
+  computeSagarmathaPeakVisualHeight,
+  isInsideTrekMountainFootprint,
+} from './himalayaTrekData';
+import { SagarmathaTrekController, createSagarmathaTrekPeak } from './himalayaTrekPeak';
 import { REFLECTIVE_WATER_ENV_UNIFORMS, triggerWaterRipple } from './waterShader';
 import { createPashupatinathComplex } from './pashupatinathComplex';
 import {
@@ -172,6 +182,9 @@ export interface WorldHudSnapshot {
   distanceWalked: number;
   timeState: TimeLightingState;
   coords: { x: number; z: number };
+  altitudeM: number;
+  telescopeActive: boolean;
+  telescopeTargetIndex: number;
   contextualAction: ContextualWorldAction | null;
   isMeditating: boolean;
 }
@@ -182,6 +195,7 @@ export interface WorldHudContinuousSnapshot {
   phaseLabel: string;
   coordsX: number;
   coordsZ: number;
+  altitudeM: number;
 }
 
 export interface WorldPerfMetrics {
@@ -198,6 +212,8 @@ export interface WorldEngineCallbacks {
   onPerfUpdate?: (metrics: WorldPerfMetrics) => void;
   onPlaceWaypointRequest: (x: number, z: number) => void;
   onInspectHighlight?: (highlight: { title: string; subtitle: string; description: string }) => void;
+  onTrekCheckpointUnlocked?: (id: TrekCheckpointId) => void;
+  onSummitHoisted?: () => void;
   onBellRing?: () => void;
   onWebglError?: (message: string) => void;
 }
@@ -279,9 +295,17 @@ export class WorldEngine {
   private staticGroundsMerged = false;
   private shadowPrevState: ShadowUpdateCheckInput | null = null;
   private shadowForceDirty = true;
+  private lastShadowTargetY = 0;
   private maxMovingPropSpeed = 0;
   private lastHudTickAt = -10;
   private lastDiscreteHud: DiscreteHudState | null = null;
+  private trekController: SagarmathaTrekController | null = null;
+  private telescopeActive = false;
+  private telescopeTargetIndex = 0;
+  private lastEmittedTelescopeState = '';
+  private lastEmittedAltRounded = -1;
+  private baseCameraFov = 42;
+  private unlockedTrekCheckpoints = new Set<TrekCheckpointId>();
   private lastSyncDatasetFlushAt = -10;
   private lastSimDatasetFlushAt = -10;
   private datasetCache: Record<string, string> = {};
@@ -790,7 +814,8 @@ export class WorldEngine {
     // 42 deg FOV on desktop; widened smoothly on narrow portrait viewports so full courtyard stays visible
     const aspect = width / height;
     const fov = aspect < 1 ? Math.min(62, 42 / Math.pow(aspect, 0.42)) : 42;
-    this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.22, 680);
+    this.baseCameraFov = fov;
+    this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.22, 2200);
     this.camera.position.copy(this.currentCamPos);
     this.camera.lookAt(this.currentLookAt);
 
@@ -912,7 +937,7 @@ export class WorldEngine {
     for (let i = 0; i < starCount; i++) {
       const theta = ((i * 2.399963) % (Math.PI * 2));
       const phi = Math.acos(0.12 + ((i * 0.618034) % 1) * 0.88);
-      const r = 740;
+      const r = 1950;
       starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       starPos[i * 3 + 1] = r * Math.cos(phi);
       starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
@@ -939,7 +964,7 @@ export class WorldEngine {
       starGeo,
       new THREE.PointsMaterial({
         vertexColors: true,
-        size: 2.8,
+        size: 4.5,
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -957,7 +982,7 @@ export class WorldEngine {
       const spreadZ = Math.cos(i * 13.71) * 0.12;
       const lon = -Math.PI * 0.5 + u * 1.15 + spread;
       const lat = 0.22 + (u + 1) * 0.34 + spreadZ;
-      const r = 720;
+      const r = 1880;
       mwPos[i * 3] = r * Math.cos(lat) * Math.cos(lon);
       mwPos[i * 3 + 1] = Math.max(45, r * Math.sin(lat));
       mwPos[i * 3 + 2] = r * Math.cos(lat) * Math.sin(lon);
@@ -974,7 +999,7 @@ export class WorldEngine {
       mwGeo,
       new THREE.PointsMaterial({
         vertexColors: true,
-        size: 4.5,
+        size: 7.5,
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
@@ -1093,6 +1118,19 @@ export class WorldEngine {
     };
 
     for (const lm of LANDMARKS) {
+      if (lm.id === 'himalayan-trek') {
+        const trekBuilt = createSagarmathaTrekPeak(this.textures, this.isSoftwareGl);
+        this.trekController = trekBuilt;
+        trekBuilt.hitMesh.userData.landmarkId = lm.id;
+        trekBuilt.summitHitMesh.userData.landmarkId = lm.id;
+        this.scene.add(trekBuilt.group);
+        this.landmarkHitTargets.push(trekBuilt.hitMesh, trekBuilt.summitHitMesh);
+        this.beaconLights.push(...trekBuilt.beaconLights);
+        this.prayerFlags.push(...trekBuilt.prayerFlags);
+        this.cameraOccluders.push(trekBuilt.mountainOccludeMesh);
+        continue;
+      }
+
       const builder = builders[lm.id];
       if (!builder) continue;
 
@@ -2075,6 +2113,14 @@ export class WorldEngine {
         this.fsColors[i3 + 2] = 0.46 + Math.random() * 0.05;
         this.fsSizes[idx] = isLanding ? 32 : 24;
         this.fsLifetimes[idx] = 0.48 + Math.random() * 0.16;
+      } else if (surface === 'snow' || surface === 'ice') {
+        this.fsKinds[idx] = 0;
+        this.fsVel[i3 + 1] = (isLanding ? 1.15 : 0.68) + Math.random() * 0.45;
+        this.fsColors[i3] = 0.88 + Math.random() * 0.1;
+        this.fsColors[i3 + 1] = 0.94 + Math.random() * 0.06;
+        this.fsColors[i3 + 2] = 1.0;
+        this.fsSizes[idx] = isLanding ? 42 : 30;
+        this.fsLifetimes[idx] = 0.56 + Math.random() * 0.2;
       } else {
         this.fsKinds[idx] = 0;
         this.fsVel[i3 + 1] = (isLanding ? 0.56 : 0.32) + Math.random() * 0.32;
@@ -2172,9 +2218,17 @@ export class WorldEngine {
       this.footprintDummy.updateMatrix();
       this.footprintInst.setMatrixAt(i, this.footprintDummy.matrix);
 
-      // Tint subtly darker on stone/wood and earthy olive-brown on grass/dirt
+      // Tint subtly darker on stone/wood, earthy olive on grass, and crisp icy-blue on snow/ice
       const baseShade =
-        s.surfaceKind === 'grass' ? 0x3b4926 : s.surfaceKind === 'wood' ? 0x422a18 : 0x5c4b39;
+        s.surfaceKind === 'grass'
+          ? 0x3b4926
+          : s.surfaceKind === 'wood'
+            ? 0x422a18
+            : s.surfaceKind === 'snow'
+              ? 0x8aa8c8
+              : s.surfaceKind === 'ice'
+                ? 0x6c90b4
+                : 0x5c4b39;
       this.footprintColorTmp.setHex(baseShade).multiplyScalar(0.55 + fade * 0.65);
       this.footprintInst.setColorAt(i, this.footprintColorTmp);
     }
@@ -3466,7 +3520,8 @@ export class WorldEngine {
       const h = Math.max(1, this.container.clientHeight || window.innerHeight);
       const aspect = w / h;
       this.camera.aspect = aspect;
-      this.camera.fov = aspect < 1 ? Math.min(62, 42 / Math.pow(aspect, 0.42)) : 42;
+      this.baseCameraFov = aspect < 1 ? Math.min(62, 42 / Math.pow(aspect, 0.42)) : 42;
+      this.camera.fov = this.telescopeActive ? 16 : this.baseCameraFov;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
       if (this.composer) {
@@ -3734,16 +3789,20 @@ export class WorldEngine {
 
     this.raycaster.layers.set(0);
     this.raycaster.setFromCamera(_pointer, this.camera);
-    const groundHits = this.raycaster.intersectObject(this.terrainMesh, false);
+    const groundTargets: THREE.Object3D[] = this.trekController
+      ? [this.terrainMesh, this.trekController.mountainOccludeMesh]
+      : [this.terrainMesh];
+    const groundHits = this.raycaster.intersectObjects(groundTargets, false);
     if (groundHits.length > 0) {
       const pt = groundHits[0].point;
-      if (Math.hypot(pt.x, pt.z) > WORLD_RADIUS - 3) return;
+      const onMountain = pt.y > 1.5 || isInsideTrekMountainFootprint(pt.x, pt.z, pt.y);
+      if (!onMountain && Math.hypot(pt.x, pt.z) > WORLD_RADIUS - 3) return;
       if (this.placementMode) {
         this.placementMode = false;
         this.callbacks.onPlaceWaypointRequest(pt.x, pt.z);
         return;
       }
-      const walkY = getSurfaceHeightAt(pt.x, pt.z, this.playerPos.y);
+      const walkY = getSurfaceHeightAt(pt.x, pt.z, onMountain ? pt.y : this.playerPos.y);
       this.walkTarget = new THREE.Vector3(pt.x, walkY, pt.z);
       this.walkMarkerMesh.position.set(pt.x, walkY + 0.08, pt.z);
       this.walkMarkerMesh.visible = true;
@@ -4104,6 +4163,109 @@ export class WorldEngine {
     this.callbacks.onInspectHighlight?.(PUMDIKOT_HIGHLIGHTS.colossalShiva);
   }
 
+  private snapTelescopeCamera(): void {
+    const target =
+      TREK_TELESCOPE_TARGETS[this.telescopeTargetIndex % TREK_TELESCOPE_TARGETS.length];
+    this.character.root.visible = false;
+    this.currentCamPos.set(51.6, 143.58, -264.95);
+    this.currentLookAt.set(target.x, target.y, target.z);
+    this.camera.position.copy(this.currentCamPos);
+    this.camera.lookAt(this.currentLookAt);
+  }
+
+  public openTelescope(): void {
+    this.telescopeActive = true;
+    this.character.root.visible = false;
+    this.camera.fov = 16;
+    this.camera.updateProjectionMatrix();
+    this.snapTelescopeCamera();
+    soundEngine.playTelescopeClick();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public cycleTelescopeTarget(delta: number): void {
+    const len = TREK_TELESCOPE_TARGETS.length;
+    this.telescopeTargetIndex = ((this.telescopeTargetIndex + delta) % len + len) % len;
+    if (this.telescopeActive) {
+      this.snapTelescopeCamera();
+    }
+    soundEngine.playTelescopeClick();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public closeTelescope(): void {
+    if (!this.telescopeActive) return;
+    this.telescopeActive = false;
+    this.camera.fov = this.baseCameraFov;
+    this.camera.updateProjectionMatrix();
+    this.character.root.visible = Boolean(this.focusedLandmark) || this.cameraMode !== 'first-person';
+    this.currentLookAt.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);
+    const horiz = Math.cos(this.cameraPitch) * this.cameraDistance;
+    const vert = Math.sin(this.cameraPitch) * this.cameraDistance;
+    this.currentCamPos.set(
+      this.playerPos.x + Math.sin(this.cameraYaw) * horiz,
+      this.playerPos.y + vert + 1.5,
+      this.playerPos.z + Math.cos(this.cameraYaw) * horiz,
+    );
+    this.applyCameraOcclusion(this.currentLookAt, this.currentCamPos);
+    this.camera.position.copy(this.currentCamPos);
+    this.camera.lookAt(this.currentLookAt);
+    soundEngine.playTelescopeClick();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public syncSummitFlagHoisted(hoisted: boolean): void {
+    if (hoisted) {
+      this.trekController?.hoistSummitFlag();
+    }
+  }
+
+  public syncUnlockedTrekCheckpoints(ids: TrekCheckpointId[]): void {
+    this.unlockedTrekCheckpoints = new Set(ids);
+  }
+
+  public drinkYakButterTea(): void {
+    this.trekController?.triggerButterTeaWarmth();
+    soundEngine.playButterTeaWarmup();
+    this.callbacks.onInspectHighlight?.({
+      title: 'Hot Yak Butter Tea · Sagarmatha View Lodge',
+      subtitle: 'Zone 5 · Altitude 142m',
+      description:
+        'Steaming Po Cha (churned yak butter, Tibetan brick tea, and Himalayan rock salt) warms you for the glacial high-camp ascent ahead.',
+    });
+    this.emitHud(true);
+  }
+
+  public restAtHighCamp(): void {
+    soundEngine.playTibetanSingingBowl();
+    this.callbacks.onInspectHighlight?.({
+      title: 'Acclimatization Rest · Himalayan High Camp',
+      subtitle: 'Zone 6 · Altitude 176m',
+      description:
+        'You catch your breath beside the windbreak stone wall as oxygen tanks gleam and wind hums across the pale-blue ice seracs above.',
+    });
+    this.emitHud(true);
+  }
+
+  public hoistSummitPrayerFlag(): void {
+    this.trekController?.hoistSummitFlag();
+    soundEngine.playSummitVictoryChord();
+    this.markLandmarkDiscovered('himalayan-trek');
+    this.callbacks.onTrekCheckpointUnlocked?.('summit');
+    this.callbacks.onSummitHoisted?.();
+    this.callbacks.onInspectHighlight?.({
+      title: 'Summit Prayer Flag Hoisted · 216m Peak',
+      subtitle: 'Zone 7 · Sagarmatha Summit Spire',
+      description:
+        'Five-element Lungta prayer flags unfurl into the crisp Himalayan gale beside the golden Trishul above the entire Kathmandu and Pokhara valley.',
+    });
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
 
@@ -4259,6 +4421,26 @@ export class WorldEngine {
       this.tossPebble(action.index);
       return;
     }
+    if (action.kind === 'drink-butter-tea') {
+      this.drinkYakButterTea();
+      return;
+    }
+    if (action.kind === 'use-scenic-telescope') {
+      if (this.telescopeActive) {
+        this.closeTelescope();
+      } else {
+        this.openTelescope();
+      }
+      return;
+    }
+    if (action.kind === 'rest-high-camp') {
+      this.restAtHighCamp();
+      return;
+    }
+    if (action.kind === 'hoist-summit-flag') {
+      this.hoistSummitPrayerFlag();
+      return;
+    }
     if (action.kind === 'sit-meditate' && typeof action.index === 'number') {
       this.toggleMeditation(action.index);
       return;
@@ -4279,6 +4461,24 @@ export class WorldEngine {
     lookOut: THREE.Vector3,
     camOut: THREE.Vector3,
   ): void {
+    if (lm.id === 'himalayan-trek') {
+      if (this.playerPos.y > 160) {
+        lookOut.set(32, 219.5, -355);
+        camOut.set(
+          lookOut.x + Math.sin(this.cameraYaw + 0.35) * 18,
+          lookOut.y + 6.5,
+          lookOut.z + Math.cos(this.cameraYaw + 0.35) * 18,
+        );
+      } else {
+        lookOut.set(16, 48, -235);
+        camOut.set(
+          16 + Math.sin(this.cameraYaw + 0.25) * 95,
+          62,
+          -95 + Math.cos(this.cameraYaw + 0.25) * 95,
+        );
+      }
+      return;
+    }
     const ly = groundHeightAt(lm.position.x, lm.position.z);
     const id = lm.id;
     const isTallTower = id === 'vit-vellore-tower';
@@ -4374,7 +4574,14 @@ export class WorldEngine {
   private sampleCameraFloorHeight(x: number, z: number, refY: number): number {
     const surfaceY = getSurfaceHeightAt(x, z, refY);
     const bvhY = this.physicsWorld.sampleFloorHeight(x, z, refY);
-    return bvhY !== null ? Math.max(surfaceY, bvhY) : surfaceY;
+    let best = bvhY !== null ? Math.max(surfaceY, bvhY) : surfaceY;
+    if (isInsideTrekMountainFootprint(x, z)) {
+      const mH = computeSagarmathaPeakVisualHeight(x, z);
+      if (mH > best && mH - refY < 16.0) {
+        best = mH;
+      }
+    }
+    return best;
   }
 
   private applyCameraOcclusion(lookAt: THREE.Vector3, camPos: THREE.Vector3): void {
@@ -4416,6 +4623,30 @@ export class WorldEngine {
           if (hits.length > 0) {
             const safeDist = Math.max(0.75, hits[0].distance - 0.35);
             camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+          }
+        }
+
+        // Heightfield cliff-wall guard: march along lookAt -> camPos so steep mountain walls
+        // always pull the camera boom forward instead of letting backface-culled terrain hide the player
+        const clippedDist = camPos.distanceTo(lookAt);
+        if (
+          clippedDist > 0.85 &&
+          (isInsideTrekMountainFootprint(lookAt.x, lookAt.z) ||
+            isInsideTrekMountainFootprint(camPos.x, camPos.z))
+        ) {
+          const steps = 14;
+          for (let s = 2; s <= steps; s++) {
+            const d = (s / steps) * clippedDist;
+            const rx = lookAt.x + _camRayDir.x * d;
+            const ry = lookAt.y + _camRayDir.y * d;
+            const rz = lookAt.z + _camRayDir.z * d;
+            if (!isInsideTrekMountainFootprint(rx, rz)) continue;
+            const mH = computeSagarmathaPeakVisualHeight(rx, rz);
+            if (ry < mH + 0.42) {
+              const safeDist = Math.max(0.95, d - 0.65);
+              camPos.copy(lookAt).addScaledVector(_camRayDir, safeDist);
+              break;
+            }
           }
         }
       }
@@ -4621,7 +4852,42 @@ export class WorldEngine {
     this.emitHud(true);
   }
 
+  public teleportToPoint3D(x: number, y: number, z: number, yaw = Math.PI): void {
+    this.closeTelescope();
+    this.playerPos.set(x, y, z);
+    this.playerVelY = 0;
+    this.isGrounded = true;
+    this.walkTarget = null;
+    this.walkMarkerMesh.visible = false;
+    this.shadowForceDirty = true;
+    this.playerYaw = yaw;
+    this.cameraYaw = yaw + Math.PI;
+    this.targetCameraYaw = yaw + Math.PI;
+    this.cameraPitch = 0.24;
+    this.targetCameraPitch = 0.24;
+    this.character.root.position.copy(this.playerPos);
+    this.character.root.rotation.y = this.playerYaw;
+    this.currentLookAt.set(x, y + 1.6, z);
+    this.currentCamPos.set(
+      x + Math.sin(this.cameraYaw) * 9.5,
+      y + 4.8,
+      z + Math.cos(this.cameraYaw) * 9.5,
+    );
+    this.applyCameraOcclusion(this.currentLookAt, this.currentCamPos);
+    this.camera.position.copy(this.currentCamPos);
+    this.camera.lookAt(this.currentLookAt);
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public teleportToTrekCheckpoint(id: TrekCheckpointId): void {
+    const cp = TREK_CHECKPOINTS[id];
+    if (!cp) return;
+    this.teleportToPoint3D(cp.x, cp.y, cp.z, cp.yaw);
+  }
+
   public resetToSpawn(): void {
+    this.closeTelescope();
     this.teleportTo(SPAWN_POSITION.x, SPAWN_POSITION.z);
     this.playerYaw = Math.PI;
     this.cameraYaw = 0;
@@ -4666,10 +4932,11 @@ export class WorldEngine {
     const sunOffY = Math.max(28, Math.sin(state.sunElevation) * 105);
     const sunOffZ = Math.cos(state.sunAzimuth + 0.55) * 80;
     const lx = this.currentLookAt.x;
+    const ly = this.currentLookAt.y;
     const lz = this.currentLookAt.z;
-    this.sunLight.target.position.set(lx, 0, lz);
+    this.sunLight.target.position.set(lx, ly, lz);
     this.sunLight.target.updateMatrixWorld();
-    this.sunLight.position.set(lx + sunOffX, sunOffY, lz + sunOffZ);
+    this.sunLight.position.set(lx + sunOffX, ly + sunOffY, lz + sunOffZ);
 
     const sunDirLen = Math.hypot(sunOffX, sunOffY, sunOffZ) || 1;
     const sunDirX = sunOffX / sunDirLen;
@@ -4687,11 +4954,12 @@ export class WorldEngine {
         shouldUpdateShadowMap(
           this.shadowPrevState,
           nextShadowState,
-          this.shadowForceDirty,
+          this.shadowForceDirty || Math.abs(ly - this.lastShadowTargetY) > 6,
           this.maxMovingPropSpeed,
         )
       ) {
         this.renderer.shadowMap.needsUpdate = true;
+        this.lastShadowTargetY = ly;
         if (!this.shadowPrevState) {
           this.shadowPrevState = nextShadowState;
         } else {
@@ -4752,6 +5020,18 @@ export class WorldEngine {
     WORLD_HAZE_UNIFORMS.uHazeDensity.value = Math.max(0.0022, state.fogDensity * 1.15);
     WORLD_HAZE_UNIFORMS.uMaxHaze.value =
       this.weather === 'foggy' ? 0.94 : this.weather === 'mist' ? 0.88 : 0.78;
+    HIMALAYA_TERRAIN_UNIFORMS.uAlpenglowColor.value.set(
+      state.phaseLabel === 'Dawn' ? '#ff8768' : '#ff6f48',
+    );
+    HIMALAYA_TERRAIN_UNIFORMS.uAlpenglowStrength.value =
+      state.phaseLabel === 'Dawn' || state.phaseLabel === 'Dusk'
+        ? 0.65
+        : state.phaseLabel === 'Golden Hour'
+          ? 0.36
+          : 0.0;
+    HIMALAYA_TERRAIN_UNIFORMS.uMoonGlint.value = state.phaseLabel === 'Night' ? 0.88 : 0.0;
+    HIMALAYA_TERRAIN_UNIFORMS.uSnowFrost.value = this.weather === 'snow' ? 0.92 : 0.0;
+    HIMALAYA_TERRAIN_UNIFORMS.uWindTime.value = elapsed;
     if (this.camera && Math.abs(this.camera.far - state.cameraFar) > 0.1) {
       this.camera.far = state.cameraFar;
       this.camera.updateProjectionMatrix();
@@ -5135,7 +5415,16 @@ export class WorldEngine {
       this.playerMoveUniformVec,
       this.meadowDisplacementStrength,
     );
-    this.cloudController.update(elapsed);
+    this.cloudController.update(
+      elapsed,
+      this.weather,
+      HIMALAYA_TERRAIN_UNIFORMS.uAlpenglowStrength.value > 0.05
+        ? HIMALAYA_TERRAIN_UNIFORMS.uAlpenglowColor.value
+        : undefined,
+    );
+    this.trekController?.update(elapsed, dt, this.playerPos, this.weather, () =>
+      soundEngine.playSuspensionBridgeCreak(),
+    );
 
     const weatherAnchor = this.gameState === 'title' ? this.currentLookAt : this.playerPos;
     this.weatherParticles?.update(
@@ -5228,7 +5517,11 @@ export class WorldEngine {
         );
       }
     }
-    const surfaceKind = getFootstepSurfaceKind(this.playerPos.x, this.playerPos.z);
+    const surfaceKind = getFootstepSurfaceKind(
+      this.playerPos.x,
+      this.playerPos.z,
+      this.playerPos.y,
+    );
     if (
       this.renderer?.domElement &&
       (this.lastSimDatasetFlushAt < 0 || elapsed - this.lastSimDatasetFlushAt >= 0.25)
@@ -5922,6 +6215,9 @@ export class WorldEngine {
     if (hasManualInput) {
       this.walkTarget = null;
       this.walkMarkerMesh.visible = false;
+      if (this.telescopeActive) {
+        this.closeTelescope();
+      }
       if (this.isMeditating) {
         this.isMeditating = false;
         this.meditationTarget = null;
@@ -6134,7 +6430,48 @@ export class WorldEngine {
       }
     }
 
-    if (this.focusedLandmark) {
+    if (this.gameState === 'playing') {
+      if (
+        !this.unlockedTrekCheckpoints.has('trailhead') &&
+        this.playerPos.z <= -138 &&
+        Math.hypot(this.playerPos.x - 6, this.playerPos.z + 144) < 12
+      ) {
+        this.unlockedTrekCheckpoints.add('trailhead');
+        this.callbacks.onTrekCheckpointUnlocked?.('trailhead');
+      }
+      if (
+        !this.unlockedTrekCheckpoints.has('teahouse') &&
+        this.playerPos.y >= 136 &&
+        Math.hypot(this.playerPos.x - 48, this.playerPos.z + 275) < 15
+      ) {
+        this.unlockedTrekCheckpoints.add('teahouse');
+        this.callbacks.onTrekCheckpointUnlocked?.('teahouse');
+      }
+      if (
+        !this.unlockedTrekCheckpoints.has('summit') &&
+        this.playerPos.y >= 210 &&
+        Math.hypot(this.playerPos.x - 32, this.playerPos.z + 355) < 11
+      ) {
+        this.unlockedTrekCheckpoints.add('summit');
+        this.callbacks.onTrekCheckpointUnlocked?.('summit');
+      }
+    }
+
+    if (this.telescopeActive) {
+      const target =
+        TREK_TELESCOPE_TARGETS[this.telescopeTargetIndex % TREK_TELESCOPE_TARGETS.length];
+      this.character.root.visible = false;
+      if (this.camera.fov !== 16) {
+        this.camera.fov = 16;
+        this.camera.updateProjectionMatrix();
+      }
+      _camTargetPos.set(51.6, 143.58, -264.95);
+      _camLookTarget.set(target.x, target.y, target.z);
+      this.currentCamPos.copy(_camTargetPos);
+      this.currentLookAt.copy(_camLookTarget);
+      this.camera.position.copy(this.currentCamPos);
+      this.camera.lookAt(this.currentLookAt);
+    } else if (this.focusedLandmark) {
       this.character.root.visible = true;
       this.computeFocusedCameraTargets(this.focusedLandmark, _camLookTarget, _camTargetPos);
     } else if (this.isMeditating && this.meditationTarget) {
@@ -6192,11 +6529,13 @@ export class WorldEngine {
       this.applyCameraOcclusion(_camLookTarget, _camTargetPos);
     }
 
-    const camDamp = 1 - Math.exp(-(this.cameraMode === 'first-person' ? 18.0 : 10.5) * dt);
-    this.currentCamPos.lerp(_camTargetPos, camDamp);
-    this.currentLookAt.lerp(_camLookTarget, camDamp);
-    this.camera.position.copy(this.currentCamPos);
-    this.camera.lookAt(this.currentLookAt);
+    if (!this.telescopeActive) {
+      const camDamp = 1 - Math.exp(-(this.cameraMode === 'first-person' ? 18.0 : 10.5) * dt);
+      this.currentCamPos.lerp(_camTargetPos, camDamp);
+      this.currentLookAt.lerp(_camLookTarget, camDamp);
+      this.camera.position.copy(this.currentCamPos);
+      this.camera.lookAt(this.currentLookAt);
+    }
 
     this.lastContextualAction = this.getContextualAction();
     this.emitHud(false);
@@ -6206,12 +6545,21 @@ export class WorldEngine {
     const elapsed = (performance.now() - this.startTimeMs) / 1000;
     const tickDue = force || this.lastHudTickAt < 0 || elapsed - this.lastHudTickAt >= 0.25;
 
+    const altitudeM = Math.max(0, Math.round(this.playerPos.y));
+    const trekAmb = computeHimalayaTrekAmbience(
+      this.playerPos.x,
+      this.playerPos.y,
+      this.playerPos.z,
+    );
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
-    const zoneName = nearest
-      ? nearest.landmark.zoneName
-      : this.playerPos.x > getRiverCenterX(this.playerPos.z)
-        ? 'Vellore Foothills'
-        : 'Kathmandu Valley';
+    const zoneName =
+      trekAmb.onMountain && trekAmb.zone && (this.playerPos.y >= 3.0 || this.playerPos.z <= -140)
+        ? trekAmb.zone.name
+        : nearest
+          ? nearest.landmark.zoneName
+          : this.playerPos.x > getRiverCenterX(this.playerPos.z)
+            ? 'Vellore Foothills'
+            : 'Kathmandu Valley';
 
     const action = this.lastContextualAction ?? this.getContextualAction();
     const showLumbiniPresets =
@@ -6229,7 +6577,12 @@ export class WorldEngine {
       showLumbiniPresets,
     };
 
-    const discreteChanged = force || hasDiscreteHudChanged(this.lastDiscreteHud, nextDiscrete);
+    const telescopeKey = `${this.telescopeActive}:${this.telescopeTargetIndex}`;
+    const discreteChanged =
+      force ||
+      hasDiscreteHudChanged(this.lastDiscreteHud, nextDiscrete) ||
+      telescopeKey !== this.lastEmittedTelescopeState ||
+      Math.abs(altitudeM - this.lastEmittedAltRounded) >= 2;
     if (!tickDue && !discreteChanged) return;
 
     const effectiveLighting = computeEffectiveLightingState(
@@ -6250,11 +6603,14 @@ export class WorldEngine {
         phaseLabel: effectiveLighting.lighting.phaseLabel,
         coordsX: Math.round(this.playerPos.x),
         coordsZ: Math.round(this.playerPos.z),
+        altitudeM,
       });
     }
 
     if (discreteChanged) {
       this.lastDiscreteHud = nextDiscrete;
+      this.lastEmittedTelescopeState = telescopeKey;
+      this.lastEmittedAltRounded = altitudeM;
       const snap: WorldHudSnapshot = {
         zoneName,
         nearestLandmark: nearest?.landmark ?? null,
@@ -6264,6 +6620,9 @@ export class WorldEngine {
           x: Math.round(this.playerPos.x),
           z: Math.round(this.playerPos.z),
         },
+        altitudeM,
+        telescopeActive: this.telescopeActive,
+        telescopeTargetIndex: this.telescopeTargetIndex,
         contextualAction: action,
         isMeditating: this.isMeditating,
       };

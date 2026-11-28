@@ -59,7 +59,7 @@ test('spawn and all landmark plazas sit on walkable terrain above water', () => 
   assert.equal(WORLD_RADIUS, 560);
   assert.equal(isWalkablePosition(SPAWN_POSITION.x, SPAWN_POSITION.z), true);
   assert.ok(groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) > -0.2);
-  assert.equal(LANDMARKS.length, 10);
+  assert.equal(LANDMARKS.length, 11);
 
   for (const lm of LANDMARKS) {
     assert.ok(
@@ -461,9 +461,14 @@ test('world obstacles prevent walking through trees, boulders, lanterns, kiosks,
   const firstRock = getWorldBoulderSpots()[0];
   assert.equal(isWalkablePosition(firstRock.x, firstRock.z), false, 'Granite field boulder blocks pass-through');
 
-  // Non-walkable landmark monuments block solid cores while walkable plaza landmarks (Janaki, Lumbini, Pumdikot) stay open
+  // Non-walkable landmark monuments block solid cores while walkable plaza/gate landmarks stay open
   for (const lm of LANDMARKS) {
-    if (lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha' && lm.id !== 'pumdikot-shiva') {
+    if (
+      lm.id !== 'janaki-mandir' &&
+      lm.id !== 'lumbini-buddha' &&
+      lm.id !== 'pumdikot-shiva' &&
+      lm.id !== 'himalayan-trek'
+    ) {
       assert.equal(
         isWalkablePosition(lm.position.x, lm.position.z),
         false,

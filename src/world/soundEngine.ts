@@ -1336,6 +1336,25 @@ class SoundEngine {
       const pitch = 108 + (Math.random() - 0.5) * 16;
       this.playTone(pitch, 0.07, 'triangle', 0.046);
       this.playTone(pitch * 1.92, 0.04, 'sine', 0.018);
+    } else if (surface === 'snow' || surface === 'ice') {
+      const buf = this.createPinkNoiseBuffer(ctx, 0.11);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime((surface === 'ice' ? 2800 : 1850) + Math.random() * 480, t);
+      bp.Q.value = surface === 'ice' ? 2.4 : 1.1;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(surface === 'ice' ? 0.036 : 0.042, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.095);
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(ctx.destination);
+      src.start(t);
+      src.stop(t + 0.105);
+      if (surface === 'ice') {
+        this.playTone(1650 + Math.random() * 220, 0.035, 'triangle', 0.016);
+      }
     } else {
       const pitch = 148 + (Math.random() - 0.5) * 24;
       this.playTone(pitch, 0.048, 'triangle', 0.036);
@@ -1751,6 +1770,65 @@ class SoundEngine {
       osc.start(st);
       osc.stop(st + p.dur + 0.05);
     }
+  }
+
+  public playSuspensionBridgeCreak(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(92, t);
+    osc.frequency.exponentialRampToValueAtTime(74, t + 0.34);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 320;
+    g.gain.setValueAtTime(0.0008, t);
+    g.gain.linearRampToValueAtTime(0.022, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.38);
+    osc.connect(lp);
+    lp.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
+  }
+
+  public playButterTeaWarmup(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    this.triggerSoftTempleChimes(ctx, 0.7, 'bodhi-zen');
+    this.playTone(392, 0.48, 'sine', 0.035);
+    this.playTone(587.33, 0.55, 'sine', 0.026);
+  }
+
+  public playTelescopeClick(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    this.playTone(760, 0.055, 'triangle', 0.042);
+    this.playTone(1140, 0.045, 'sine', 0.024);
+  }
+
+  public playSummitVictoryChord(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    this.triggerTibetanSingingBowl(ctx, 1.0);
+    const t = ctx.currentTime;
+    const chord = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    chord.forEach((f, idx) => {
+      const st = t + idx * 0.075;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, st);
+      g.gain.setValueAtTime(0.0005, st);
+      g.gain.linearRampToValueAtTime(0.028, st + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0004, st + 2.2);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 2.3);
+    });
   }
 
   public playClick(): void {

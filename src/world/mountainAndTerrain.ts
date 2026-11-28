@@ -16,6 +16,7 @@ import {
   SPAWN_POSITION,
   TreeSpecies,
   TreeSpot,
+  WeatherKind,
   getGraphicsQualityConfig,
   getMeadowZoneAt,
   getRiverCenterX,
@@ -37,6 +38,7 @@ import {
 } from './pumdikotData';
 import { applyRealisticWaterShader } from './waterShader';
 import { getCachedMaterial, getCachedTexture, mergeStaticMeshesByMaterial } from './meshOptimization';
+import { createHimalayanAmphitheater } from './himalayaAmphitheater';
 
 export const WORLD_HAZE_UNIFORMS = {
   uHazeColor: { value: new THREE.Color('#c9dfef') },
@@ -368,7 +370,7 @@ export interface AnimatedFoliageController {
 
 export interface MountainCloudController {
   group: THREE.Group;
-  update: (elapsed: number) => void;
+  update: (elapsed: number, weather?: WeatherKind, alpenglowColor?: THREE.Color) => void;
 }
 
 export interface RoadAndLanternsResult {
@@ -469,183 +471,17 @@ function sampleRoadPoints(): Array<{ x: number; z: number }> {
 }
 
 /**
- * Photorealistic Himalayan Range along the northern horizon:
- * high-density tectonic ridgelines, eroded couloirs, slope-based snow & glacier stratification,
- * and multi-layer alpine grass / talus pebble / weathered gneiss rock PBR maps.
+ * Authentic 360-degree three-tier Nepali Himalayan Mountain Amphitheater:
+ * foreground Mahabharat terraced foothills & river gorges, mid-altitude granite massifs,
+ * and towering Ama Dablam / Machapuchare / Lhotse / Sagarmatha snow peaks.
  */
 export function createSculptedHimalayas(textures: ProceduralTextureSet): THREE.Mesh {
-  const width = 1360;
-  const depth = 290;
-  const segX = 360;
-  const segZ = 96;
-
-  const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
-  geo.rotateX(-Math.PI / 2);
-  if (geo.attributes.uv) {
-    geo.setAttribute('uv1', geo.attributes.uv.clone());
-  }
-
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const zLocal = pos.getZ(i);
-    const z = zLocal - 325;
-    pos.setZ(i, z);
-
-    const zFront = 1 - THREE.MathUtils.smoothstep(z, -315, -182);
-    const zBack = THREE.MathUtils.smoothstep(z, -475, -355);
-    const zBlend = zFront * zBack;
-    const flank = THREE.MathUtils.smoothstep(Math.abs(x), 250, 460) * 0.36;
-    const envelope = Math.min(1, zBlend + flank * (1 - THREE.MathUtils.smoothstep(z, -240, -145)));
-
-    const ridge = ridgedNoise(x, z);
-
-    const jaggedPeak = (cx: number, cz: number, sx: number, sz: number, h: number) => {
-      const dx = Math.abs(x - cx) / sx;
-      const dz = Math.abs(z - cz) / sz;
-      const arete = Math.max(0, 1 - Math.hypot(dx * 0.78, dz * 0.95));
-      const spine = Math.max(0, 1 - (dx * 0.55 + dz * 1.08));
-      return (Math.pow(arete, 1.35) * 0.55 + Math.pow(spine, 1.75) * 0.45) * h;
-    };
-
-    const annapurnaWest = jaggedPeak(-250, -338, 88, 66, 78);
-    const machapuchareTwinL = jaggedPeak(-172, -312, 62, 54, 92);
-    const machapuchareTwinR = jaggedPeak(-150, -324, 54, 54, 78);
-    const amaDablamMain = jaggedPeak(-74, -315, 68, 56, 88);
-    const amaDablamShoulder = jaggedPeak(-54, -306, 56, 52, 62);
-    const everestWestShoulder = jaggedPeak(-16, -342, 66, 58, 72);
-    const everestSummit = jaggedPeak(22, -335, 82, 66, 112);
-    const lhotseEast = jaggedPeak(62, -346, 68, 60, 78);
-    const easternMassif = jaggedPeak(175, -332, 88, 64, 76);
-    const easternSaddle = jaggedPeak(270, -358, 86, 62, 68);
-    const outerLeft = jaggedPeak(-355, -298, 88, 62, 54);
-    const outerRight = jaggedPeak(355, -298, 88, 62, 56);
-
-    const massHeight =
-      annapurnaWest +
-      machapuchareTwinL +
-      machapuchareTwinR +
-      amaDablamMain +
-      amaDablamShoulder +
-      everestWestShoulder +
-      everestSummit +
-      lhotseEast +
-      easternMassif +
-      easternSaddle +
-      outerLeft +
-      outerRight;
-
-    const couloirErosion =
-      Math.sin(x * 0.29 + ridge * 3.1) * 2.2 * THREE.MathUtils.smoothstep(massHeight, 14, 65);
-    const microCrag =
-      Math.sin(x * 0.62 - z * 0.44) *
-      Math.cos(x * 0.24 + z * 0.55) *
-      1.35 *
-      THREE.MathUtils.smoothstep(massHeight, 12, 54);
-    const fineStrataRib =
-      Math.sin(x * 1.18 + z * 0.82) *
-      Math.cos(x * 0.74 - z * 0.96) *
-      0.72 *
-      THREE.MathUtils.smoothstep(massHeight, 6, 38);
-
-    const frontCanyonWeight = 1 - THREE.MathUtils.smoothstep(z, -318, -238);
-    const gorgeMask = 1 - Math.exp(-Math.pow((x - 42) / 28, 2)) * 0.55 * frontCanyonWeight;
-    const height =
-      -3.8 +
-      envelope * gorgeMask * (8.5 + ridge * 24 + massHeight + couloirErosion + microCrag + fineStrataRib);
-    pos.setY(i, height);
-  }
-
-  geo.computeVertexNormals();
-  const norm = geo.attributes.normal;
-  const colors = new Float32Array(pos.count * 3);
-  const terrainMix = new Float32Array(pos.count * 3);
-  const snowMaskAttr = new Float32Array(pos.count);
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const slopeY = THREE.MathUtils.clamp(norm.getY(i), 0, 1);
-
-    const timberline = THREE.MathUtils.smoothstep(y, 1.0, 20.0);
-    const snowAlt = 30.0 + Math.sin(x * 0.052) * 5.2 + Math.cos(z * 0.068) * 3.2;
-    const altSnow = THREE.MathUtils.smoothstep(y, snowAlt, snowAlt + 15.0);
-    const slopeSnowRetention = THREE.MathUtils.smoothstep(slopeY, 0.56, 0.82);
-    const snowFactor = altSnow * (0.18 + 0.82 * slopeSnowRetention);
-    snowMaskAttr[i] = snowFactor;
-
-    const glacierShelf =
-      THREE.MathUtils.smoothstep(y, snowAlt - 7.5, snowAlt + 6.0) *
-      THREE.MathUtils.smoothstep(slopeY, 0.58, 0.86) *
-      (0.5 + 0.5 * Math.sin(x * 0.11 + z * 0.09));
-
-    const wGrass = (1 - timberline) * THREE.MathUtils.smoothstep(slopeY, 0.62, 0.9);
-    const talusBand =
-      THREE.MathUtils.smoothstep(y, 2.0, 11.0) *
-      (1 - THREE.MathUtils.smoothstep(y, 16.0, 28.0)) *
-      THREE.MathUtils.smoothstep(slopeY, 0.55, 0.85);
-    const wPebble = talusBand * 0.72;
-    const wRock = Math.max(0.08, 1.0 - wGrass - wPebble);
-    const sumW = wGrass + wPebble + wRock;
-    terrainMix[i * 3] = wGrass / sumW;
-    terrainMix[i * 3 + 1] = wPebble / sumW;
-    terrainMix[i * 3 + 2] = wRock / sumW;
-
-    // Neutral-warm to cool slate vertex tint calibrated for multiplied rock/pebble/grass albedo maps
-    let r = THREE.MathUtils.lerp(0.84, 0.88, timberline);
-    let g = THREE.MathUtils.lerp(0.92, 0.89, timberline);
-    let b = THREE.MathUtils.lerp(0.76, 0.94, timberline);
-
-    const cragTint = 0.5 + 0.5 * Math.sin(x * 0.095 - z * 0.068);
-    r = THREE.MathUtils.lerp(r, 0.98, cragTint * 0.28 * timberline);
-    g = THREE.MathUtils.lerp(g, 0.93, cragTint * 0.28 * timberline);
-    b = THREE.MathUtils.lerp(b, 0.89, cragTint * 0.28 * timberline);
-
-    if (glacierShelf > 0.15) {
-      r = THREE.MathUtils.lerp(r, 0.78, glacierShelf * 0.45);
-      g = THREE.MathUtils.lerp(g, 0.91, glacierShelf * 0.45);
-      b = THREE.MathUtils.lerp(b, 1.0, glacierShelf * 0.45);
-    }
-
-    _color.setRGB(
-      THREE.MathUtils.lerp(r, 0.95, snowFactor),
-      THREE.MathUtils.lerp(g, 0.97, snowFactor),
-      THREE.MathUtils.lerp(b, 1.0, snowFactor),
-    );
-    colors[i * 3] = _color.r;
-    colors[i * 3 + 1] = _color.g;
-    colors[i * 3 + 2] = _color.b;
-  }
-
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.setAttribute('aTerrainMix', new THREE.BufferAttribute(terrainMix, 3));
-  geo.setAttribute('aSnowMask', new THREE.BufferAttribute(snowMaskAttr, 1));
-
-  const mat = new THREE.MeshStandardMaterial({
-    map: textures.rockMap ?? textures.meadowMap,
-    normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(1.05, 1.05),
-    roughnessMap: textures.rockRough ?? textures.meadowRough,
-    aoMap: textures.rockAo,
-    aoMapIntensity: 0.82,
-    vertexColors: true,
-    roughness: 0.94,
-    metalness: 0.03,
-    flatShading: false,
-  });
-  applyTerrainMultiLayerShader(mat, textures, { isHimalayas: true });
-
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  mesh.castShadow = false;
-  mesh.userData.skipNavMesh = true;
-  return mesh;
+  return createHimalayanAmphitheater(textures);
 }
 
 /**
- * High-altitude translucent unlit alpine valley cloud wisps drifting cleanly past mountain shoulders
- * without dark undersides or muddy shadows.
+ * Volumetric Himalayan ridge cloud bands weaving 360 degrees through mountain gorges,
+ * paired with wind-blown snow spindrift plumes streaming off the high summit arêtes.
  */
 export function createMountainClouds(): MountainCloudController {
   const group = new THREE.Group();
@@ -661,8 +497,8 @@ export function createMountainClouds(): MountainCloudController {
     ctx.translate(128, 64);
     ctx.scale(2, 1);
     const g = ctx.createRadialGradient(0, 0, 6, 0, 0, 60);
-    g.addColorStop(0, 'rgba(220, 226, 234, 0.68)');
-    g.addColorStop(0.45, 'rgba(208, 216, 228, 0.32)');
+    g.addColorStop(0, 'rgba(232, 238, 246, 0.72)');
+    g.addColorStop(0.45, 'rgba(216, 224, 236, 0.34)');
     g.addColorStop(1, 'rgba(196, 208, 224, 0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -676,57 +512,141 @@ export function createMountainClouds(): MountainCloudController {
 
   const cloudMat = new THREE.MeshBasicMaterial({
     map: mistTex,
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const mistMat = cloudMat.clone();
+  mistMat.opacity = 0.24;
+
+  const spindriftMat = new THREE.MeshBasicMaterial({
+    map: mistTex,
+    color: 0xf4f8ff,
     transparent: true,
     opacity: 0.36,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
 
-  const ribbonGeo = new THREE.PlaneGeometry(110, 22);
-  const banks: Array<{ obj: THREE.Group; baseX: number; speed: number; phase: number }> = [];
+  const ribbonGeo = new THREE.PlaneGeometry(140, 26);
+  const banks: Array<{
+    obj: THREE.Group;
+    angle: number;
+    radius: number;
+    baseY: number;
+    angSpeed: number;
+    phase: number;
+    isLow: boolean;
+  }> = [];
 
-  const seeds: Array<[number, number, number, number, number]> = [
-    [-190, 42, -255, 1.15, 0],
-    [-65, 48, -280, 1.3, 1],
-    [78, 46, -268, 1.2, 2],
-    [195, 43, -245, 1.1, 3],
-    // Low-altitude drifting Himalayan valley mist banks along the northern foothills
-    [-150, 10.5, -175, 1.35, 4],
-    [-42, 9.2, -168, 1.45, 5],
-    [65, 11.0, -172, 1.3, 6],
-    [155, 9.8, -162, 1.25, 7],
-  ];
+  // 360-degree gorge & mid-mountain cloud rings weaving around the valley
+  for (let i = 0; i < 18; i++) {
+    const isLow = i >= 10;
+    const angle = (i / (isLow ? 8 : 10)) * Math.PI * 2 + (isLow ? 0.35 : 0.12);
+    const radius = isLow ? 510 + (i % 3) * 65 : 740 + (i % 4) * 75;
+    const baseY = isLow ? 34 + (i % 3) * 14 : 98 + (i % 4) * 24;
+    const scale = isLow ? 1.35 + (i % 2) * 0.35 : 1.75 + (i % 3) * 0.45;
+    const mat = isLow ? mistMat : cloudMat;
 
-  const mistMat = cloudMat.clone();
-  mistMat.opacity = 0.24;
-
-  seeds.forEach(([x, y, z, s, idx]) => {
     const cluster = new THREE.Group();
-    cluster.position.set(x, y, z);
-    const mat = idx >= 4 ? mistMat : cloudMat;
+    cluster.position.set(Math.cos(angle) * radius, baseY, Math.sin(angle) * radius);
+    cluster.lookAt(0, baseY, 0);
+
     const p1 = new THREE.Mesh(ribbonGeo, mat);
-    p1.scale.set(s, s, 1);
+    p1.scale.set(scale, scale * 0.92, 1);
     const p2 = new THREE.Mesh(ribbonGeo, mat);
-    p2.position.set(22 * s, idx >= 4 ? 1.8 : 3.5, -8);
-    p2.scale.set(s * 0.78, s * 0.75, 1);
+    p2.position.set(28 * scale, isLow ? 3.5 : 6.0, -14);
+    p2.scale.set(scale * 0.78, scale * 0.74, 1);
     cluster.add(p1, p2);
     group.add(cluster);
+
     banks.push({
       obj: cluster,
-      baseX: x,
-      speed: (idx >= 4 ? 0.9 : 1.4) + (idx % 3) * 0.45,
-      phase: idx * 1.3,
+      angle,
+      radius,
+      baseY,
+      angSpeed: (isLow ? 0.0042 : 0.0028) + (i % 3) * 0.0008,
+      phase: i * 1.15,
+      isLow,
+    });
+  }
+
+  // Summit wind-blown snow spindrift plumes streaming off Sagarmatha Trek Peak & Great Himalaya spires
+  const spindriftGeo = new THREE.PlaneGeometry(54, 11);
+  const spindriftPlumes: Array<{
+    mesh: THREE.Mesh;
+    anchorX: number;
+    anchorY: number;
+    anchorZ: number;
+    phase: number;
+    span: number;
+  }> = [];
+  const summitPlumeAnchors: Array<[number, number, number, number]> = [
+    [32, 217, -355, 0.9], // Flagship Sagarmatha Trek Peak summit
+    [40, 215, -358, 0.85],
+    [16, 362, -1085, 2.2], // Great Himalaya Sagarmatha spire
+    [-415, 294, -990, 1.9], // Machapuchare spire
+    [-210, 312, -1040, 2.0], // Ama Dablam spire
+    [290, 326, -1050, 2.0], // Lhotse massif
+  ];
+  summitPlumeAnchors.forEach(([ax, ay, az, sc], idx) => {
+    const plume = new THREE.Mesh(spindriftGeo, spindriftMat);
+    plume.position.set(ax, ay, az);
+    plume.scale.set(sc, sc * 0.85, 1);
+    plume.rotation.y = 0.28 + idx * 0.08;
+    plume.rotation.z = -0.06;
+    group.add(plume);
+    spindriftPlumes.push({
+      mesh: plume,
+      anchorX: ax,
+      anchorY: ay,
+      anchorZ: az,
+      phase: idx * 1.37,
+      span: 14 * sc,
     });
   });
 
+  const baseTint = new THREE.Color(0xffffff);
+
   return {
     group,
-    update: (elapsed: number) => {
+    update: (elapsed: number, weather: WeatherKind = 'clear', alpenglowColor?: THREE.Color) => {
+      const isFoggy = weather === 'foggy';
+      const isMist = weather === 'mist';
+      const isSnow = weather === 'snow';
+      cloudMat.opacity = isFoggy ? 0.62 : isMist ? 0.50 : isSnow ? 0.44 : 0.30;
+      mistMat.opacity = isFoggy ? 0.54 : isMist ? 0.42 : isSnow ? 0.34 : 0.20;
+      spindriftMat.opacity = isSnow ? 0.68 : isFoggy ? 0.46 : 0.32;
+
+      if (alpenglowColor) {
+        baseTint.setHex(0xffffff).lerp(alpenglowColor, 0.42);
+        cloudMat.color.copy(baseTint);
+        mistMat.color.copy(baseTint);
+        spindriftMat.color.setHex(0xf6f9ff).lerp(alpenglowColor, 0.35);
+      } else {
+        cloudMat.color.setHex(0xffffff);
+        mistMat.color.setHex(0xffffff);
+        spindriftMat.color.setHex(0xf4f8ff);
+      }
+
       for (const b of banks) {
-        const span = 560;
-        const wrapped = ((b.baseX + elapsed * b.speed + span * 0.5) % span) - span * 0.5;
-        b.obj.position.x = wrapped;
-        b.obj.position.y += Math.sin(elapsed * 0.35 + b.phase) * 0.002;
+        const a = b.angle + elapsed * b.angSpeed;
+        const y = b.baseY + Math.sin(elapsed * 0.32 + b.phase) * 3.2;
+        b.obj.position.set(Math.cos(a) * b.radius, y, Math.sin(a) * b.radius);
+        b.obj.lookAt(0, y, 0);
+      }
+
+      const windMul = isSnow ? 2.4 : 1.0;
+      for (const p of spindriftPlumes) {
+        const cycle = ((elapsed * 0.35 * windMul + p.phase) % 1);
+        p.mesh.position.set(
+          p.anchorX + 6 + cycle * p.span,
+          p.anchorY + Math.sin(elapsed * 1.6 + p.phase) * 1.4 - cycle * 1.5,
+          p.anchorZ - cycle * 3.5,
+        );
       }
     },
   };
@@ -1715,14 +1635,17 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
 export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWaterController {
   const group = new THREE.Group();
 
-  const geo = new THREE.PlaneGeometry(14.5, 720, 24, 180);
+  const geo = new THREE.PlaneGeometry(14.5, 636, 24, 165);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0, 120);
+  geo.translate(0, 0, 164);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const rx = pos.getX(i);
     const rz = pos.getZ(i);
     pos.setX(i, rx + getRiverCenterX(rz));
+    if (rz < -142) {
+      pos.setY(i, -((-142 - rz) * 0.08));
+    }
   }
   geo.computeVertexNormals();
 
@@ -1781,8 +1704,8 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   });
 
   const stoneCoords: Array<{ x: number; y: number; z: number; s: number }> = [];
-  for (let i = 0; i < 210; i++) {
-    const z = -210 + i * 3.25 + Math.sin(i * 1.9) * 0.8;
+  for (let i = 0; i < 196; i++) {
+    const z = -150 + i * 3.15 + Math.sin(i * 1.9) * 0.75;
     if (Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.5) continue;
     if (z >= 220 && z <= 382) continue;
     const rcX = getRiverCenterX(z);
@@ -1834,7 +1757,7 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   for (let i = 0; i < leafCount; i++) {
     leafMeta.push({
       offset: (Math.sin(i * 19.37) * 0.65) * 4.5,
-      zBase: -210 + (i / leafCount) * 640,
+      zBase: -150 + (i / leafCount) * 600,
       speed: 1.35 + (i % 5) * 0.22,
       rot: i * 1.4,
       phase: i * 0.87,
@@ -1852,8 +1775,8 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
       uTime.value = elapsed;
       for (let i = 0; i < leafCount; i++) {
         const m = leafMeta[i];
-        const span = 640;
-        const z = ((m.zBase + elapsed * m.speed + 210) % span) - 210;
+        const span = 600;
+        const z = ((m.zBase + elapsed * m.speed + 150) % span) - 150;
         const x = getRiverCenterX(z) + m.offset + Math.sin(elapsed * 0.9 + m.phase) * 0.45;
         const y = -0.305 + Math.sin(elapsed * 2.2 + m.phase) * 0.014;
         _vec3.set(x, y, z);

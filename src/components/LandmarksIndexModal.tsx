@@ -1,24 +1,31 @@
 import React from 'react';
-import { Check, MapPin, Navigation, Trash2, X } from 'lucide-react';
+import { Check, Lock, MapPin, Mountain, Navigation, Trash2, X } from 'lucide-react';
 import { LANDMARKS, LandmarkData } from '../data/portfolioData';
+import { TREK_CHECKPOINTS, TrekCheckpointId } from '../world/himalayaTrekData';
 import { CustomWaypoint } from '../world/worldLogic';
 
 interface LandmarksIndexModalProps {
   open: boolean;
   discoveredIds: string[];
   customWaypoints: CustomWaypoint[];
+  unlockedTrekCheckpoints?: TrekCheckpointId[];
   onClose: () => void;
   onTeleportLandmark: (landmark: LandmarkData) => void;
+  onTeleportTrekCheckpoint?: (id: TrekCheckpointId) => void;
   onTeleportWaypoint: (waypoint: CustomWaypoint) => void;
   onDeleteWaypoint: (id: string) => void;
 }
+
+const TREK_CHECKPOINT_ORDER: TrekCheckpointId[] = ['trailhead', 'teahouse', 'summit'];
 
 export const LandmarksIndexModal: React.FC<LandmarksIndexModalProps> = ({
   open,
   discoveredIds,
   customWaypoints,
+  unlockedTrekCheckpoints = ['trailhead'],
   onClose,
   onTeleportLandmark,
+  onTeleportTrekCheckpoint,
   onTeleportWaypoint,
   onDeleteWaypoint,
 }) => {
@@ -98,6 +105,62 @@ export const LandmarksIndexModal: React.FC<LandmarksIndexModalProps> = ({
                 </div>
               );
             })}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Mountain className="w-4 h-4 text-sky-300" aria-hidden="true" />
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Sagarmatha Trek Checkpoints (0m – 216m)
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {TREK_CHECKPOINT_ORDER.map((id) => {
+                const cp = TREK_CHECKPOINTS[id];
+                const isUnlocked = id === 'trailhead' || unlockedTrekCheckpoints.includes(id);
+                return (
+                  <div
+                    key={cp.id}
+                    className="rounded-xl border border-white/12 p-3.5 flex flex-col justify-between gap-2.5"
+                    style={{ backgroundColor: '#152033' }}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-sky-300 font-semibold tabular-nums">
+                          {cp.altitudeM}m
+                        </span>
+                        {isUnlocked ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                            <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                            Unlocked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-slate-400">
+                            <Lock className="w-3 h-3" aria-hidden="true" />
+                            Climb to Unlock
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="mt-1 text-sm font-semibold text-slate-50">{cp.label}</h4>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!isUnlocked || !onTeleportTrekCheckpoint}
+                      onClick={() => onTeleportTrekCheckpoint?.(cp.id)}
+                      className={`w-full py-1.5 px-3 rounded-lg font-medium text-xs inline-flex items-center justify-center gap-1.5 transition-colors ${
+                        isUnlocked
+                          ? 'bg-sky-500/20 hover:bg-sky-500 text-sky-200 hover:text-slate-950 cursor-pointer'
+                          : 'bg-white/5 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <Navigation className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>{isUnlocked ? 'Fast Travel' : 'Locked'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {customWaypoints.length > 0 && (

@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
   Award,
+  ChevronLeft,
+  ChevronRight,
   Compass,
   Mail,
   Map as MapIcon,
@@ -13,10 +15,17 @@ import {
 } from 'lucide-react';
 import { LandmarkData } from '../data/portfolioData';
 import { LiveWeatherInfo } from '../services/weatherService';
+import { TREK_TELESCOPE_TARGETS } from '../world/himalayaTrekData';
 import { ContextualWorldAction, TimeLightingState, WeatherKind } from '../world/worldLogic';
 
 interface WorldHudProps {
   zoneName: string;
+  altitudeM?: number;
+  telescopeActive?: boolean;
+  telescopeTargetIndex?: number;
+  onTelescopePrev?: () => void;
+  onTelescopeNext?: () => void;
+  onTelescopeClose?: () => void;
   discoveredCount: number;
   totalLandmarks: number;
   unlockedAchievementsCount: number;
@@ -59,6 +68,12 @@ const WEATHER_LABELS: Record<WeatherKind, string> = {
 
 export const WorldHud: React.FC<WorldHudProps> = ({
   zoneName,
+  altitudeM = 0,
+  telescopeActive = false,
+  telescopeTargetIndex = 0,
+  onTelescopePrev,
+  onTelescopeNext,
+  onTelescopeClose,
   discoveredCount,
   totalLandmarks,
   unlockedAchievementsCount,
@@ -144,6 +159,14 @@ export const WorldHud: React.FC<WorldHudProps> = ({
             <span className="text-amber-300 font-medium whitespace-nowrap">
               {discoveredCount}/{totalLandmarks} Landmarks
             </span>
+            {altitudeM >= 4 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span data-testid="hud-altitude" className="text-sky-300 font-medium whitespace-nowrap">
+                  Alt {Math.round(altitudeM)}m
+                </span>
+              </>
+            )}
             <span className="hidden sm:inline" aria-hidden="true">
               ·
             </span>
@@ -258,6 +281,68 @@ export const WorldHud: React.FC<WorldHudProps> = ({
         </div>
       </div>
 
+      {/* Scenic Brass Telescope Viewfinder Overlay */}
+      {telescopeActive && (() => {
+        const safeIdx =
+          ((telescopeTargetIndex % TREK_TELESCOPE_TARGETS.length) + TREK_TELESCOPE_TARGETS.length) %
+          TREK_TELESCOPE_TARGETS.length;
+        const target = TREK_TELESCOPE_TARGETS[safeIdx];
+        return (
+          <div
+            data-testid="scenic-telescope-overlay"
+            className="fixed inset-0 pointer-events-none flex flex-col items-center justify-center"
+          >
+            <div className="w-56 h-56 sm:w-72 sm:h-72 rounded-full border-2 border-amber-300/45 flex items-center justify-center relative">
+              <div className="w-4 h-[1px] bg-amber-300/70" />
+              <div className="h-4 w-[1px] bg-amber-300/70 absolute" />
+              <div className="w-24 h-24 rounded-full border border-amber-300/25 absolute" />
+            </div>
+
+            <div
+              className="pointer-events-auto mt-6 max-w-md w-[92vw] rounded-xl border border-amber-400/50 px-4 py-3 shadow-2xl flex items-center justify-between gap-3"
+              style={{ backgroundColor: 'rgba(13, 20, 34, 0.94)' }}
+            >
+              <button
+                type="button"
+                onClick={onTelescopePrev}
+                aria-label="Previous valley target"
+                className="w-9 h-9 rounded-lg border border-white/15 text-slate-100 hover:border-amber-400/60 hover:text-amber-300 flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+              </button>
+
+              <div className="min-w-0 flex-1 text-center">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-300 tabular-nums">
+                  {target.bearingLabel} · {target.distanceM}m
+                </div>
+                <div className="text-sm sm:text-base font-bold text-[#eae5da] truncate">
+                  {target.name}
+                </div>
+                <div className="text-xs text-slate-300 truncate">{target.subtitle}</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onTelescopeNext}
+                aria-label="Next valley target"
+                className="w-9 h-9 rounded-lg border border-white/15 text-slate-100 hover:border-amber-400/60 hover:text-amber-300 flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onTelescopeClose}
+                aria-label="Exit telescope view"
+                className="px-2.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold shrink-0 cursor-pointer"
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Center-Bottom Contextual Interaction Prompt */}
       <div
         className={`flex flex-col items-center gap-2 transition-all ${
@@ -304,7 +389,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
           </div>
         )}
 
-        {(isMeditating || (contextualAction && !placementMode && !hasOpenLandmark && !activeHighlight)) && (
+        {(isMeditating || (contextualAction && !placementMode && !hasOpenLandmark && !activeHighlight && !telescopeActive)) && (
           <button
             type="button"
             data-testid="contextual-action-prompt"
@@ -324,7 +409,7 @@ export const WorldHud: React.FC<WorldHudProps> = ({
           </button>
         )}
 
-        {!contextualAction && nearestLandmark && !placementMode && !hasOpenLandmark && !isMeditating && !activeHighlight && (
+        {!contextualAction && nearestLandmark && !placementMode && !hasOpenLandmark && !isMeditating && !activeHighlight && !telescopeActive && (
           <button
             type="button"
             onClick={() => onInspectNearest(nearestLandmark)}
@@ -391,7 +476,15 @@ export const WorldHud: React.FC<WorldHudProps> = ({
                       ? 'Spin'
                       : contextualAction?.kind === 'sit-meditate'
                         ? 'Meditate'
-                        : 'Inspect'}
+                        : contextualAction?.kind === 'drink-butter-tea'
+                          ? 'Drink Tea'
+                          : contextualAction?.kind === 'use-scenic-telescope'
+                            ? 'Telescope'
+                            : contextualAction?.kind === 'rest-high-camp'
+                              ? 'Rest'
+                              : contextualAction?.kind === 'hoist-summit-flag'
+                                ? 'Hoist Flag'
+                                : 'Inspect'}
             </button>
           )}
           <button
