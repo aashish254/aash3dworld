@@ -79,7 +79,6 @@ import {
   createCurbedRoads,
   createDioramaTerrain,
   createGlacialLakeAndWaterfall,
-  createHimalayanGompaAndLodge,
   createInstancedFoliage,
   createInstancedGrassField,
   createLumbiniPeaceParkland,
@@ -103,6 +102,13 @@ import {
   BOUDHA_INTERACTIVE_SPOTS,
   getBoudha108PrayerWheelPlacements,
 } from './boudhanathData';
+import { createPumdikotComplex } from './pumdikotComplex';
+import {
+  PUMDIKOT_COMPLEX,
+  PUMDIKOT_HIGHLIGHTS,
+  PUMDIKOT_INTERACTIVE_SPOTS,
+  isInPumdikotInnerSanctum,
+} from './pumdikotData';
 import {
   ExplorerCharacterRig,
   InteractiveProp,
@@ -117,7 +123,6 @@ import {
   createLumbiniBuddha,
   createNoticeBoardKiosk,
   createPrayerFlagLine,
-  createPumdikotShiva,
   createRecruiterBeacon,
   createSuspensionBridge,
   createVitClockTower,
@@ -374,6 +379,13 @@ export class WorldEngine {
   private boudhaTriggerKoraWaveFn: ((startIdx?: number) => void) | null = null;
   private boudhaTriggerGompaBlessingFn: (() => void) | null = null;
   private boudhaTriggerAjimaOfferingFn: (() => void) | null = null;
+  private pumdikotShivakundaHitTarget: THREE.Mesh | null = null;
+  private pumdikotNandiBellHitTarget: THREE.Mesh | null = null;
+  private pumdikotPorticoHitTarget: THREE.Mesh | null = null;
+  private pumdikotInnerLingamHitTarget: THREE.Mesh | null = null;
+  private pumdikotDomeShivaHitTarget: THREE.Mesh | null = null;
+  private pumdikotTriggerInnerOfferingFn: (() => void) | null = null;
+  private pumdikotBellIndex = -1;
   private activeTossedPebbles: TossedPebbleEntry[] = [];
   private tossedPebbleGeo: THREE.BufferGeometry | null = null;
   private tossedPebbleMat: THREE.MeshStandardMaterial | null = null;
@@ -971,9 +983,8 @@ export class WorldEngine {
     );
     this.scene.add(this.milkyWayPoints);
 
-    // Sculpted Real-World Himalayan Range + Cliffside Gompa / Sherpa Lodge + Drifting Clouds
+    // Sculpted Real-World Himalayan Range + Drifting Clouds
     this.scene.add(createSculptedHimalayas(this.textures));
-    this.scene.add(createHimalayanGompaAndLodge(this.textures));
     this.cloudController = createMountainClouds();
     this.scene.add(this.cloudController.group);
   }
@@ -1061,7 +1072,7 @@ export class WorldEngine {
     const builders: Record<string, () => ReturnType<typeof createPashupatinathComplex>> = {
       'kathmandu-stupa': () => createPashupatinathComplex(this.textures),
       'boudhanath-stupa': () => createBoudhanathComplex(this.textures),
-      'pumdikot-shiva': () => createPumdikotShiva(this.textures),
+      'pumdikot-shiva': () => createPumdikotComplex(this.textures, this.isSoftwareGl),
       'janaki-mandir': () =>
         createJanakiMandir(this.textures, () => {
           if (this.disposed) return;
@@ -1088,7 +1099,8 @@ export class WorldEngine {
       const built = builder();
       const y =
         lm.id === 'kathmandu-stupa' ||
-        lm.id === 'boudhanath-stupa'
+        lm.id === 'boudhanath-stupa' ||
+        lm.id === 'pumdikot-shiva'
           ? 0
           : groundHeightAt(lm.position.x, lm.position.z);
       built.group.position.set(lm.position.x, y, lm.position.z);
@@ -1262,6 +1274,42 @@ export class WorldEngine {
         if (typeof built.group.userData.triggerBagmatiAarati === 'function') {
           this.pashupatiTriggerAaratiFn = built.group.userData.triggerBagmatiAarati as () => void;
         }
+      }
+      if (lm.id === 'pumdikot-shiva') {
+        const shivakundaHit = built.group.userData.shivakundaHitTarget as THREE.Mesh | undefined;
+        if (shivakundaHit) {
+          shivakundaHit.layers.set(2);
+          shivakundaHit.userData.nonCollidable = true;
+          this.pumdikotShivakundaHitTarget = shivakundaHit;
+        }
+        const nandiBellHit = built.group.userData.nandiBellHitTarget as THREE.Mesh | undefined;
+        if (nandiBellHit) {
+          nandiBellHit.layers.set(2);
+          nandiBellHit.userData.nonCollidable = true;
+          this.pumdikotNandiBellHitTarget = nandiBellHit;
+        }
+        const porticoHit = built.group.userData.porticoHitTarget as THREE.Mesh | undefined;
+        if (porticoHit) {
+          porticoHit.layers.set(2);
+          porticoHit.userData.nonCollidable = true;
+          this.pumdikotPorticoHitTarget = porticoHit;
+        }
+        const innerLingamHit = built.group.userData.innerLingamHitTarget as THREE.Mesh | undefined;
+        if (innerLingamHit) {
+          innerLingamHit.layers.set(2);
+          innerLingamHit.userData.nonCollidable = true;
+          this.pumdikotInnerLingamHitTarget = innerLingamHit;
+        }
+        const domeShivaHit = built.group.userData.domeShivaHitTarget as THREE.Mesh | undefined;
+        if (domeShivaHit) {
+          domeShivaHit.layers.set(2);
+          domeShivaHit.userData.nonCollidable = true;
+          this.pumdikotDomeShivaHitTarget = domeShivaHit;
+        }
+        if (typeof built.group.userData.triggerInnerOffering === 'function') {
+          this.pumdikotTriggerInnerOfferingFn = built.group.userData.triggerInnerOffering as () => void;
+        }
+        this.pumdikotBellIndex = this.templeBellEntries.length;
       }
       if (built.cameraOccluders && built.cameraOccluders.length > 0) {
         this.cameraOccluders.push(...built.cameraOccluders);
@@ -2923,6 +2971,11 @@ export class WorldEngine {
     for (const hit of this.pashupatiGheeLampHitTargets) exclude.add(hit);
     if (this.boudhaGompaBowlHitTarget) exclude.add(this.boudhaGompaBowlHitTarget);
     if (this.boudhaAjimaHitTarget) exclude.add(this.boudhaAjimaHitTarget);
+    if (this.pumdikotShivakundaHitTarget) exclude.add(this.pumdikotShivakundaHitTarget);
+    if (this.pumdikotNandiBellHitTarget) exclude.add(this.pumdikotNandiBellHitTarget);
+    if (this.pumdikotPorticoHitTarget) exclude.add(this.pumdikotPorticoHitTarget);
+    if (this.pumdikotInnerLingamHitTarget) exclude.add(this.pumdikotInnerLingamHitTarget);
+    if (this.pumdikotDomeShivaHitTarget) exclude.add(this.pumdikotDomeShivaHitTarget);
     for (const prop of this.interactiveProps) exclude.add(prop.mesh);
     return exclude;
   }
@@ -3504,10 +3557,45 @@ export class WorldEngine {
       this.pashupatiAaratiHitTarget !== null ||
       this.boudhaGompaBowlHitTarget !== null ||
       this.boudhaAjimaHitTarget !== null ||
-      this.boudhaKoraBrassInst !== null
+      this.boudhaKoraBrassInst !== null ||
+      this.pumdikotShivakundaHitTarget !== null ||
+      this.pumdikotNandiBellHitTarget !== null ||
+      this.pumdikotPorticoHitTarget !== null ||
+      this.pumdikotInnerLingamHitTarget !== null ||
+      this.pumdikotDomeShivaHitTarget !== null
     ) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
+      if (this.pumdikotInnerLingamHitTarget) {
+        if (this.raycaster.intersectObject(this.pumdikotInnerLingamHitTarget, false).length > 0) {
+          this.offerPumdikotBelAndDiya();
+          return;
+        }
+      }
+      if (this.pumdikotShivakundaHitTarget) {
+        if (this.raycaster.intersectObject(this.pumdikotShivakundaHitTarget, false).length > 0) {
+          this.sprinklePumdikotWater();
+          return;
+        }
+      }
+      if (this.pumdikotNandiBellHitTarget) {
+        if (this.raycaster.intersectObject(this.pumdikotNandiBellHitTarget, false).length > 0) {
+          this.ringPumdikotBell();
+          return;
+        }
+      }
+      if (this.pumdikotPorticoHitTarget) {
+        if (this.raycaster.intersectObject(this.pumdikotPorticoHitTarget, false).length > 0) {
+          this.enterPumdikotSanctum();
+          return;
+        }
+      }
+      if (this.pumdikotDomeShivaHitTarget) {
+        if (this.raycaster.intersectObject(this.pumdikotDomeShivaHitTarget, false).length > 0) {
+          this.inspectPumdikotColossus();
+          return;
+        }
+      }
       if (this.boudhaGompaBowlHitTarget) {
         if (this.raycaster.intersectObject(this.boudhaGompaBowlHitTarget, false).length > 0) {
           this.ringBoudhaSingingBowl();
@@ -3655,7 +3743,7 @@ export class WorldEngine {
         this.callbacks.onPlaceWaypointRequest(pt.x, pt.z);
         return;
       }
-      const walkY = getSurfaceHeightAt(pt.x, pt.z);
+      const walkY = getSurfaceHeightAt(pt.x, pt.z, this.playerPos.y);
       this.walkTarget = new THREE.Vector3(pt.x, walkY, pt.z);
       this.walkMarkerMesh.position.set(pt.x, walkY + 0.08, pt.z);
       this.walkMarkerMesh.visible = true;
@@ -3953,6 +4041,69 @@ export class WorldEngine {
     });
   }
 
+  public sprinklePumdikotWater(): void {
+    const elapsed = (performance.now() - this.startTimeMs) / 1000;
+    const spot = PUMDIKOT_INTERACTIVE_SPOTS.shivakundaCenter;
+    triggerWaterRipple(spot.x, spot.z, elapsed, 1.55);
+    this.spawnWaterSplash(spot.x, PUMDIKOT_COMPLEX.pondWaterY + 0.16, spot.z, 1.25);
+    soundEngine.playWaterSplash(0.85);
+    this.ritualOfferingsCount += 1;
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.(PUMDIKOT_HIGHLIGHTS.shivakunda);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public ringPumdikotBell(): void {
+    const bell = this.templeBellEntries[this.pumdikotBellIndex];
+    if (bell) {
+      const elapsed = (performance.now() - this.startTimeMs) / 1000;
+      const dist = Math.hypot(bell.worldPos.x - this.playerPos.x, bell.worldPos.z - this.playerPos.z);
+      this.triggerTempleBell(bell, elapsed, 1.0, Math.min(dist, 3.0));
+    } else {
+      soundEngine.playBellChime();
+    }
+  }
+
+  public enterPumdikotSanctum(): void {
+    const inner = PUMDIKOT_INTERACTIVE_SPOTS.innerLingamCenter;
+    this.playerPos.x = inner.x;
+    this.playerPos.z = inner.z + 5.2;
+    this.playerPos.y = PUMDIKOT_COMPLEX.garbhagrihaY;
+    this.playerYaw = Math.PI;
+    this.cameraYaw = 0;
+    this.targetCameraYaw = 0;
+    this.cameraPitch = 0.14;
+    this.targetCameraPitch = 0.14;
+    this.character.root.position.copy(this.playerPos);
+    this.character.root.rotation.y = this.playerYaw;
+    soundEngine.playBellChime();
+    this.callbacks.onInspectHighlight?.(PUMDIKOT_HIGHLIGHTS.innerSanctum);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public offerPumdikotBelAndDiya(): void {
+    this.pumdikotTriggerInnerOfferingFn?.();
+    this.pashupatiOfferingsCount += 1;
+    this.ritualOfferingsCount += 1;
+    const spot = PUMDIKOT_INTERACTIVE_SPOTS.innerLingamCenter;
+    this.spawnButterLampOfferingParticles(spot.x, PUMDIKOT_COMPLEX.garbhagrihaY + 1.4, spot.z);
+    soundEngine.playPashupatiShankhaBlessing();
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.(PUMDIKOT_HIGHLIGHTS.innerSanctum);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public inspectPumdikotColossus(): void {
+    soundEngine.playBellChime();
+    this.callbacks.onInspectHighlight?.(PUMDIKOT_HIGHLIGHTS.colossalShiva);
+  }
+
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
 
@@ -4016,6 +4167,7 @@ export class WorldEngine {
         })),
         aaratiTerrace: PASHUPATI_INTERACTIVE_SPOTS.aaratiTerraceCenter,
       },
+      this.playerPos.y,
     );
   }
 
@@ -4028,6 +4180,22 @@ export class WorldEngine {
     const action = this.getContextualAction();
     if (!action) return;
 
+    if (action.kind === 'sprinkle-pumdikot-water') {
+      this.sprinklePumdikotWater();
+      return;
+    }
+    if (action.kind === 'enter-pumdikot-sanctum') {
+      this.enterPumdikotSanctum();
+      return;
+    }
+    if (action.kind === 'offer-pumdikot-bel-diya') {
+      this.offerPumdikotBelAndDiya();
+      return;
+    }
+    if (action.kind === 'inspect-pumdikot-shiva') {
+      this.inspectPumdikotColossus();
+      return;
+    }
     if (action.kind === 'spin-boudha-kora-wheels') {
       this.triggerBoudhaKoraWheelWave(action.index ?? 0);
       return;
@@ -4130,7 +4298,7 @@ export class WorldEngine {
             : isTallTower
               ? 5.0
               : isPumdikot
-                ? 3.6
+                ? 12.5
                 : 2.8;
     const focusDist = isJanaki
       ? 60
@@ -4143,7 +4311,7 @@ export class WorldEngine {
             : isTallTower
               ? 16.5
               : isPumdikot
-                ? 15.2
+                ? 74.0
                 : 13.0;
     const camYOffset = isJanaki
       ? 8.5
@@ -4154,7 +4322,7 @@ export class WorldEngine {
           : isTallTower
             ? 5.2
             : isPumdikot
-              ? 4.8
+              ? 10.5
               : 4.5;
     const azimuthOffset = isJanaki ? 0.2 : isLumbini ? 0.34 : isPagoda ? -0.52 : 0.32;
     lookOut.set(lm.position.x, ly + lookYOffset, lm.position.z);
@@ -4204,7 +4372,7 @@ export class WorldEngine {
   }
 
   private sampleCameraFloorHeight(x: number, z: number, refY: number): number {
-    const surfaceY = getSurfaceHeightAt(x, z);
+    const surfaceY = getSurfaceHeightAt(x, z, refY);
     const bvhY = this.physicsWorld.sampleFloorHeight(x, z, refY);
     return bvhY !== null ? Math.max(surfaceY, bvhY) : surfaceY;
   }
@@ -4314,11 +4482,12 @@ export class WorldEngine {
   public teleportTo(x: number, z: number): void {
     const prevX = this.playerPos.x;
     const prevZ = this.playerPos.z;
-    const safe = clampToWalkable(this.playerPos.x, this.playerPos.z, x, z);
+    const jumpRefY = Math.hypot(x - prevX, z - prevZ) > 6.0 ? 0 : this.playerPos.y;
+    const safe = clampToWalkable(this.playerPos.x, this.playerPos.z, x, z, jumpRefY);
     this.playerPos.x = safe.x;
     this.playerPos.z = safe.z;
     this.shadowForceDirty = true;
-    this.playerPos.y = getSurfaceHeightAt(safe.x, safe.z);
+    this.playerPos.y = getSurfaceHeightAt(safe.x, safe.z, jumpRefY);
     this.playerVelY = 0;
     this.isGrounded = true;
     this.walkTarget = null;
@@ -4332,6 +4501,9 @@ export class WorldEngine {
       const atBoudhaSouthPlaza =
         Math.abs(safe.x - BOUDHA_COMPLEX.centerX) <= 14.0 &&
         Math.abs(safe.z - (BOUDHA_COMPLEX.centerZ + BOUDHA_COMPLEX.halfSize + 6.0)) <= 10.0;
+      const atPumdikotSouthGate =
+        Math.abs(safe.x - PUMDIKOT_COMPLEX.centerX) <= 10.0 &&
+        Math.abs(safe.z - (PUMDIKOT_COMPLEX.centerZ + PUMDIKOT_COMPLEX.southGateLocalZ + 6.0)) <= 10.0;
       const inPashupatiSanctum =
         Math.abs(safe.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
         Math.abs(safe.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
@@ -4349,6 +4521,13 @@ export class WorldEngine {
         this.targetCameraYaw = 0;
         this.cameraPitch = 0.22;
         this.targetCameraPitch = 0.22;
+      } else if (atPumdikotSouthGate) {
+        // Face North directly through the Crimson Gate toward Shivakunda, Nandi, Pink Rotunda & 108-ft Shiva
+        this.playerYaw = Math.PI;
+        this.cameraYaw = 0;
+        this.targetCameraYaw = 0;
+        this.cameraPitch = 0.16;
+        this.targetCameraPitch = 0.16;
       } else if (inPashupatiSanctum) {
         const toCenterX = PASHUPATI_COMPLEX.centerX - safe.x;
         const toCenterZ = PASHUPATI_COMPLEX.centerZ - safe.z;
@@ -4377,6 +4556,8 @@ export class WorldEngine {
         this.currentCamPos.set(safe.x - 14.5, this.playerPos.y + 6.5, safe.z + 2.5);
       } else if (atBoudhaSouthPlaza) {
         this.currentCamPos.set(safe.x + 2.5, this.playerPos.y + 6.5, safe.z + 14.5);
+      } else if (atPumdikotSouthGate) {
+        this.currentCamPos.set(safe.x + 2.2, this.playerPos.y + 5.8, safe.z + 13.5);
       } else if (inPashupatiSanctum) {
         this.currentCamPos.set(
           safe.x + Math.sin(this.cameraYaw) * 3.2,
@@ -5784,6 +5965,7 @@ export class WorldEngine {
         this.playerPos.z,
         this.playerPos.x + stepDx,
         this.playerPos.z + stepDz,
+        this.playerPos.y,
       );
       const bvhResolved = this.physicsWorld.resolveHorizontalCollision(
         this.playerPos.x,
@@ -5855,7 +6037,11 @@ export class WorldEngine {
       }
     }
 
-    const baseSurfaceY = getSurfaceHeightAt(this.playerPos.x, this.playerPos.z);
+    const baseSurfaceY = getSurfaceHeightAt(
+      this.playerPos.x,
+      this.playerPos.z,
+      this.playerPos.y,
+    );
     const bvhFloor = this.physicsWorld.sampleFloorHeight(
       this.playerPos.x,
       this.playerPos.z,
@@ -5924,6 +6110,11 @@ export class WorldEngine {
     const inPashupatiSanctum =
       Math.abs(this.playerPos.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
       Math.abs(this.playerPos.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
+    const inPumdikotSanctum = isInPumdikotInnerSanctum(
+      this.playerPos.x,
+      this.playerPos.z,
+      this.playerPos.y,
+    );
 
     const lookLambda = this.cameraMode === 'first-person' ? 18.0 : 12.0;
     this.cameraYaw = dampCameraValue(this.cameraYaw, this.targetCameraYaw, lookLambda, dt);
@@ -5935,6 +6126,7 @@ export class WorldEngine {
     if (this.renderer?.domElement) {
       this.writeDataset('insideMayaDevi', inMayaDeviInterior ? 'true' : 'false');
       this.writeDataset('insidePashupatiSanctum', inPashupatiSanctum ? 'true' : 'false');
+      this.writeDataset('insidePumdikotSanctum', inPumdikotSanctum ? 'true' : 'false');
       this.writeDataset('cameraMode', this.cameraMode);
       if (elapsed - this.lastSimDatasetFlushAt < 0.02 || this.lastSimDatasetFlushAt < 0) {
         this.writeDataset('cameraPitchDeg', String(Math.round((-this.cameraPitch * 180) / Math.PI)));
@@ -5982,11 +6174,13 @@ export class WorldEngine {
         this.playerPos.z <= 102.6;
       const activeCamDist = inPashupatiSanctum
         ? Math.min(this.cameraDistance, 3.8)
-        : inMayaDeviInterior
-          ? Math.min(this.cameraDistance, 6.2)
-          : inJanakiCourtyard
-            ? Math.min(this.cameraDistance, 8.2)
-            : this.cameraDistance;
+        : inPumdikotSanctum
+          ? Math.min(this.cameraDistance, 4.8)
+          : inMayaDeviInterior
+            ? Math.min(this.cameraDistance, 6.2)
+            : inJanakiCourtyard
+              ? Math.min(this.cameraDistance, 8.2)
+              : this.cameraDistance;
       const horiz = Math.cos(this.cameraPitch) * activeCamDist;
       const vert = Math.sin(this.cameraPitch) * activeCamDist;
       _camLookTarget.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);

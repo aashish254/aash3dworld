@@ -461,9 +461,9 @@ test('world obstacles prevent walking through trees, boulders, lanterns, kiosks,
   const firstRock = getWorldBoulderSpots()[0];
   assert.equal(isWalkablePosition(firstRock.x, firstRock.z), false, 'Granite field boulder blocks pass-through');
 
-  // Non-Janaki/Lumbini landmark monuments block solid cores while EVERY landmark approach point stays walkable
+  // Non-walkable landmark monuments block solid cores while walkable plaza landmarks (Janaki, Lumbini, Pumdikot) stay open
   for (const lm of LANDMARKS) {
-    if (lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha') {
+    if (lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha' && lm.id !== 'pumdikot-shiva') {
       assert.equal(
         isWalkablePosition(lm.position.x, lm.position.z),
         false,
@@ -1710,16 +1710,16 @@ test('First-time landmark approach cue provides unique per-landmark spatial moti
     const { soundEngine } = await import('./soundEngine');
     soundEngine.setEnabled(false);
     assert.equal(
-      soundEngine.playLandmarkApproachCue('aniflow-studio', { x: -54, y: 2.5, z: -92 }, 27),
+      soundEngine.playLandmarkApproachCue('aniflow-studio', { x: 118, y: 2.5, z: -56 }, 27),
       false,
     );
 
     soundEngine.setEnabled(true);
     const played = soundEngine.playLandmarkApproachCue(
       'aniflow-studio',
-      { x: -54, y: 2.5, z: -92 },
+      { x: 118, y: 2.5, z: -56 },
       27,
-      { x: -54, y: 1.8, z: -72, forwardX: 0, forwardY: 0, forwardZ: -1 },
+      { x: 118, y: 1.8, z: -36, forwardX: 0, forwardY: 0, forwardZ: -1 },
     );
     assert.equal(played, true);
     assert.ok(pannerCount >= 1);

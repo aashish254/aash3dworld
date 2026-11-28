@@ -18,6 +18,14 @@ import {
   isInBoudhaHardSurface,
   isInBoudhaPrecinct,
 } from './boudhanathData';
+import {
+  PUMDIKOT_INTERACTIVE_SPOTS,
+  carvePumdikotGround,
+  getPumdikotSurfaceY,
+  isInPumdikotHardSurface,
+  isInPumdikotPrecinct,
+  isPumdikotWalkable,
+} from './pumdikotData';
 
 export type WeatherKind = 'clear' | 'mist' | 'foggy' | 'rain' | 'snow';
 export type TimePreset = 'live' | 'dawn' | 'noon' | 'dusk' | 'night';
@@ -215,12 +223,12 @@ export const LUMBINI_PUSHKARINI_POND = {
 export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[0, 6], [-24, -10], [-48, -24]],
   [[-48, -24], [-78, -10], [-108, 4]],
-  [[-108, 4], [-109, -35], [-108, -74]],
-  [[-48, -24], [-51, -58], [-54, -92]],
-  [[-48, -24], [-18, -68], [10, -108]],
-  [[10, -108], [52, -104], [94, -96]],
+  [[-108, 4], [-116, -42], [-112, -84]],
   [[0, 6], [11, -10], [22.5, -24]],
   [[37.5, -24], [58, -26], [78, -28]],
+  [[78, -28], [98, -42], [118, -56]],
+  [[118, -56], [127, -72], [136, -88]],
+  [[136, -88], [115, -92], [94, -96]],
   [[78, -28], [87, -62], [94, -96]],
   // Smooth continuous boulevard from Spawn arriving perpendicularly at Janaki Chowk East Gate (-53.9, 128.5)
   [[0, 6], [-16, 28], [-30, 58], [-38, 94], [-42, 122], [-46.5, 128.5], [-50.5, 128.5], [-53.9, 128.5]],
@@ -236,6 +244,8 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[-92.0, 300.0], [-132.0, 296.0], [-172.0, 298.0], [-212.0, 301.0], [-245.0, 302.0]],
   [[-308.0, 178.5], [-308.0, 208.0], [-308.0, 239.0]],
   [[-212.0, 301.0], [-228.0, 336.0], [-244.0, 368.0], [-276.0, 376.0], [-302.0, 375.0], [-308.0, 371.0], [-308.0, 366.0]],
+  // Pumdikot Mahadev South Crimson Gate Approach Spur (-50, -28)
+  [[-48, -24], [-49.5, -25.0], [-50, -28]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -244,12 +254,15 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-64, -15],
   [-95, -5],
   [-112, -38],
-  [-56, -60],
-  [-18, -68],
-  [52, -100],
+  [-54.5, -22.5],
+  [-44.5, -21.5],
   [16, -21],
   [56, -24],
-  [88, -62],
+  [94, -44],
+  [110, -52],
+  [126, -70],
+  [116, -95],
+  [84, -62],
   [-18, 28],
   [-46, 86],
   [-48.5, 132.2],
@@ -446,6 +459,9 @@ export function getWorldTreeSpots(): TreeSpot[] {
       if (lm.id === 'boudhanath-stupa') {
         return isInBoudhaPrecinct(x, z, 5);
       }
+      if (lm.id === 'pumdikot-shiva') {
+        return isInPumdikotPrecinct(x, z, 5);
+      }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
       return inPlazaRadius || inCameraCorridor;
@@ -547,7 +563,9 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
             ? isInPashupatiPrecinct(rx, rz)
             : lm.id === 'boudhanath-stupa'
               ? isInBoudhaPrecinct(rx, rz, 5)
-              : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
+              : lm.id === 'pumdikot-shiva'
+                ? isInPumdikotPrecinct(rx, rz, 5)
+                : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
     const riverCenterX = getRiverCenterX(rz);
@@ -694,18 +712,16 @@ export function groundHeightAt(x: number, z: number): number {
   // Flatten spawn plaza and landmark terraces smoothly
   const flatAnchors: Array<{ x: number; z: number; radius: number; targetY: number }> = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, radius: 16, targetY: 0.15 },
-    ...LANDMARKS.filter((lm) => lm.id !== 'boudhanath-stupa').map((lm) => ({
+    ...LANDMARKS.filter((lm) => lm.id !== 'boudhanath-stupa' && lm.id !== 'pumdikot-shiva').map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
       radius: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 92 : 18,
       targetY:
-        lm.id === 'pumdikot-shiva'
-          ? 1.45
-          : lm.id === 'recruiter-beacon'
-            ? 0.75
-            : lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa'
-              ? 0.25
-              : 0.2,
+        lm.id === 'recruiter-beacon'
+          ? 0.75
+          : lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa'
+            ? 0.25
+            : 0.2,
     })),
   ];
 
@@ -848,6 +864,7 @@ export function groundHeightAt(x: number, z: number): number {
   // Carve monumental 108m x 124m Pashupatinath courtyard, Bagmati River channel, and East Bank Pandra Shivalaya
   h = carvePashupatinathGround(x, z, h);
   h = carveBoudhanathGround(x, z, h);
+  h = carvePumdikotGround(x, z, h);
 
   return h;
 }
@@ -902,7 +919,7 @@ function getRoadDeckSamples(): Array<{ x: number; z: number; deckY: number }> {
  * Returns the exact visible walkable/prop surface height at (x, z), accounting for raised stone
  * plaza aprons and level crowned cobblestone road decks so props and artifacts never sink into roads.
  */
-export function getSurfaceHeightAt(x: number, z: number): number {
+export function getSurfaceHeightAt(x: number, z: number, refY = 0): number {
   const base = groundHeightAt(x, z);
   if (isOnBridgeDeck(x, z) || isOnLumbiniCanalBridge(x, z)) {
     return base + 0.02;
@@ -921,6 +938,10 @@ export function getSurfaceHeightAt(x: number, z: number): number {
   if (boudhaY !== null) {
     return boudhaY;
   }
+  const pumdikotY = getPumdikotSurfaceY(x, z, refY);
+  if (pumdikotY !== null) {
+    return pumdikotY;
+  }
 
   // Raised circular stone plaza aprons at Spawn & small non-precinct landmarks
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.45) {
@@ -931,11 +952,12 @@ export function getSurfaceHeightAt(x: number, z: number): number {
       lm.id === 'janaki-mandir' ||
       lm.id === 'lumbini-buddha' ||
       lm.id === 'kathmandu-stupa' ||
-      lm.id === 'boudhanath-stupa'
+      lm.id === 'boudhanath-stupa' ||
+      lm.id === 'pumdikot-shiva'
     ) {
       continue;
     }
-    const r = lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
+    const r = 7.05;
     if (Math.hypot(x - lm.position.x, z - lm.position.z) <= r) {
       surfaceY = Math.max(surfaceY, groundHeightAt(lm.position.x, lm.position.z) + 0.105);
     }
@@ -1016,7 +1038,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
     x <= LUMBINI_FENCE_BOUNDS.maxX + 0.5 &&
     z >= LUMBINI_FENCE_BOUNDS.minZ - 0.5 &&
     z <= LUMBINI_FENCE_BOUNDS.maxZ + 0.5;
-  if (!inJanakiChowk && !inLumbiniPrecinct && !isInBoudhaPrecinct(x, z)) {
+  if (!inJanakiChowk && !inLumbiniPrecinct && !isInBoudhaPrecinct(x, z) && !isInPumdikotPrecinct(x, z)) {
     const roadSamples = getRoadDeckSamples();
     let bestDist = 2.35;
     let bestDeckY = surfaceY;
@@ -1040,7 +1062,7 @@ export function getSurfaceHeightAt(x: number, z: number): number {
  * Checks whether (x, z) is walkable without stepping into deep river/lake/canal water,
  * solid palace masonry walls, or outside the open-world boundary.
  */
-export function isWalkablePosition(x: number, z: number): boolean {
+export function isWalkablePosition(x: number, z: number, refY = 0): boolean {
   if (Math.hypot(x, z) > WORLD_RADIUS - 3.0) return false;
   if (isOnBridgeDeck(x, z)) {
     // Bridge end truss pylons flanking the deck entry at ±3.2m
@@ -1121,6 +1143,7 @@ export function isWalkablePosition(x: number, z: number): boolean {
 
   if (!isPashupatinathWalkable(x, z)) return false;
   if (!isBoudhanathWalkable(x, z)) return false;
+  if (!isPumdikotWalkable(x, z, refY)) return false;
 
   // Non-precinct landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
   for (const lm of LANDMARKS) {
@@ -1128,7 +1151,8 @@ export function isWalkablePosition(x: number, z: number): boolean {
       lm.id === 'janaki-mandir' ||
       lm.id === 'lumbini-buddha' ||
       lm.id === 'kathmandu-stupa' ||
-      lm.id === 'boudhanath-stupa'
+      lm.id === 'boudhanath-stupa' ||
+      lm.id === 'pumdikot-shiva'
     ) {
       continue;
     }
@@ -1137,17 +1161,6 @@ export function isWalkablePosition(x: number, z: number): boolean {
     if (Math.hypot(dx, dz) > 12.0) continue;
 
     switch (lm.id) {
-      case 'pumdikot-shiva':
-        if (Math.hypot(dx, dz) <= 3.1) return false;
-        if (
-          Math.hypot(dx, dz) >= 4.45 &&
-          Math.hypot(dx, dz) <= 5.2 &&
-          !(Math.abs(dx) < 1.35 && dz > 0)
-        ) {
-          return false;
-        }
-        if (Math.hypot(dx + 3.4, dz - 4.9) <= 0.95) return false;
-        break;
       case 'vit-vellore-tower':
         if (Math.abs(dx) <= 2.95 && Math.abs(dz) <= 2.75) return false;
         if (Math.hypot(dx + 3.3, dz - 3.85) <= 0.95) return false;
@@ -1556,11 +1569,12 @@ export function clampToWalkable(
   prevZ: number,
   nextX: number,
   nextZ: number,
+  refY = 0,
 ): { x: number; z: number } {
   const dist = Math.hypot(nextX - prevX, nextZ - prevZ);
   // Instant fast-travel teleport (> 6m): validate destination directly
   if (dist > 6.0) {
-    return isWalkablePosition(nextX, nextZ) ? { x: nextX, z: nextZ } : { x: prevX, z: prevZ };
+    return isWalkablePosition(nextX, nextZ, refY) ? { x: nextX, z: nextZ } : { x: prevX, z: prevZ };
   }
 
   // Swept substepping prevents fast sprinting from tunneling through temple walls
@@ -1573,12 +1587,12 @@ export function clampToWalkable(
   for (let i = 0; i < steps; i++) {
     const tx = curX + stepDx;
     const tz = curZ + stepDz;
-    if (isWalkablePosition(tx, tz)) {
+    if (isWalkablePosition(tx, tz, refY)) {
       curX = tx;
       curZ = tz;
-    } else if (isWalkablePosition(tx, curZ)) {
+    } else if (isWalkablePosition(tx, curZ, refY)) {
       curX = tx;
-    } else if (isWalkablePosition(curX, tz)) {
+    } else if (isWalkablePosition(curX, tz, refY)) {
       curZ = tz;
     } else {
       break;
@@ -2661,8 +2675,8 @@ export const MEADOW_ZONES: MeadowZone[] = [
   {
     id: 'annapurna-foothill-meadow',
     name: 'Annapurna Foothill Meadow',
-    x: -76,
-    z: -46,
+    x: -138,
+    z: -48,
     radiusX: 22,
     radiusZ: 22,
     falloff: 8,
@@ -2724,7 +2738,6 @@ export interface SpatialAmbienceMix {
 
 const STONE_PLAZA_RADII: Record<string, number> = {
   'boudhanath-stupa': 10.5,
-  'pumdikot-shiva': 9.5,
   'vit-vellore-tower': 11.2,
   'aniflow-studio': 8.2,
   'agent-infra-monolith': 8.4,
@@ -2760,6 +2773,7 @@ export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKin
   const pashuY = getPashupatinathSurfaceY(x, z);
   if (pashuY !== null && x <= PASHUPATI_COMPLEX.eastBankMaxX) return 'stone';
   if (isInBoudhaHardSurface(x, z)) return 'stone';
+  if (isInPumdikotHardSurface(x, z)) return 'stone';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
 
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
@@ -2886,6 +2900,7 @@ export function computeSpatialAmbienceMix(
 
   const ridgeFactor = Math.max(
     1 - smoothstep(10, 38, dPumdikot),
+    1 - smoothstep(10, 38, Math.hypot(x + 108, z + 74)),
     1 - smoothstep(24, 52, dLake),
     smoothstep(-95, -145, z) * 0.72,
     smoothstep(1.1, 3.0, elevation) * 0.58,
@@ -4204,7 +4219,7 @@ export const WORLD_FOREST_BIRD_EMITTERS: LumbiniSpatialEmitterSpec[] = [
     id: 'forest-pumdikot-east',
     kind: 'bird-canopy',
     label: 'Pumdikot Cedar Woodland',
-    x: -97.0,
+    x: -101.0,
     y: 8.6,
     z: -68.0,
     refDistance: 7.5,
@@ -4795,6 +4810,10 @@ export type ContextualWorldActionKind =
   | 'perform-bagmati-aarati'
   | 'spin-boudha-kora-wheels'
   | 'ring-boudha-singing-bowl'
+  | 'sprinkle-pumdikot-water'
+  | 'enter-pumdikot-sanctum'
+  | 'offer-pumdikot-bel-diya'
+  | 'inspect-pumdikot-shiva'
   | 'light-butter-lamp'
   | 'spin-prayer-wheel'
   | 'ring-temple-bell'
@@ -4857,6 +4876,7 @@ export function computeContextualWorldAction(
     gheeLampRacks?: ReadonlyArray<{ x: number; z: number; lit?: boolean }>;
     aaratiTerrace?: { x: number; z: number };
   } = {},
+  playerY = 0,
 ): ContextualWorldAction | null {
   // 0a. Boudhanath Interactive Ritual Spots
   const gompaBowl = BOUDHA_INTERACTIVE_SPOTS.gompaBowl;
@@ -4886,6 +4906,51 @@ export function computeContextualWorldAction(
       targetZ: boudhaWheels[bestKoraIdx].worldZ,
       index: bestKoraIdx,
     };
+  }
+
+  // 0b. Pumdikot Mahadev Interactive Rituals, Inner Sanctum & Upper 108-Lingam Terrace
+  if (isInPumdikotPrecinct(playerX, playerZ, 2.0)) {
+    const pLingam = PUMDIKOT_INTERACTIVE_SPOTS.innerLingamCenter;
+    const pDistToDomeCenter = Math.hypot(playerX - pLingam.x, playerZ - pLingam.z);
+    if (playerY >= 4.2 && pDistToDomeCenter <= 16.5) {
+      const plaque = PUMDIKOT_INTERACTIVE_SPOTS.upperTerracePlaque;
+      return {
+        kind: 'inspect-pumdikot-shiva',
+        label: 'Inspect 108-ft Pumdikot Mahadev',
+        targetX: plaque.x,
+        targetZ: plaque.z,
+      };
+    }
+    if (playerY < 4.2 && pDistToDomeCenter <= 6.4) {
+      return {
+        kind: 'offer-pumdikot-bel-diya',
+        label: 'Offer Bel Leaves & Light Diya',
+        targetX: pLingam.x,
+        targetZ: pLingam.z,
+      };
+    }
+    const portico = PUMDIKOT_INTERACTIVE_SPOTS.porticoEntrance;
+    if (
+      playerY < 4.2 &&
+      Math.hypot(playerX - portico.x, playerZ - portico.z) <= 3.8 &&
+      pDistToDomeCenter > 10.6
+    ) {
+      return {
+        kind: 'enter-pumdikot-sanctum',
+        label: 'Enter Pumdikot Inner Sanctum',
+        targetX: portico.x,
+        targetZ: portico.z,
+      };
+    }
+    const shivakunda = PUMDIKOT_INTERACTIVE_SPOTS.shivakundaCenter;
+    if (playerY < 4.2 && Math.hypot(playerX - shivakunda.x, playerZ - shivakunda.z) <= 8.2) {
+      return {
+        kind: 'sprinkle-pumdikot-water',
+        label: 'Sprinkle Sacred Water',
+        targetX: shivakunda.x,
+        targetZ: shivakunda.z,
+      };
+    }
   }
 
   // 0. Pashupatinath Sacred Interactions (Chaturmukha Shiva Lingam, Golden Nandi, Ghee-Lamp Racks, Bagmati Aarati)

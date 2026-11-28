@@ -97,6 +97,7 @@ function createDroopingFrondGeo(
  */
 function createMughalLotusUrnGeo(radius: number, height: number): THREE.LatheGeometry {
   const pts: THREE.Vector2[] = [
+    new THREE.Vector2(0, 0),
     new THREE.Vector2(radius * 0.56, 0),
     new THREE.Vector2(radius * 0.68, height * 0.06),
     new THREE.Vector2(radius * 0.52, height * 0.13),
@@ -110,6 +111,7 @@ function createMughalLotusUrnGeo(radius: number, height: number): THREE.LatheGeo
     new THREE.Vector2(radius * 1.00, height * 1.00),
     new THREE.Vector2(radius * 0.82, height * 0.98),
     new THREE.Vector2(radius * 0.76, height * 0.85),
+    new THREE.Vector2(0, height * 0.78),
   ];
   const geo = new THREE.LatheGeometry(pts, 28);
   geo.computeVertexNormals();

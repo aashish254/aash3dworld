@@ -2577,14 +2577,21 @@ export function createInteractiveProps(textures: ProceduralTextureSet): Interact
   ];
 
   // Center ALL lathe geometries around (0, 0, 0) for accurate 3D rigid-body tumbling
+  // Outer wall bottom->top (+radial normals), then rolled rim & inner wall top->bottom (-radial normals)
   const potPts = [
-    new THREE.Vector2(0.01, -0.31),
+    new THREE.Vector2(0.0, -0.31),
     new THREE.Vector2(0.24, -0.26),
     new THREE.Vector2(0.32, -0.03),
     new THREE.Vector2(0.18, 0.21),
     new THREE.Vector2(0.24, 0.31),
+    new THREE.Vector2(0.20, 0.315),
+    new THREE.Vector2(0.145, 0.20),
+    new THREE.Vector2(0.265, -0.03),
+    new THREE.Vector2(0.19, -0.23),
+    new THREE.Vector2(0.0, -0.26),
   ];
   const potGeo = new THREE.LatheGeometry(potPts, 16);
+  potGeo.computeVertexNormals();
   const crateGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
   const caseGeo = new THREE.BoxGeometry(0.62, 0.42, 0.46);
   const blockGeo = new THREE.BoxGeometry(0.88, 0.56, 0.62);

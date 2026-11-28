@@ -31,6 +31,10 @@ import {
   isInBoudhaHardSurface,
   isInBoudhaPrecinct,
 } from './boudhanathData';
+import {
+  isInPumdikotHardSurface,
+  isInPumdikotPrecinct,
+} from './pumdikotData';
 import { applyRealisticWaterShader } from './waterShader';
 import { getCachedMaterial, getCachedTexture, mergeStaticMeshesByMaterial } from './meshOptimization';
 
@@ -871,6 +875,7 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
         ((z >= 232.0 && z < 236.0) || (z > 364.0 && z <= 368.0))) ||
       (x >= 41.5 && x <= 62.5 && z >= 236.0 && z <= 364.0);
     const inBoudhaClear = isInBoudhaPrecinct(x, z, 2.5);
+    const inPumdikotClear = isInPumdikotPrecinct(x, z, 2.5);
 
     const inWaterBasin =
       underPeaceCanal ||
@@ -892,13 +897,14 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       underWestPeaceWalk ||
       underPashupatiAryaghat ||
       underPashupatiDeck ||
-      inBoudhaClear;
+      inBoudhaClear ||
+      inPumdikotClear;
     if (isStructuralClear) {
       pondMaskCache[i] = inWaterBasin ? 2 : 1;
     }
 
-    if (inBoudhaClear) {
-      // Preserve carved flat Boudhanath Kora plaza
+    if (inBoudhaClear || inPumdikotClear) {
+      // Preserve carved flat Boudhanath Kora & Pumdikot View Plazas
     } else if (underPashupatiAryaghat) {
       // Preserve smooth carved Bagmati river channel & 14m transitions from carvePashupatinathGround
       y = Math.min(y, 0.25);
@@ -1374,8 +1380,8 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     if (px >= -102 && px <= 63 && pz >= 230 && pz <= 370) {
       return { excluded: true, roadD: 99, distRiver };
     }
-    // Keep Boudhanath Kora Plaza free of wild grass
-    if (isInBoudhaHardSurface(px, pz)) {
+    // Keep Boudhanath Kora & Pumdikot View Plazas free of wild grass
+    if (isInBoudhaHardSurface(px, pz) || isInPumdikotHardSurface(px, pz)) {
       return { excluded: true, roadD: 99, distRiver };
     }
     for (const art of OUTER_TEMPLE_ARTIFACT_SPOTS) {
@@ -1975,11 +1981,12 @@ export function createCurbedRoads(
         lm.id !== 'janaki-mandir' &&
         lm.id !== 'lumbini-buddha' &&
         lm.id !== 'kathmandu-stupa' &&
-        lm.id !== 'boudhanath-stupa',
+        lm.id !== 'boudhanath-stupa' &&
+        lm.id !== 'pumdikot-shiva',
     ).map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'pumdikot-shiva' ? 7.6 : 7.0,
+      r: 7.0,
       mat: lm.id === 'vit-vellore-tower' ? sandstonePlazaMat : roadMat,
     })),
   ];
@@ -2128,11 +2135,13 @@ export function createCurbedRoads(
           baseX < -202.0 &&
           ((baseZ > 175.0 && baseZ < 180.0) || (baseZ > 19.0 && baseZ < 24.5));
         const inBoudhaGate = isInBoudhaPrecinct(baseX, baseZ, 4.5);
+        const inPumdikotGate = isInPumdikotPrecinct(baseX, baseZ, 3.0);
         if (
           inChowk ||
           inLumbini ||
           atEastCorridorTJunction ||
           inBoudhaGate ||
+          inPumdikotGate ||
           rm.deckY <= -0.1
         ) {
           prevRingStart = -1;
@@ -2321,6 +2330,18 @@ export function createCurbedRoads(
       z: 293.0,
       rotY: 1.57,
       lines: ['<- BOUDHANATH', 'KORA PLAZA', 'PASHUPATI ->'],
+    },
+    {
+      x: -43.5,
+      z: -24.5,
+      rotY: -0.3,
+      lines: ['PUMDIKOT ^', '108-FT SHIVA', 'RIVER BRIDGE ->'],
+    },
+    {
+      x: 58.0,
+      z: -20.5,
+      rotY: 0.25,
+      lines: ['VIT VELLORE ->', 'ANIFLOW STUDIO ^', 'SYSTEMS CITADEL'],
     },
   ];
   for (const mp of milepostSpecs) {
@@ -2979,151 +3000,6 @@ export function createInstancedFoliage(
   };
 }
 
-/**
- * Himalayan Cliffside Monastery (image_22cbe3ee) perched on a northern gneiss crag spur
- * alongside a Sherpa Stone Tea-House Lodge (image_b2a55a1e) below Ama Dablam.
- */
-export function createHimalayanGompaAndLodge(textures: ProceduralTextureSet): THREE.Group {
-  const group = new THREE.Group();
-
-  const cragMat = new THREE.MeshStandardMaterial({
-    map: textures.rockMap ?? textures.meadowMap,
-    normalMap: textures.rockNormal,
-    normalScale: new THREE.Vector2(1.05, 1.05),
-    roughnessMap: textures.rockRough ?? textures.meadowRough,
-    aoMap: textures.rockAo,
-    aoMapIntensity: 0.8,
-    color: 0x9ea2aa,
-    roughness: 0.94,
-  });
-  const whiteWallMat = new THREE.MeshStandardMaterial({
-    normalMap: textures.sandstoneNormal,
-    normalScale: new THREE.Vector2(0.35, 0.35),
-    color: 0xd4cec2,
-    roughness: 0.9,
-  });
-  const crimsonMat = new THREE.MeshStandardMaterial({ color: 0x6f211c, roughness: 0.82 });
-  const timberMat = new THREE.MeshStandardMaterial({
-    map: textures.woodMap,
-    normalMap: textures.woodNormal,
-    color: 0x5c3e26,
-    roughness: 0.84,
-  });
-  const goldMat = new THREE.MeshStandardMaterial({
-    color: 0xc9942a,
-    roughness: 0.3,
-    metalness: 0.85,
-  });
-  const warmWinMat = new THREE.MeshStandardMaterial({
-    color: 0xffdf99,
-    emissive: 0xe68c1e,
-    emissiveIntensity: 2.1,
-  });
-
-  // 1. Cliffside Tibetan-Nepali Gompa Monastery at (-48, -182) perched on Himalayan foothills
-  const gompa = new THREE.Group();
-  const gx = -48;
-  const gz = -182;
-  gompa.position.set(gx, groundHeightAt(gx, gz), gz);
-  gompa.rotation.y = 0.24;
-  gompa.scale.setScalar(2.35);
-
-  const cliffMain = new THREE.Mesh(new THREE.ConeGeometry(4.4, 9.6, 7), cragMat);
-  cliffMain.position.set(0, 4.2, -1.5);
-  cliffMain.scale.set(1.2, 1, 0.9);
-  cliffMain.castShadow = true;
-  cliffMain.receiveShadow = true;
-  const cliffLedge = new THREE.Mesh(new THREE.BoxGeometry(5.6, 3.6, 3.2), cragMat);
-  cliffLedge.position.set(0, 2.2, 0.6);
-  cliffLedge.castShadow = true;
-  gompa.add(cliffMain, cliffLedge);
-
-  for (let s = 0; s < 8; s++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.28, 0.65), cragMat);
-    step.position.set(-2.6 + s * 0.26, 0.4 + s * 0.42, 2.4 - s * 0.12);
-    gompa.add(step);
-  }
-
-  const hall = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.1, 2.4), whiteWallMat);
-  hall.position.set(0, 4.75, 0.65);
-  hall.castShadow = true;
-  const frieze = new THREE.Mesh(new THREE.BoxGeometry(4.32, 0.36, 2.52), crimsonMat);
-  frieze.position.set(0, 5.55, 0.65);
-  const timberGallery = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.72, 0.55), timberMat);
-  timberGallery.position.set(0, 4.65, 1.98);
-  const roofLower = new THREE.Mesh(new THREE.ConeGeometry(3.2, 0.72, 4), crimsonMat);
-  roofLower.rotation.y = Math.PI / 4;
-  roofLower.position.set(0, 6.12, 0.65);
-  const upperShrine = new THREE.Mesh(new THREE.BoxGeometry(1.85, 1.05, 1.55), whiteWallMat);
-  upperShrine.position.set(0, 6.75, 0.65);
-  const upperBand = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.24, 1.64), crimsonMat);
-  upperBand.position.set(0, 7.12, 0.65);
-  const roofTop = new THREE.Mesh(new THREE.ConeGeometry(1.65, 0.68, 4), goldMat);
-  roofTop.rotation.y = Math.PI / 4;
-  roofTop.position.set(0, 7.62, 0.65);
-  const gyeltsen = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.55, 8), goldMat);
-  gyeltsen.position.set(0, 8.16, 0.65);
-  gompa.add(hall, frieze, timberGallery, roofLower, upperShrine, upperBand, roofTop, gyeltsen);
-
-  for (const wx of [-1.25, 0, 1.25]) {
-    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.54), warmWinMat);
-    win.position.set(wx, 4.95, 1.87);
-    gompa.add(win);
-  }
-  group.add(gompa);
-
-  // 2. Sherpa Stone Tea-House Lodge at (-98, -176) below Ama Dablam
-  const lodge = new THREE.Group();
-  const lx = -98;
-  const lz = -176;
-  lodge.position.set(lx, groundHeightAt(lx, lz), lz);
-  lodge.rotation.y = 0.18;
-  lodge.scale.setScalar(2.15);
-
-  const stoneMat = new THREE.MeshStandardMaterial({
-    map: textures.cobbleMap,
-    normalMap: textures.cobbleNormal,
-    color: 0x8d887e,
-    roughness: 0.9,
-  });
-  const blueRoofMat = new THREE.MeshStandardMaterial({ color: 0x24597c, roughness: 0.62 });
-  const redRoofMat = new THREE.MeshStandardMaterial({ color: 0x8c2e28, roughness: 0.64 });
-
-  const foundation = new THREE.Mesh(new THREE.BoxGeometry(7.6, 1.0, 5.0), cragMat);
-  foundation.position.y = 0.05;
-  foundation.receiveShadow = true;
-  lodge.add(foundation);
-
-  const mainWing = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.55, 2.3), stoneMat);
-  mainWing.position.set(-0.9, 1.28, -0.35);
-  mainWing.castShadow = true;
-  const mainRoof = new THREE.Mesh(
-    createRectangularHipRoofGeometry(5.1, 0.92, 2.95),
-    blueRoofMat,
-  );
-  mainRoof.position.set(-0.9, 2.48, -0.35);
-
-  const sideWing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.35, 2.1), stoneMat);
-  sideWing.position.set(2.0, 1.18, 0.35);
-  sideWing.castShadow = true;
-  const sideRoof = new THREE.Mesh(
-    createRectangularHipRoofGeometry(3.2, 0.82, 2.7),
-    redRoofMat,
-  );
-  sideRoof.position.set(2.0, 2.24, 0.35);
-
-  for (const wx of [-2.1, -1.2, -0.3, 1.7]) {
-    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), warmWinMat);
-    win.position.set(wx, 1.38, wx > 1 ? 1.41 : 0.82);
-    lodge.add(win);
-  }
-  const lowWall = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.34, 0.24), stoneMat);
-  lowWall.position.set(-0.2, 0.65, 2.15);
-  lodge.add(mainWing, mainRoof, sideWing, sideRoof, lowWall);
-  group.add(lodge);
-
-  return group;
-}
 
 /**
  * Fewa / Tilicho Turquoise Glacial Lake, Cliff Waterfall, Tal Barahi Island Mini-Pagoda

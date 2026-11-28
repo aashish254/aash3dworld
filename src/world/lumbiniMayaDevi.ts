@@ -1355,7 +1355,7 @@ export function buildMayaDeviTemple(
 
   // 4 Sculpted Hammered Brass Kalash Offering Vessels at the Corners (with Dark Water & Floating Blossom)
   const kalashProfile = [
-    new THREE.Vector2(0.001, 0.0),
+    new THREE.Vector2(0.0, 0.0),
     new THREE.Vector2(0.048, 0.0),
     new THREE.Vector2(0.054, 0.012),
     new THREE.Vector2(0.040, 0.024),
@@ -1366,6 +1366,7 @@ export function buildMayaDeviTemple(
     new THREE.Vector2(0.082, 0.145),
     new THREE.Vector2(0.078, 0.150),
     new THREE.Vector2(0.052, 0.128),
+    new THREE.Vector2(0.0, 0.115),
   ];
   const kalashGeo = new THREE.LatheGeometry(kalashProfile, 22);
   kalashGeo.computeVertexNormals();

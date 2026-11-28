@@ -31,19 +31,24 @@ function buildCourtyardBell(bronzeMat: THREE.Material, ropeMat: THREE.Material):
   bracket.position.y = -0.14;
   swingPivot.add(bracket);
 
+  // Inner cavity top->bottom (-radial inward normals), chamfered lip, then outer shell bottom->top (+radial outward normals)
   const bellProfile = [
-    new THREE.Vector2(0.0, 0.0),
-    new THREE.Vector2(0.14, -0.05),
-    new THREE.Vector2(0.22, -0.24),
-    new THREE.Vector2(0.28, -0.58),
-    new THREE.Vector2(0.42, -0.78),
-    new THREE.Vector2(0.46, -0.84),
-    new THREE.Vector2(0.39, -0.84),
-    new THREE.Vector2(0.23, -0.56),
-    new THREE.Vector2(0.14, -0.18),
     new THREE.Vector2(0.0, -0.14),
+    new THREE.Vector2(0.14, -0.18),
+    new THREE.Vector2(0.23, -0.56),
+    new THREE.Vector2(0.38, -0.825),
+    new THREE.Vector2(0.395, -0.845),
+    new THREE.Vector2(0.445, -0.845),
+    new THREE.Vector2(0.46, -0.825),
+    new THREE.Vector2(0.42, -0.78),
+    new THREE.Vector2(0.28, -0.58),
+    new THREE.Vector2(0.22, -0.24),
+    new THREE.Vector2(0.14, -0.05),
+    new THREE.Vector2(0.0, 0.0),
   ];
-  const bellBody = new THREE.Mesh(new THREE.LatheGeometry(bellProfile, 18), bronzeMat);
+  const bellGeo = new THREE.LatheGeometry(bellProfile, 20);
+  bellGeo.computeVertexNormals();
+  const bellBody = new THREE.Mesh(bellGeo, bronzeMat);
   bellBody.position.y = -0.22;
   bellBody.castShadow = true;
   swingPivot.add(bellBody);

@@ -160,24 +160,14 @@ export function getDetailedPrayerWheelCapGeo(): THREE.LatheGeometry {
 let cachedBellBodyGeo: THREE.LatheGeometry | null = null;
 function getDetailedBellBodyGeo(): THREE.LatheGeometry {
   if (cachedBellBodyGeo) return cachedBellBodyGeo;
-  const pts: THREE.Vector2[] = [
-    new THREE.Vector2(0.0, 0.34),
-    new THREE.Vector2(0.045, 0.33),
-    new THREE.Vector2(0.08, 0.29),
-    new THREE.Vector2(0.135, 0.25),
-    new THREE.Vector2(0.15, 0.20),
-    new THREE.Vector2(0.155, 0.14),
-    new THREE.Vector2(0.175, 0.08),
-    new THREE.Vector2(0.225, 0.03),
-    new THREE.Vector2(0.245, 0.005),
-    new THREE.Vector2(0.23, 0.0),
-    new THREE.Vector2(0.195, 0.035),
-    new THREE.Vector2(0.135, 0.14),
-    new THREE.Vector2(0.02, 0.28),
-  ];
-  // Lathe requires increasing/consistent winding; build exterior bell cleanly bottom-to-top
+  // Inner cavity top->bottom (-radial inward normals), chamfered lip, then outer bell bottom->top (+radial outward normals)
   const cleanPts: THREE.Vector2[] = [
-    new THREE.Vector2(0.205, 0.0),
+    new THREE.Vector2(0.0, 0.28),
+    new THREE.Vector2(0.11, 0.21),
+    new THREE.Vector2(0.145, 0.13),
+    new THREE.Vector2(0.195, 0.015),
+    new THREE.Vector2(0.21, 0.0),
+    new THREE.Vector2(0.238, 0.0),
     new THREE.Vector2(0.245, 0.015),
     new THREE.Vector2(0.23, 0.042),
     new THREE.Vector2(0.185, 0.09),
@@ -188,7 +178,6 @@ function getDetailedBellBodyGeo(): THREE.LatheGeometry {
     new THREE.Vector2(0.045, 0.33),
     new THREE.Vector2(0.0, 0.35),
   ];
-  void pts;
   cachedBellBodyGeo = new THREE.LatheGeometry(cleanPts, 28);
   cachedBellBodyGeo.computeVertexNormals();
   return cachedBellBodyGeo;
@@ -394,6 +383,7 @@ let cachedDeepaBowlGeo: THREE.LatheGeometry | null = null;
 function getDetailedDeepaBowlGeo(): THREE.LatheGeometry {
   if (cachedDeepaBowlGeo) return cachedDeepaBowlGeo;
   const pts: THREE.Vector2[] = [
+    new THREE.Vector2(0.0, 0.0),
     new THREE.Vector2(0.08, 0.0),
     new THREE.Vector2(0.22, 0.03),
     new THREE.Vector2(0.35, 0.085),
@@ -401,6 +391,7 @@ function getDetailedDeepaBowlGeo(): THREE.LatheGeometry {
     new THREE.Vector2(0.37, 0.145),
     new THREE.Vector2(0.32, 0.11),
     new THREE.Vector2(0.12, 0.09),
+    new THREE.Vector2(0.0, 0.082),
   ];
   cachedDeepaBowlGeo = new THREE.LatheGeometry(pts, 32);
   cachedDeepaBowlGeo.computeVertexNormals();
