@@ -1,4 +1,14 @@
 import { LANDMARKS } from '../data/portfolioData';
+import {
+  PASHUPATI_COMPLEX,
+  PASHUPATI_INTERACTIVE_SPOTS,
+  carvePashupatinathGround,
+  getPashupatinathSurfaceY,
+  isInPashupatiBagmatiRiver,
+  isInPashupatiPrecinct,
+  isOnPashupatiBagmatiBridge,
+  isPashupatinathWalkable,
+} from './pashupatinathData';
 
 export type WeatherKind = 'clear' | 'mist' | 'foggy' | 'rain' | 'snow';
 export type TimePreset = 'live' | 'dawn' | 'noon' | 'dusk' | 'night';
@@ -209,6 +219,10 @@ export const ROAD_PATHS: Array<Array<[number, number]>> = [
   [[-92, 149.5], [-92, 158.0], [-92, 168.0], [-125, 174.0], [-170, 177.5], [-212, 178.5], [-250, 178.5], [-280, 178.5], [-320, 178.5], [-356, 178.5], [-376, 172.0], [-379, 140.0], [-379, 100.0], [-379, 60.0], [-376, 28.0], [-354, 21.0], [-315, 21.0], [-280, 21.0], [-245, 21.0], [-212, 21.0], [-176, 18.0], [-140, 11.0], [-108, 4]],
   // East Scenic Park Corridor cleanly outside Lumbini East Fence (x = -216) and >= 54m clear of Janaki Mandir West Wall (x = -148.5)
   [[-205.0, 176.5], [-205.0, 140.0], [-205.0, 108.0], [-205.0, 100.0], [-205.0, 72.0], [-205.0, 23.0]],
+  // Pashupatinath Western Avenue straight south along x=-92 from Janaki Mandir South Gate -> Paschim Dwar Approach Plaza (-82, 300)
+  [[-92.0, 168.0], [-92.0, 212.0], [-92.0, 256.0], [-92.0, 300.0], [-84.0, 300.0]],
+  // Pashupatinath North Gate Avenue from Janaki East Boulevard -> North Gate (-28, 238)
+  [[-46.5, 128.5], [-34.0, 168.0], [-28.0, 206.0], [-28.0, 236.5]],
 ];
 
 export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
@@ -243,11 +257,19 @@ export const ROAD_LANTERN_COORDS: Array<[number, number]> = [
   [-186.0, 24.5],
   [-209.5, 96.0],
   [-209.5, 104.0],
+  // Pashupatinath Western & North Avenue Approach Lanterns
+  [-96.5, 196.0],
+  [-87.5, 224.0],
+  [-96.5, 252.0],
+  [-87.5, 276.0],
+  [-96.5, 294.0],
+  [-24.0, 220.0],
+  [-32.0, 188.0],
 ];
 
 export const PRAYER_FLAG_POLES: Array<[number, number]> = [
-  [-55, -20],
-  [-42, -29],
+  [-96.0, 284.0],
+  [-84.0, 287.0],
   [-6.2, 0.5],
   [4.2, -4.5],
   [-114, 1],
@@ -301,11 +323,11 @@ export const OUTER_TEMPLE_ARTIFACT_SPOTS: OuterTempleArtifactSpot[] = [
   { x: -59.5, z: 144.5, kind: 'prayer-flags', rotY: 0.35, scale: 1.0 },
   { x: -68.5, z: 152.5, kind: 'offering-bowl', rotY: -0.2, scale: 1.05 },
   { x: -116.5, z: 152.5, kind: 'incense-stand', rotY: 0.25, scale: 1.0 },
-  // Pashupatinath outer temple grounds (-48, -24)
-  { x: -58.5, z: -31.5, kind: 'incense-stand', rotY: 0.3, scale: 1.05 },
-  { x: -37.5, z: -16.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
-  { x: -57.5, z: -14.5, kind: 'prayer-flags', rotY: 0.5, scale: 1.0 },
-  { x: -38.5, z: -33.0, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
+  // Pashupatinath Western Approach Plaza ritual artifacts (-98..-88, 289..313)
+  { x: -97.5, z: 289.5, kind: 'incense-stand', rotY: 0.3, scale: 1.05 },
+  { x: -93.0, z: 289.5, kind: 'offering-bowl', rotY: 0.0, scale: 1.05 },
+  { x: -97.5, z: 312.5, kind: 'prayer-flags', rotY: 0.5, scale: 1.0 },
+  { x: -95.0, z: 312.5, kind: 'incense-stand', rotY: -0.4, scale: 1.0 },
   // Boudhanath Stupa outer kora grounds (-108, 4)
   { x: -119.5, z: -5.5, kind: 'offering-bowl', rotY: 0.4, scale: 1.05 },
   { x: -96.5, z: -5.5, kind: 'prayer-flags', rotY: -0.3, scale: 1.05 },
@@ -397,6 +419,9 @@ export function getWorldTreeSpots(): TreeSpot[] {
       }
       if (lm.id === 'lumbini-buddha') {
         return dx > -92 && dx < 68 && dz > -70 && dz < 78;
+      }
+      if (lm.id === 'kathmandu-stupa') {
+        return isInPashupatiPrecinct(x, z);
       }
       const inPlazaRadius = Math.hypot(dx, dz - 2.0) < 15.0;
       const inCameraCorridor = dz >= 0 && dz < 24 && Math.abs(dx) < 10.5;
@@ -495,7 +520,9 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
         ? rx - lm.position.x > -64 && rx - lm.position.x < 46 && rz - lm.position.z > -42 && rz - lm.position.z < 75
         : lm.id === 'lumbini-buddha'
           ? rx - lm.position.x > -92 && rx - lm.position.x < 68 && rz - lm.position.z > -70 && rz - lm.position.z < 78
-          : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
+          : lm.id === 'kathmandu-stupa'
+            ? isInPashupatiPrecinct(rx, rz)
+            : Math.hypot(rx - lm.position.x, rz - lm.position.z) < 14,
     );
     const nearSpawn = Math.hypot(rx - SPAWN_POSITION.x, rz - SPAWN_POSITION.z) < 12;
     const riverCenterX = getRiverCenterX(rz);
@@ -511,7 +538,15 @@ export function getWorldBoulderSpots(): BoulderSpot[] {
 }
 
 export function getRiverCenterX(z: number): number {
-  return 34 + Math.sin(z * 0.028) * 6.5;
+  const meander = Math.sin(z * 0.028) * 6.5;
+  // Smoothly align the meandering river straight along x=34 through the stone Pashupatinath Aryaghat corridor (z=236..364)
+  if (z > 210 && z < 392) {
+    const enterT = smoothstep(210, 236, z);
+    const exitT = 1 - smoothstep(364, 392, z);
+    const channelize = Math.min(enterT, exitT);
+    return 34 + meander * (1 - channelize);
+  }
+  return 34 + meander;
 }
 
 export function getLandmarkApproachPoint(lm: (typeof LANDMARKS)[number]): { x: number; z: number } {
@@ -643,7 +678,7 @@ export function groundHeightAt(x: number, z: number): number {
           ? 1.45
           : lm.id === 'recruiter-beacon'
             ? 0.75
-            : lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha'
+            : lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa'
               ? 0.25
               : 0.2,
     })),
@@ -758,6 +793,18 @@ export function groundHeightAt(x: number, z: number): number {
     }
   }
 
+  // Level entire Pashupatinath Temple Complex parkland, approach avenues & Sleshmantak edge at y = 0.25m
+  const pashupati = LANDMARKS.find((l) => l.id === 'kathmandu-stupa');
+  if (pashupati) {
+    const pOutX = x < -102.0 ? -102.0 - x : x > 80.0 ? x - 80.0 : 0;
+    const pOutZ = z < 222.0 ? 222.0 - z : z > 378.0 ? z - 378.0 : 0;
+    const pashDist = Math.hypot(pOutX, pOutZ);
+    if (pashDist < 28) {
+      const pBlend = 1 - smoothstep(0, 28, pashDist);
+      h = lerp(h, 0.25, pBlend);
+    }
+  }
+
   // Carve Fewa / Tilicho turquoise glacial alpine lake basin in the NW foothills
   const distToLake = Math.hypot(x - GLACIAL_LAKE.x, z - GLACIAL_LAKE.z);
   if (distToLake < GLACIAL_LAKE.basinRadius) {
@@ -772,6 +819,9 @@ export function groundHeightAt(x: number, z: number): number {
     const bankBlend = 1 - smoothstep(3.2, 8.4, distToRiver);
     h = lerp(h, -1.85, bankBlend);
   }
+
+  // Carve monumental 108m x 124m Pashupatinath courtyard, Bagmati River channel, and East Bank Pandra Shivalaya
+  h = carvePashupatinathGround(x, z, h);
 
   return h;
 }
@@ -837,12 +887,17 @@ export function getSurfaceHeightAt(x: number, z: number): number {
 
   let surfaceY = base;
 
-  // Raised circular stone plaza aprons at Spawn & non-Janaki landmarks (cylinder top = centerY + 0.10)
+  const pashupatiY = getPashupatinathSurfaceY(x, z);
+  if (pashupatiY !== null) {
+    return pashupatiY;
+  }
+
+  // Raised circular stone plaza aprons at Spawn & non-Janaki/non-Lumbini/non-Pashupati landmarks
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.45) {
     surfaceY = Math.max(surfaceY, groundHeightAt(SPAWN_POSITION.x, SPAWN_POSITION.z) + 0.105);
   }
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha') continue;
+    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa') continue;
     const r = lm.id === 'boudhanath-stupa' ? 8.25 : lm.id === 'pumdikot-shiva' ? 7.65 : 7.05;
     if (Math.hypot(x - lm.position.x, z - lm.position.z) <= r) {
       surfaceY = Math.max(surfaceY, groundHeightAt(lm.position.x, lm.position.z) + 0.105);
@@ -957,6 +1012,12 @@ export function isWalkablePosition(x: number, z: number): boolean {
     if (onPylonX && Math.abs(z - BRIDGE_BOUNDS.centerZ) >= 2.8) return false;
     return true;
   }
+  if (isOnPashupatiBagmatiBridge(x, z)) {
+    if (Math.abs(z - PASHUPATI_COMPLEX.bridgeCenterZ) > PASHUPATI_COMPLEX.bridgeHalfZ - 0.35) {
+      return false;
+    }
+    return true;
+  }
   if (isOnLumbiniCanalBridge(x, z)) {
     // Arched Maitri Peace Bridge balustrade edge rails block side plunge while keeping ±2.25m deck open
     if (Math.abs(z - LUMBINI_PEACE_CANAL.bridgeCenterZ) >= 2.28) return false;
@@ -1021,20 +1082,16 @@ export function isWalkablePosition(x: number, z: number): boolean {
     if (Math.hypot(x - b.x, z - b.z) <= 0.98) return false;
   }
 
+  if (!isPashupatinathWalkable(x, z)) return false;
+
   // Non-Janaki landmark masonry bases, columns, sculptures & signposts (approachOffset points stay clear)
   for (const lm of LANDMARKS) {
-    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha') continue;
+    if (lm.id === 'janaki-mandir' || lm.id === 'lumbini-buddha' || lm.id === 'kathmandu-stupa') continue;
     const dx = x - lm.position.x;
     const dz = z - lm.position.z;
     if (Math.hypot(dx, dz) > 12.0) continue;
 
     switch (lm.id) {
-      case 'kathmandu-stupa':
-        if (Math.abs(dx) <= 4.7 && Math.abs(dz) <= 4.4 && !(Math.abs(dx - 0.45) <= 1.1 && dz >= 1.8)) {
-          return false;
-        }
-        if (Math.hypot(dx - 3.45, dz - 4.15) <= 0.95) return false;
-        break;
       case 'boudhanath-stupa':
         if (Math.abs(dx) <= 4.05 && Math.abs(dz) <= 4.05) return false;
         if (Math.hypot(dx - 3.85, dz - 4.4) <= 0.95) return false;
@@ -2615,7 +2672,6 @@ export interface SpatialAmbienceMix {
 }
 
 const STONE_PLAZA_RADII: Record<string, number> = {
-  'kathmandu-stupa': 9.2,
   'boudhanath-stupa': 10.5,
   'pumdikot-shiva': 9.5,
   'vit-vellore-tower': 11.2,
@@ -2649,6 +2705,9 @@ function pointToSegmentDist(
 export function getFootstepSurfaceKind(x: number, z: number): FootstepSurfaceKind {
   if (isOnBridgeDeck(x, z)) return 'wood';
   if (isOnLumbiniCanalBridge(x, z) || isOnLumbiniSacredBridge(x, z)) return 'stone';
+  if (isOnPashupatiBagmatiBridge(x, z)) return 'stone';
+  const pashuY = getPashupatinathSurfaceY(x, z);
+  if (pashuY !== null && x <= PASHUPATI_COMPLEX.eastBankMaxX) return 'stone';
   if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) <= 7.5) return 'stone';
 
   const lumbini = LANDMARKS.find((l) => l.id === 'lumbini-buddha');
@@ -4173,6 +4232,30 @@ export const WORLD_FOREST_BIRD_EMITTERS: LumbiniSpatialEmitterSpec[] = [
     baseWeight: 0.84,
     speciesHint: 'parakeet',
   },
+  {
+    id: 'forest-sleshmantak-north',
+    kind: 'bird-canopy',
+    label: 'Sleshmantak Sacred Woodland (North)',
+    x: 74.0,
+    y: 6.8,
+    z: 276.0,
+    refDistance: 7.0,
+    maxDistance: 56,
+    baseWeight: 0.96,
+    speciesHint: 'bulbul',
+  },
+  {
+    id: 'forest-sleshmantak-south',
+    kind: 'bird-dove',
+    label: 'Sleshmantak Sacred Woodland (South)',
+    x: 74.0,
+    y: 6.2,
+    z: 324.0,
+    refDistance: 7.0,
+    maxDistance: 56,
+    baseWeight: 0.92,
+    speciesHint: 'dove',
+  },
 ];
 
 export interface ForestBirdSpatialAudioState {
@@ -4522,8 +4605,13 @@ export function findWaterEdgeRippleOrigin(
     };
   }
 
-  // Bagmati River (only when wading inside channel, never on bridge deck)
-  if (playerZ >= -220 && playerZ <= 240 && !isOnBridgeDeck(playerX, playerZ)) {
+  // Bagmati River (only when wading inside channel, never on north or Pashupatinath bridge decks)
+  if (
+    playerZ >= -220 &&
+    playerZ <= 420 &&
+    !isOnBridgeDeck(playerX, playerZ) &&
+    !isOnPashupatiBagmatiBridge(playerX, playerZ)
+  ) {
     const riverX = getRiverCenterX(playerZ);
     if (Math.abs(playerX - riverX) < 6.4) {
       return {
@@ -4649,6 +4737,10 @@ export type ContextualWorldActionKind =
   | 'inspect-marker-stone'
   | 'inspect-mauryan-chambers'
   | 'inspect-nativity-relief'
+  | 'inspect-shiva-lingam'
+  | 'inspect-golden-nandi'
+  | 'light-pashupati-lamps'
+  | 'perform-bagmati-aarati'
   | 'light-butter-lamp'
   | 'spin-prayer-wheel'
   | 'ring-temple-bell'
@@ -4695,8 +4787,8 @@ export const MAYA_DEVI_PLAQUE_SPOTS: ReadonlyArray<{
 
 /**
  * Determines the highest-priority [E] contextual world interaction around the player:
- * Maya Devi museum plaques inside the temple, nearby Prayer Wheel,
- * Temple Bell, Pushkarini/Sacred Pond Pebble Toss, Bodhi Chautara Meditation, or nearest Landmark.
+ * Pashupatinath Sacred Sanctum/Nandi/Lamps/Bagmati Aarati, Maya Devi museum plaques,
+ * Prayer Wheel, Temple Bell, Pebble Toss, Meditation Bench, or nearest Landmark.
  */
 export function computeContextualWorldAction(
   playerX: number,
@@ -4707,7 +4799,60 @@ export function computeContextualWorldAction(
   pebbleSpots: ReadonlyArray<{ x: number; z: number; pondX: number; pondZ: number; label: string }>,
   meditationSpots: ReadonlyArray<{ x: number; z: number; lookX: number; lookZ: number; label: string }>,
   butterLampSpots: ReadonlyArray<{ x: number; z: number; isLit?: boolean }> = [],
+  pashupatiSpots: {
+    gheeLampRacks?: ReadonlyArray<{ x: number; z: number; lit?: boolean }>;
+    aaratiTerrace?: { x: number; z: number };
+  } = {},
 ): ContextualWorldAction | null {
+  // 0. Pashupatinath Sacred Interactions (Chaturmukha Shiva Lingam, Golden Nandi, Ghee-Lamp Racks, Bagmati Aarati)
+  const lingamCenter = PASHUPATI_INTERACTIVE_SPOTS.shivaLingamCenter;
+  if (
+    Math.abs(playerX - lingamCenter.x) <= 5.4 &&
+    Math.abs(playerZ - lingamCenter.z) <= 5.4
+  ) {
+    return {
+      kind: 'inspect-shiva-lingam',
+      label: 'Offer Bel Leaf & Inspect Chaturmukha Shiva Lingam',
+      targetX: lingamCenter.x,
+      targetZ: lingamCenter.z,
+    };
+  }
+
+  const nandiCenter = PASHUPATI_INTERACTIVE_SPOTS.nandiPedestalCenter;
+  if (Math.hypot(playerX - nandiCenter.x, playerZ - nandiCenter.z) <= 4.35) {
+    return {
+      kind: 'inspect-golden-nandi',
+      label: 'Inspect Golden Nandi Bull',
+      targetX: nandiCenter.x,
+      targetZ: nandiCenter.z,
+    };
+  }
+
+  const racks = pashupatiSpots.gheeLampRacks ?? PASHUPATI_INTERACTIVE_SPOTS.gheeLampRacks;
+  for (let i = 0; i < racks.length; i++) {
+    const r = racks[i];
+    if (Math.hypot(playerX - r.x, playerZ - r.z) <= 3.15) {
+      const isLit = 'lit' in r && Boolean(r.lit);
+      return {
+        kind: 'light-pashupati-lamps',
+        label: isLit ? 'Extinguish / Trim Sacred Ghee Lamps' : 'Light Tiered Brass Ghee-Lamp Rack',
+        targetX: r.x,
+        targetZ: r.z,
+        index: i,
+      };
+    }
+  }
+
+  const aarati = pashupatiSpots.aaratiTerrace ?? PASHUPATI_INTERACTIVE_SPOTS.aaratiTerraceCenter;
+  if (Math.hypot(playerX - aarati.x, playerZ - aarati.z) <= 4.4) {
+    return {
+      kind: 'perform-bagmati-aarati',
+      label: 'Perform Bagmati Sandhya Aarati & Float River Diyas',
+      targetX: aarati.x,
+      targetZ: aarati.z,
+    };
+  }
+
   // 1. Inside Maya Devi Sanctuary boardwalk -> pick nearest of the 3 museum plaques (Marker Stone, Mauryan Chambers, Nativity Sculpture)
   const inMayaDeviBoardwalk =
     playerX >= -297.5 && playerX <= -262.5 && playerZ >= 62.5 && playerZ <= 85.4;

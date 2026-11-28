@@ -542,13 +542,13 @@ export function applyRealisticWaterShader(
            modeCode === 0
              ? `
          float edgeNorm = abs(vWaterUv.x - 0.5) * 2.0;
-         float edgeNoise = sin(vWaterLocal.z * 1.15 - wt * 0.95) * 0.055 + cos(vWaterLocal.z * 2.3 + wt * 0.65) * 0.030;
-         float edgeDist = clamp(edgeNorm + edgeNoise, 0.0, 1.1);
-         float shoreBand = smoothstep(0.82, 0.985, edgeDist);
-         // Crisp stylized concentric shoreline foam contour lines
+         float edgeNoise = sin(vWaterLocal.z * 1.15 - wt * 0.95) * 0.045 + cos(vWaterLocal.z * 2.3 + wt * 0.65) * 0.025;
+         float edgeDist = clamp(edgeNorm + edgeNoise, 0.0, 1.08);
+         float shoreBand = smoothstep(0.89, 0.992, edgeDist);
+         // Subtle stylized shoreline foam contour lines
          float contourPhase = (1.0 - edgeDist) * 24.0 - wt * 1.45 + sin(vWaterLocal.z * 0.85) * 0.8;
-         float contourWave1 = smoothstep(0.68, 0.90, sin(contourPhase)) * smoothstep(0.66, 0.92, edgeDist) * (1.0 - smoothstep(0.95, 1.02, edgeDist));
-         float contourWave2 = smoothstep(0.76, 0.94, cos(vWaterLocal.z * 0.62 - wt * 1.1 + edgeDist * 14.0)) * smoothstep(0.55, 0.84, edgeDist) * (1.0 - smoothstep(0.86, 0.95, edgeDist));
+         float contourWave1 = smoothstep(0.74, 0.93, sin(contourPhase)) * smoothstep(0.72, 0.94, edgeDist) * (1.0 - smoothstep(0.95, 1.02, edgeDist));
+         float contourWave2 = smoothstep(0.80, 0.96, cos(vWaterLocal.z * 0.62 - wt * 1.1 + edgeDist * 14.0)) * smoothstep(0.60, 0.86, edgeDist) * (1.0 - smoothstep(0.88, 0.96, edgeDist));
          float f1 = sin(vWaterLocal.z * 0.95 - wt * 1.3 + sin(vWaterLocal.x * 1.45) * 1.2);
          float f2 = cos(vWaterLocal.x * 1.95 + vWaterLocal.z * 0.75 - wt * 0.95);`
              : modeCode === 1
@@ -619,12 +619,13 @@ export function applyRealisticWaterShader(
            interactiveFoam += smoothstep(0.42, 0.95, sin(ph)) * pFall * (0.16 + 0.26 * mvBoost);
          }
 
-         vec3 waterCol = mix(uWaterDeep, uWaterShallow, smoothstep(0.16, 0.92, edgeNorm));
+         vec3 waterCol = mix(uWaterDeep, uWaterShallow, smoothstep(0.18, 0.92, edgeNorm));
          float caustic = smoothstep(0.54, 0.96, (f1 * f2) * 0.5 + 0.5);
-         waterCol += vec3(0.06, 0.14, 0.15) * caustic;
+         waterCol += vec3(0.03, 0.09, 0.10) * caustic;
 
-         float totalFoam = clamp(shoreBand * 0.52 + contourWave1 * 0.62 + contourWave2 * 0.34 + interactiveFoam, 0.0, 0.92);
-         vec3 foamColor = vec3(0.92, 0.97, 0.98);
+         float maxFoamCap = ${modeCode === 0 ? '0.42' : '0.84'};
+         float totalFoam = clamp(shoreBand * ${modeCode === 0 ? '0.28' : '0.52'} + contourWave1 * ${modeCode === 0 ? '0.32' : '0.62'} + contourWave2 * ${modeCode === 0 ? '0.20' : '0.34'} + interactiveFoam, 0.0, maxFoamCap);
+         vec3 foamColor = ${modeCode === 0 ? 'vec3(0.68, 0.78, 0.80)' : 'vec3(0.90, 0.96, 0.97)'};
          diffuseColor.rgb = mix(waterCol, foamColor, totalFoam);`,
       )
       .replace(
@@ -642,15 +643,15 @@ export function applyRealisticWaterShader(
            vec3 rippleViewN = normalize((viewMatrix * vec4(rippleWorldN, 0.0)).xyz);
            normal = normalize(mix(normal, rippleViewN, 0.58));
 
-           // Fresnel sky/horizon reflection & crisp stylized specular glint
+           // Balanced Fresnel sky reflection & crisp sun glint without blowing out into bloom haze
            vec3 viewDirW = normalize(vViewPosition);
            float ndv = clamp(dot(normal, viewDirW), 0.0, 1.0);
-           float fresnel = pow(1.0 - ndv, 3.0);
-           vec3 skyReflect = vec3(0.58, 0.76, 0.86);
-           diffuseColor.rgb = mix(diffuseColor.rgb, skyReflect, fresnel * 0.42);
+           float fresnel = pow(1.0 - ndv, 3.4);
+           vec3 skyReflect = vec3(0.42, 0.60, 0.70);
+           diffuseColor.rgb = mix(diffuseColor.rgb, skyReflect, fresnel * ${modeCode === 0 ? '0.22' : '0.34'});
 
-           float sunSparkle = pow(clamp(max(0.0, vWaveCrest * 18.0) + max(0.0, abs(gx) + abs(gz)) * 3.2, 0.0, 1.0), 3.0);
-           diffuseColor.rgb += vec3(0.24, 0.28, 0.30) * sunSparkle;
+           float sunSparkle = pow(clamp(max(0.0, vWaveCrest * 18.0) + max(0.0, abs(gx) + abs(gz)) * 3.2, 0.0, 1.0), 3.2);
+           diffuseColor.rgb += vec3(0.08, 0.10, 0.11) * sunSparkle;
          }`,
       );
   };

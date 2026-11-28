@@ -88,6 +88,14 @@ import {
   sampleTerrainMeshHeight,
 } from './mountainAndTerrain';
 import { REFLECTIVE_WATER_ENV_UNIFORMS, triggerWaterRipple } from './waterShader';
+import { createPashupatinathComplex } from './pashupatinathComplex';
+import {
+  PASHUPATI_COMPLEX,
+  PASHUPATI_HIGHLIGHTS,
+  PASHUPATI_INTERACTIVE_SPOTS,
+  getPashupatinathSurfaceY,
+  getPashupatinathWaterAt,
+} from './pashupatinathData';
 import {
   ExplorerCharacterRig,
   InteractiveProp,
@@ -100,7 +108,6 @@ import {
   createExplorerCharacter,
   createInteractiveProps,
   createJanakiMandir,
-  createKathmanduPagoda,
   createLumbiniBuddha,
   createNoticeBoardKiosk,
   createPrayerFlagLine,
@@ -322,6 +329,7 @@ export class WorldEngine {
     intensityScale: number;
     warmFlicker: boolean;
     interiorSanctum: boolean;
+    sourceUserData?: Record<string, unknown>;
   }> = [];
   private pooledPointLights: THREE.PointLight[] = [];
   private animatedLandmarkNodes: THREE.Object3D[] = [];
@@ -344,6 +352,16 @@ export class WorldEngine {
     nativityRelief?: MayaDeviHighlightInfo;
   } | null = null;
   private mayaDeviPlaqueHitTargets: THREE.Mesh[] = [];
+  private pashupatiLingamHitTarget: THREE.Mesh | null = null;
+  private pashupatiNandiHitTarget: THREE.Mesh | null = null;
+  private pashupatiGheeLampHitTargets: THREE.Mesh[] = [];
+  private pashupatiGheeRackLit: [boolean, boolean] = [false, false];
+  private pashupatiAaratiHitTarget: THREE.Mesh | null = null;
+  private pashupatiLingamOfferingFn: (() => void) | null = null;
+  private pashupatiToggleRackFn: ((idx: number) => boolean) | null = null;
+  private pashupatiTriggerAaratiFn: (() => void) | null = null;
+  private pashupatiOfferingsCount = 0;
+  private bagmatiAaratiCount = 0;
   private activeTossedPebbles: TossedPebbleEntry[] = [];
   private tossedPebbleGeo: THREE.BufferGeometry | null = null;
   private tossedPebbleMat: THREE.MeshStandardMaterial | null = null;
@@ -563,6 +581,7 @@ export class WorldEngine {
         intensityScale: typeof light.userData.intensityScale === 'number' ? light.userData.intensityScale : 1,
         warmFlicker: Boolean(light.userData.warmFlicker),
         interiorSanctum: Boolean(light.userData.interiorSanctum),
+        sourceUserData: light.userData,
       });
       light.parent?.remove(light);
       light.dispose();
@@ -991,11 +1010,11 @@ export class WorldEngine {
     kiosk.rotation.y = -0.58;
     this.scene.add(kiosk);
 
-    // Prayer flag lines across Pashupatinath courtyard, Spawn vista, and Boudhanath mandala
+    // Prayer flag lines across Pashupatinath Western Approach Plaza, Spawn vista, and Boudhanath mandala
     const line1 = createPrayerFlagLine(
-      new THREE.Vector3(-55, sampleTerrainMeshHeight(this.terrainMesh, -55, -20) + 4.4, -20),
-      new THREE.Vector3(-42, sampleTerrainMeshHeight(this.terrainMesh, -42, -29) + 4.4, -29),
-      12,
+      new THREE.Vector3(-96, getSurfaceHeightAt(-96, 284) + 3.2, 284),
+      new THREE.Vector3(-84, getSurfaceHeightAt(-84, 287) + 3.2, 287),
+      10,
     );
     const line2 = createPrayerFlagLine(
       new THREE.Vector3(-6.2, sampleTerrainMeshHeight(this.terrainMesh, -6.2, 0.5) + 4.0, 0.5),
@@ -1027,8 +1046,8 @@ export class WorldEngine {
   }
 
   private buildLandmarks(): void {
-    const builders: Record<string, () => ReturnType<typeof createKathmanduPagoda>> = {
-      'kathmandu-stupa': () => createKathmanduPagoda(this.textures),
+    const builders: Record<string, () => ReturnType<typeof createPashupatinathComplex>> = {
+      'kathmandu-stupa': () => createPashupatinathComplex(this.textures),
       'boudhanath-stupa': () => createBoudhanathStupa(this.textures),
       'pumdikot-shiva': () => createPumdikotShiva(this.textures),
       'janaki-mandir': () =>
@@ -1055,7 +1074,7 @@ export class WorldEngine {
       if (!builder) continue;
 
       const built = builder();
-      const y = groundHeightAt(lm.position.x, lm.position.z);
+      const y = lm.id === 'kathmandu-stupa' ? 0 : groundHeightAt(lm.position.x, lm.position.z);
       built.group.position.set(lm.position.x, y, lm.position.z);
       built.hitMesh.userData.landmarkId = lm.id;
       this.scene.add(built.group);
@@ -1152,6 +1171,47 @@ export class WorldEngine {
             item.mesh.userData.mayaDeviPlaqueKey = item.highlightKey;
             this.mayaDeviPlaqueHitTargets.push(item.mesh);
           }
+        }
+      }
+      if (lm.id === 'kathmandu-stupa') {
+        const lingamHit = built.group.userData.lingamHitTarget as THREE.Mesh | undefined;
+        if (lingamHit) {
+          lingamHit.layers.set(2);
+          lingamHit.userData.nonCollidable = true;
+          lingamHit.userData.pashupatiAction = 'inspect-shiva-lingam';
+          this.pashupatiLingamHitTarget = lingamHit;
+        }
+        const nandiHit = built.group.userData.nandiHitTarget as THREE.Mesh | undefined;
+        if (nandiHit) {
+          nandiHit.layers.set(2);
+          nandiHit.userData.nonCollidable = true;
+          nandiHit.userData.pashupatiAction = 'inspect-golden-nandi';
+          this.pashupatiNandiHitTarget = nandiHit;
+        }
+        const rackHits = built.group.userData.gheeLampHitTargets as THREE.Mesh[] | undefined;
+        if (Array.isArray(rackHits)) {
+          rackHits.forEach((mesh, rIdx) => {
+            mesh.layers.set(2);
+            mesh.userData.nonCollidable = true;
+            mesh.userData.pashupatiRackIndex = rIdx;
+            this.pashupatiGheeLampHitTargets.push(mesh);
+          });
+        }
+        const aaratiHit = built.group.userData.aaratiHitTarget as THREE.Mesh | undefined;
+        if (aaratiHit) {
+          aaratiHit.layers.set(2);
+          aaratiHit.userData.nonCollidable = true;
+          aaratiHit.userData.pashupatiAction = 'perform-bagmati-aarati';
+          this.pashupatiAaratiHitTarget = aaratiHit;
+        }
+        if (typeof built.group.userData.triggerLingamOffering === 'function') {
+          this.pashupatiLingamOfferingFn = built.group.userData.triggerLingamOffering as () => void;
+        }
+        if (typeof built.group.userData.toggleGheeLampRack === 'function') {
+          this.pashupatiToggleRackFn = built.group.userData.toggleGheeLampRack as (idx: number) => boolean;
+        }
+        if (typeof built.group.userData.triggerBagmatiAarati === 'function') {
+          this.pashupatiTriggerAaratiFn = built.group.userData.triggerBagmatiAarati as () => void;
         }
       }
       if (built.cameraOccluders && built.cameraOccluders.length > 0) {
@@ -1365,7 +1425,10 @@ export class WorldEngine {
     for (const spot of OUTER_TEMPLE_ARTIFACT_SPOTS) {
       const artifact = new THREE.Group();
       const terrY = sampleTerrainMeshHeight(this.terrainMesh, spot.x, spot.z);
-      const baseY = spot.kind === 'prayer-flags' ? terrY : Math.max(getSurfaceHeightAt(spot.x, spot.z), terrY);
+      const baseY =
+        spot.kind === 'prayer-flags' && getPashupatinathSurfaceY(spot.x, spot.z) === null
+          ? terrY
+          : Math.max(getSurfaceHeightAt(spot.x, spot.z), terrY);
       artifact.position.set(spot.x, baseY, spot.z);
       artifact.rotation.y = spot.rotY;
       artifact.scale.setScalar(spot.scale);
@@ -2719,6 +2782,16 @@ export class WorldEngine {
         flowZ: 0.35,
       };
     }
+    const pashupatiWater = getPashupatinathWaterAt(x, z);
+    if (pashupatiWater) {
+      return {
+        inWater: true,
+        surfaceY: pashupatiWater.surfaceY,
+        bedY: groundHeightAt(x, z),
+        flowX: pashupatiWater.flowX,
+        flowZ: pashupatiWater.flowZ,
+      };
+    }
     return { inWater: false, surfaceY: -999, bedY: 0, flowX: 0, flowZ: 0 };
   }
 
@@ -2794,6 +2867,11 @@ export class WorldEngine {
     for (const hit of this.bellHitTargets) exclude.add(hit);
     for (const hit of this.prayerWheelHitTargets) exclude.add(hit);
     for (const hit of this.butterLampHitTargets) exclude.add(hit);
+    for (const hit of this.mayaDeviPlaqueHitTargets) exclude.add(hit);
+    if (this.pashupatiLingamHitTarget) exclude.add(this.pashupatiLingamHitTarget);
+    if (this.pashupatiNandiHitTarget) exclude.add(this.pashupatiNandiHitTarget);
+    if (this.pashupatiAaratiHitTarget) exclude.add(this.pashupatiAaratiHitTarget);
+    for (const hit of this.pashupatiGheeLampHitTargets) exclude.add(hit);
     for (const prop of this.interactiveProps) exclude.add(prop.mesh);
     return exclude;
   }
@@ -3368,10 +3446,42 @@ export class WorldEngine {
       this.bellHitTargets.length > 0 ||
       this.prayerWheelHitTargets.length > 0 ||
       this.butterLampHitTargets.length > 0 ||
-      this.mayaDeviPlaqueHitTargets.length > 0
+      this.mayaDeviPlaqueHitTargets.length > 0 ||
+      this.pashupatiLingamHitTarget !== null ||
+      this.pashupatiNandiHitTarget !== null ||
+      this.pashupatiGheeLampHitTargets.length > 0 ||
+      this.pashupatiAaratiHitTarget !== null
     ) {
       this.raycaster.layers.set(2);
       this.raycaster.setFromCamera(_pointer, this.camera);
+      if (this.pashupatiLingamHitTarget) {
+        if (this.raycaster.intersectObject(this.pashupatiLingamHitTarget, false).length > 0) {
+          this.triggerPashupatiLingamOffering();
+          return;
+        }
+      }
+      if (this.pashupatiNandiHitTarget) {
+        if (this.raycaster.intersectObject(this.pashupatiNandiHitTarget, false).length > 0) {
+          this.inspectPashupatiNandi();
+          return;
+        }
+      }
+      if (this.pashupatiGheeLampHitTargets.length > 0) {
+        const rackHits = this.raycaster.intersectObjects(this.pashupatiGheeLampHitTargets, false);
+        if (rackHits.length > 0) {
+          const rIdx = rackHits[0].object.userData.pashupatiRackIndex as number | undefined;
+          if (typeof rIdx === 'number') {
+            this.togglePashupatiGheeRack(rIdx);
+            return;
+          }
+        }
+      }
+      if (this.pashupatiAaratiHitTarget) {
+        if (this.raycaster.intersectObject(this.pashupatiAaratiHitTarget, false).length > 0) {
+          this.performPashupatiBagmatiAarati();
+          return;
+        }
+      }
       if (this.butterLampHitTargets.length > 0) {
         const lampHits = this.raycaster.intersectObjects(this.butterLampHitTargets, false);
         if (lampHits.length > 0) {
@@ -3670,6 +3780,62 @@ export class WorldEngine {
     this.scheduleImmediateRender();
   }
 
+  public triggerPashupatiLingamOffering(): void {
+    this.pashupatiLingamOfferingFn?.();
+    this.pashupatiOfferingsCount += 1;
+    this.ritualOfferingsCount += 1;
+    soundEngine.playPashupatiShankhaBlessing();
+    const lc = PASHUPATI_INTERACTIVE_SPOTS.shivaLingamCenter;
+    this.spawnButterLampOfferingParticles(lc.x, PASHUPATI_COMPLEX.plinthDeckY + 1.45, lc.z);
+    this.writeDataset('pashupatiOfferings', String(this.pashupatiOfferingsCount));
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.(PASHUPATI_HIGHLIGHTS.shivaLingam);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public inspectPashupatiNandi(): void {
+    soundEngine.playBellChime();
+    this.callbacks.onInspectHighlight?.(PASHUPATI_HIGHLIGHTS.goldenNandi);
+  }
+
+  public togglePashupatiGheeRack(index: number): void {
+    const rack = PASHUPATI_INTERACTIVE_SPOTS.gheeLampRacks[index];
+    if (!rack || !this.pashupatiToggleRackFn) return;
+    const isNowLit = this.pashupatiToggleRackFn(index);
+    if (index === 0 || index === 1) {
+      this.pashupatiGheeRackLit[index] = isNowLit;
+    }
+    this.ritualOfferingsCount += 1;
+    this.spawnButterLampOfferingParticles(rack.x, PASHUPATI_COMPLEX.courtyardY + 1.05, rack.z);
+    const litTotal = (this.pashupatiGheeRackLit[0] ? 1 : 0) + (this.pashupatiGheeRackLit[1] ? 1 : 0);
+    soundEngine.playRitualButterLampOffering(Math.max(1, litTotal));
+    this.writeDataset('pashupatiGheeRacksLit', String(litTotal));
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.syncLighting((performance.now() - this.startTimeMs) / 1000);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
+  public performPashupatiBagmatiAarati(): void {
+    this.pashupatiTriggerAaratiFn?.();
+    this.bagmatiAaratiCount += 1;
+    this.ritualOfferingsCount += 1;
+    soundEngine.playBagmatiAaratiRitual();
+    for (const st of PASHUPATI_INTERACTIVE_SPOTS.aaratiStands) {
+      this.spawnButterLampOfferingParticles(st.x, 1.85, st.z);
+    }
+    this.writeDataset('bagmatiAaratiCount', String(this.bagmatiAaratiCount));
+    this.writeDataset('ritualOfferings', String(this.ritualOfferingsCount));
+    this.callbacks.onInspectHighlight?.(PASHUPATI_HIGHLIGHTS.bagmatiAarati);
+    this.syncLighting((performance.now() - this.startTimeMs) / 1000);
+    this.lastContextualAction = this.getContextualAction();
+    this.emitHud(true);
+    this.scheduleImmediateRender();
+  }
+
   private getContextualAction(): ContextualWorldAction | null {
     const nearest = findNearestLandmark(this.playerPos.x, this.playerPos.z);
 
@@ -3725,6 +3891,14 @@ export class WorldEngine {
       this.pebbleSpots,
       this.meditationSpots,
       this.lampSpotsScratch,
+      {
+        gheeLampRacks: PASHUPATI_INTERACTIVE_SPOTS.gheeLampRacks.map((r, idx) => ({
+          x: r.x,
+          z: r.z,
+          lit: Boolean(this.pashupatiGheeRackLit[idx]),
+        })),
+        aaratiTerrace: PASHUPATI_INTERACTIVE_SPOTS.aaratiTerraceCenter,
+      },
     );
   }
 
@@ -3737,6 +3911,22 @@ export class WorldEngine {
     const action = this.getContextualAction();
     if (!action) return;
 
+    if (action.kind === 'inspect-shiva-lingam') {
+      this.triggerPashupatiLingamOffering();
+      return;
+    }
+    if (action.kind === 'inspect-golden-nandi') {
+      this.inspectPashupatiNandi();
+      return;
+    }
+    if (action.kind === 'light-pashupati-lamps' && typeof action.index === 'number') {
+      this.togglePashupatiGheeRack(action.index);
+      return;
+    }
+    if (action.kind === 'perform-bagmati-aarati') {
+      this.performPashupatiBagmatiAarati();
+      return;
+    }
     if (action.kind === 'inspect-marker-stone' && this.mayaDeviHighlights?.markerStone) {
       soundEngine.playBellChime();
       this.callbacks.onInspectHighlight?.(this.mayaDeviHighlights.markerStone);
@@ -3808,38 +3998,40 @@ export class WorldEngine {
       ? 8.4
       : isLumbini
         ? 8.2
-        : isTallTower
-          ? 5.0
-          : isBoudha
-            ? 3.9
-            : isPumdikot
-              ? 3.6
-              : isPagoda
-                ? 3.5
+        : isPagoda
+          ? 10.5
+          : isTallTower
+            ? 5.0
+            : isBoudha
+              ? 3.9
+              : isPumdikot
+                ? 3.6
                 : 2.8;
     const focusDist = isJanaki
       ? 60
       : isLumbini
         ? 68.0
-        : isTallTower
-          ? 16.5
-          : isBoudha
+        : isPagoda
+          ? 72.0
+          : isTallTower
             ? 16.5
-            : isPumdikot
-              ? 15.2
-              : isPagoda
-                ? 14.8
+            : isBoudha
+              ? 16.5
+              : isPumdikot
+                ? 15.2
                 : 13.0;
     const camYOffset = isJanaki
       ? 8.5
       : isLumbini
         ? 10.5
-        : isTallTower
-          ? 5.2
-          : isBoudha || isPumdikot
-            ? 4.8
-            : 4.5;
-    const azimuthOffset = isJanaki ? 0.2 : isLumbini ? 0.34 : 0.32;
+        : isPagoda
+          ? 14.5
+          : isTallTower
+            ? 5.2
+            : isBoudha || isPumdikot
+              ? 4.8
+              : 4.5;
+    const azimuthOffset = isJanaki ? 0.2 : isLumbini ? 0.34 : isPagoda ? -0.52 : 0.32;
     lookOut.set(lm.position.x, ly + lookYOffset, lm.position.z);
     camOut.set(
       lookOut.x + Math.sin(this.cameraYaw + azimuthOffset) * focusDist,
@@ -4009,19 +4201,52 @@ export class WorldEngine {
     this.character.root.position.copy(this.playerPos);
     if (Math.hypot(safe.x - prevX, safe.z - prevZ) > 8) {
       this.justTeleported = true;
-      this.playerYaw = Math.PI;
-      this.cameraYaw = 0;
-      this.targetCameraYaw = 0;
-      this.cameraPitch = 0.45;
-      this.targetCameraPitch = 0.45;
+      const atPashupatiWestPlaza =
+        Math.abs(safe.x - (PASHUPATI_COMPLEX.minX - 10.0)) <= 10.0 &&
+        Math.abs(safe.z - PASHUPATI_COMPLEX.centerZ) <= 12.0;
+      const inPashupatiSanctum =
+        Math.abs(safe.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
+        Math.abs(safe.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
+      if (atPashupatiWestPlaza) {
+        // Face East directly toward the grand Pashupatinath Paschim Dwar Torana Gate
+        this.playerYaw = Math.PI * 0.5;
+        this.cameraYaw = -Math.PI * 0.5;
+        this.targetCameraYaw = -Math.PI * 0.5;
+        this.cameraPitch = 0.24;
+        this.targetCameraPitch = 0.24;
+      } else if (inPashupatiSanctum) {
+        const toCenterX = PASHUPATI_COMPLEX.centerX - safe.x;
+        const toCenterZ = PASHUPATI_COMPLEX.centerZ - safe.z;
+        const aimAngle = Math.hypot(toCenterX, toCenterZ) > 0.2 ? Math.atan2(toCenterX, toCenterZ) : Math.PI * 0.5;
+        this.playerYaw = aimAngle;
+        this.cameraYaw = aimAngle + Math.PI;
+        this.targetCameraYaw = aimAngle + Math.PI;
+        this.cameraPitch = 0.14;
+        this.targetCameraPitch = 0.14;
+      } else {
+        this.playerYaw = Math.PI;
+        this.cameraYaw = 0;
+        this.targetCameraYaw = 0;
+        this.cameraPitch = 0.45;
+        this.targetCameraPitch = 0.45;
+      }
       this.character.root.rotation.y = this.playerYaw;
       const inCourtyard =
+        inPashupatiSanctum ||
         (Math.abs(safe.x + 92) <= 13.8 && safe.z >= 79.0 && safe.z <= 102.6) ||
         (Math.abs(safe.x - LUMBINI_SACRED_POND.centerX) <= 17.2 &&
           safe.z >= LUMBINI_SACRED_POND.centerZ - 33.2 &&
           safe.z <= LUMBINI_SACRED_POND.centerZ - 10.8);
       this.currentLookAt.set(safe.x, this.playerPos.y + (inCourtyard ? 1.5 : 1.8), safe.z);
-      if (inCourtyard) {
+      if (atPashupatiWestPlaza) {
+        this.currentCamPos.set(safe.x - 14.5, this.playerPos.y + 6.5, safe.z + 2.5);
+      } else if (inPashupatiSanctum) {
+        this.currentCamPos.set(
+          safe.x + Math.sin(this.cameraYaw) * 3.2,
+          this.playerPos.y + 2.0,
+          safe.z + Math.cos(this.cameraYaw) * 3.2,
+        );
+      } else if (inCourtyard) {
         this.currentCamPos.set(safe.x, this.playerPos.y + 4.4, safe.z + 6.5);
       } else {
         this.currentCamPos.set(safe.x + 7.5, this.playerPos.y + 9.2, safe.z + 20.5);
@@ -4166,7 +4391,10 @@ export class WorldEngine {
       Math.abs(lightingAnchor.x - LUMBINI_SACRED_POND.centerX) <= 17.8 &&
       lightingAnchor.z >= LUMBINI_SACRED_POND.centerZ - 33.8 &&
       lightingAnchor.z <= LUMBINI_SACRED_POND.centerZ - 10.2;
-    if (inMayaDeviSanctum) {
+    const inPashupatiSanctum =
+      Math.abs(lightingAnchor.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
+      Math.abs(lightingAnchor.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
+    if (inMayaDeviSanctum || inPashupatiSanctum) {
       this.hemiLight.color.set(state.hemiSkyColor).lerp(_targetColor.set(0xffebd0), 0.72);
       this.hemiLight.groundColor.set(state.hemiGroundColor).lerp(_targetColor.set(0x7d4c2c), 0.78);
       this.hemiLight.intensity = Math.max(state.hemiIntensity, 1.05);
@@ -4227,8 +4455,13 @@ export class WorldEngine {
     } else {
       const descCount = this.beaconPoolDescs.length;
       for (let i = 0; i < descCount; i++) {
+        const desc = this.beaconPoolDescs[i];
+        const dynScale =
+          typeof desc.sourceUserData?.intensityScale === 'number'
+            ? desc.sourceUserData.intensityScale
+            : desc.intensityScale;
         this.beaconEligible[i] =
-          state.lanternIntensity <= 0.02 && !this.beaconPoolDescs[i].interiorSanctum ? 0 : 1;
+          dynScale <= 0.01 || (state.lanternIntensity <= 0.02 && !desc.interiorSanctum) ? 0 : 1;
       }
       const selectedCount = selectClosestIndicesZeroAlloc(
         this.beaconPosX,
@@ -4251,10 +4484,16 @@ export class WorldEngine {
         pl.position.copy(desc.pos);
         pl.distance = desc.distance;
         pl.decay = desc.decay;
+        const dynScale =
+          typeof desc.sourceUserData?.intensityScale === 'number'
+            ? desc.sourceUserData.intensityScale
+            : desc.intensityScale;
         const effectiveLantern = desc.interiorSanctum
           ? Math.max(0.75, state.lanternIntensity)
-          : state.lanternIntensity;
-        const baseInt = effectiveLantern * desc.intensityScale;
+          : dynScale > 1.8
+            ? Math.max(0.85, state.lanternIntensity)
+            : state.lanternIntensity;
+        const baseInt = effectiveLantern * dynScale;
         if (desc.flickerAmp > 0) {
           const wave =
             0.55 * Math.sin(elapsed * 6.4 + desc.flickerPhase) +
@@ -5545,6 +5784,9 @@ export class WorldEngine {
       Math.abs(this.playerPos.x - LUMBINI_SACRED_POND.centerX) <= 17.2 &&
       this.playerPos.z >= LUMBINI_SACRED_POND.centerZ - 33.2 &&
       this.playerPos.z <= LUMBINI_SACRED_POND.centerZ - 10.8;
+    const inPashupatiSanctum =
+      Math.abs(this.playerPos.x - PASHUPATI_COMPLEX.centerX) <= 8.2 &&
+      Math.abs(this.playerPos.z - PASHUPATI_COMPLEX.centerZ) <= 8.2;
 
     const lookLambda = this.cameraMode === 'first-person' ? 18.0 : 12.0;
     this.cameraYaw = dampCameraValue(this.cameraYaw, this.targetCameraYaw, lookLambda, dt);
@@ -5555,6 +5797,7 @@ export class WorldEngine {
 
     if (this.renderer?.domElement) {
       this.writeDataset('insideMayaDevi', inMayaDeviInterior ? 'true' : 'false');
+      this.writeDataset('insidePashupatiSanctum', inPashupatiSanctum ? 'true' : 'false');
       this.writeDataset('cameraMode', this.cameraMode);
       if (elapsed - this.lastSimDatasetFlushAt < 0.02 || this.lastSimDatasetFlushAt < 0) {
         this.writeDataset('cameraPitchDeg', String(Math.round((-this.cameraPitch * 180) / Math.PI)));
@@ -5600,11 +5843,13 @@ export class WorldEngine {
         Math.abs(this.playerPos.x + 92) <= 13.8 &&
         this.playerPos.z >= 79.0 &&
         this.playerPos.z <= 102.6;
-      const activeCamDist = inMayaDeviInterior
-        ? Math.min(this.cameraDistance, 6.2)
-        : inJanakiCourtyard
-          ? Math.min(this.cameraDistance, 8.2)
-          : this.cameraDistance;
+      const activeCamDist = inPashupatiSanctum
+        ? Math.min(this.cameraDistance, 3.8)
+        : inMayaDeviInterior
+          ? Math.min(this.cameraDistance, 6.2)
+          : inJanakiCourtyard
+            ? Math.min(this.cameraDistance, 8.2)
+            : this.cameraDistance;
       const horiz = Math.cos(this.cameraPitch) * activeCamDist;
       const vert = Math.sin(this.cameraPitch) * activeCamDist;
       _camLookTarget.set(this.playerPos.x, this.playerPos.y + 1.5, this.playerPos.z);

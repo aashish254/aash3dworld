@@ -782,7 +782,14 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
     ...LANDMARKS.map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
-      r: lm.id === 'janaki-mandir' ? 58 : lm.id === 'lumbini-buddha' ? 92 : 20,
+      r:
+        lm.id === 'janaki-mandir'
+          ? 58
+          : lm.id === 'lumbini-buddha'
+            ? 92
+            : lm.id === 'kathmandu-stupa'
+              ? 88
+              : 20,
     })),
   ];
 
@@ -847,10 +854,22 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
           (x >= LUMBINI_PEACE_CANAL.minX - 1.4 && x <= LUMBINI_PEACE_CANAL.minX + 0.2)));
 
     const roadDist =
-      x > -410 && x < 115 && z > -118 && z < 195 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
+      x > -410 && x < 115 && z > -118 && z < 390 ? minDistanceToRoadsFast(x, z, roadGrid) : 99;
     roadDistCache[i] = roadDist;
+
+    const underPashupatiAryaghat =
+      x > 26.0 && x < 41.5 && z >= 224.0 && z <= 376.0;
+    const underPashupatiDeck =
+      (x >= -100.5 && x <= 26.0 && z >= 236.0 && z <= 364.0) ||
+      (Math.abs(x + 28.0) <= 4.8 &&
+        ((z >= 232.0 && z < 236.0) || (z > 364.0 && z <= 368.0))) ||
+      (x >= 41.5 && x <= 62.5 && z >= 236.0 && z <= 364.0);
+
     const inWaterBasin =
-      underPeaceCanal || inSurroundingPond || underPushkariniBasin || underGangaSagarBasin;
+      underPeaceCanal ||
+      inSurroundingPond ||
+      underPushkariniBasin ||
+      underGangaSagarBasin;
     const isStructuralClear =
       inWaterBasin ||
       onBridgePier ||
@@ -863,12 +882,19 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
       underBridgeWalk ||
       underLumbiniPlaza ||
       underLumbiniOuterPromenade ||
-      underWestPeaceWalk;
+      underWestPeaceWalk ||
+      underPashupatiAryaghat ||
+      underPashupatiDeck;
     if (isStructuralClear) {
       pondMaskCache[i] = inWaterBasin ? 2 : 1;
     }
 
-    if (underPeaceCanal) {
+    if (underPashupatiAryaghat) {
+      // Preserve smooth carved Bagmati river channel & 14m transitions from carvePashupatinathGround
+      y = Math.min(y, 0.25);
+    } else if (underPashupatiDeck) {
+      y = 0.18;
+    } else if (underPeaceCanal) {
       y = -1.15;
     } else if (inSurroundingPond || onSacredBridge) {
       y = -0.9;
@@ -912,9 +938,10 @@ export function createDioramaTerrain(textures: ProceduralTextureSet): THREE.Mesh
         }
       }
       const riverBridgeClear =
-        x > BRIDGE_BOUNDS.minX - 6 &&
-        x < BRIDGE_BOUNDS.maxX + 6 &&
-        Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.5
+        (x > BRIDGE_BOUNDS.minX - 6 &&
+          x < BRIDGE_BOUNDS.maxX + 6 &&
+          Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.5) ||
+        (x > 25.0 && x < 44.0 && Math.abs(z - 300.0) < 7.5)
           ? 0
           : 1;
       const roadFade = THREE.MathUtils.smoothstep(roadDist, 3.6, 7.2);
@@ -1325,6 +1352,10 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
     ) {
       return { excluded: true, roadD: 99, distRiver };
     }
+    // Keep Pashupatinath courtyard, Western Plaza, Bagmati River & Pandra Shivalaya free of wild grass while keeping Sleshmantak Forest grassy
+    if (px >= -102 && px <= 63 && pz >= 230 && pz <= 370) {
+      return { excluded: true, roadD: 99, distRiver };
+    }
     for (const art of OUTER_TEMPLE_ARTIFACT_SPOTS) {
       if (Math.hypot(px - art.x, pz - art.z) <= 1.95 * art.scale) {
         return { excluded: true, roadD: 99, distRiver };
@@ -1656,8 +1687,9 @@ export function createInstancedGrassField(terrainMesh?: THREE.Mesh): AnimatedGra
 export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWaterController {
   const group = new THREE.Group();
 
-  const geo = new THREE.PlaneGeometry(14.5, 480, 24, 120);
+  const geo = new THREE.PlaneGeometry(14.5, 720, 24, 180);
   geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0, 120);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const rx = pos.getX(i);
@@ -1668,21 +1700,21 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
 
   const uTime = { value: 0 };
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x26545a,
+    color: 0x1b4c54,
     normalMap: textures.waterNormal,
-    normalScale: new THREE.Vector2(0.45, 0.45),
-    roughness: 0.06,
-    metalness: 0.48,
+    normalScale: new THREE.Vector2(0.42, 0.42),
+    roughness: 0.22,
+    metalness: 0.14,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.94,
   });
 
   applyRealisticWaterShader(mat, uTime, {
     mode: 'river',
     maxRadius: 7.25,
     flowSpeed: 2.1,
-    deepTint: 0x0b353c,
-    shallowTint: 0x265e5d,
+    deepTint: 0x0a323b,
+    shallowTint: 0x1d585e,
   });
 
   const waterMesh = new THREE.Mesh(geo, mat);
@@ -1721,11 +1753,13 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   });
 
   const stoneCoords: Array<{ x: number; y: number; z: number; s: number }> = [];
-  for (let i = 0; i < 120; i++) {
-    const z = -175 + i * 2.95 + Math.sin(i * 1.9) * 0.8;
+  for (let i = 0; i < 210; i++) {
+    const z = -210 + i * 3.25 + Math.sin(i * 1.9) * 0.8;
     if (Math.abs(z - BRIDGE_BOUNDS.centerZ) < 6.5) continue;
+    if (z >= 220 && z <= 382) continue;
     const rcX = getRiverCenterX(z);
-    const offset = Math.sin(i * 2.71) * 5.8;
+    const maxOffset = 4.2;
+    const offset = Math.sin(i * 2.71) * maxOffset;
     const x = rcX + offset;
     const bedY = groundHeightAt(x, z);
     const s = 0.68 + (i % 5) * 0.26;
@@ -1772,7 +1806,7 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
   for (let i = 0; i < leafCount; i++) {
     leafMeta.push({
       offset: (Math.sin(i * 19.37) * 0.65) * 4.5,
-      zBase: -170 + (i / leafCount) * 340,
+      zBase: -210 + (i / leafCount) * 640,
       speed: 1.35 + (i % 5) * 0.22,
       rot: i * 1.4,
       phase: i * 0.87,
@@ -1790,8 +1824,8 @@ export function createAnimatedRiver(textures: ProceduralTextureSet): AnimatedWat
       uTime.value = elapsed;
       for (let i = 0; i < leafCount; i++) {
         const m = leafMeta[i];
-        const span = 340;
-        const z = ((m.zBase + elapsed * m.speed + 170) % span) - 170;
+        const span = 640;
+        const z = ((m.zBase + elapsed * m.speed + 210) % span) - 210;
         const x = getRiverCenterX(z) + m.offset + Math.sin(elapsed * 0.9 + m.phase) * 0.45;
         const y = -0.305 + Math.sin(elapsed * 2.2 + m.phase) * 0.014;
         _vec3.set(x, y, z);
@@ -1914,7 +1948,12 @@ export function createCurbedRoads(
 
   const aprons = [
     { x: SPAWN_POSITION.x, z: SPAWN_POSITION.z, r: 7.4, mat: roadMat },
-    ...LANDMARKS.filter((lm) => lm.id !== 'janaki-mandir' && lm.id !== 'lumbini-buddha').map((lm) => ({
+    ...LANDMARKS.filter(
+      (lm) =>
+        lm.id !== 'janaki-mandir' &&
+        lm.id !== 'lumbini-buddha' &&
+        lm.id !== 'kathmandu-stupa',
+    ).map((lm) => ({
       x: lm.position.x,
       z: lm.position.z,
       r: lm.id === 'boudhanath-stupa' ? 8.2 : lm.id === 'pumdikot-shiva' ? 7.6 : 7.0,
@@ -2231,6 +2270,74 @@ export function createCurbedRoads(
     lanternLights.push(ptLight);
     lanternGroup.add(post);
   });
+
+  // Carved Stone Directional Mileposts along Southern Perimeter Boulevard & Pashupati West Avenue
+  const milepostSpecs: Array<{ x: number; z: number; rotY: number; lines: string[] }> = [
+    {
+      x: -96.5,
+      z: 166.0,
+      rotY: 0.15,
+      lines: ['<- LUMBINI', 'JANAKI ^', 'v PASHUPATI'],
+    },
+    {
+      x: -33.5,
+      z: 228.0,
+      rotY: 0.0,
+      lines: ['PASHUPATINATH', 'NORTH GATE v', '<- PASCHIM DWAR'],
+    },
+    {
+      x: -97.0,
+      z: 276.0,
+      rotY: 1.57,
+      lines: ['PASCHIM DWAR ->', 'PASHUPATINATH', 'BAGMATI GHATS ->'],
+    },
+  ];
+  for (const mp of milepostSpecs) {
+    const my = sampleTerrainMeshHeight(terrainMesh, mp.x, mp.z);
+    const mpGroup = new THREE.Group();
+    mpGroup.position.set(mp.x, my, mp.z);
+    mpGroup.rotation.y = mp.rotY;
+    mpGroup.userData.snapCategory = 'milepost';
+    mpGroup.userData.lockXZ = true;
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.36, 0.65), lanternStoneMat);
+    base.position.y = 0.18;
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.45, 0.32), curbMat);
+    pillar.position.y = 1.05;
+    pillar.castShadow = true;
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.46, 0.42, 4), lanternStoneMat);
+    cap.rotation.y = Math.PI * 0.25;
+    cap.position.y = 1.98;
+    mpGroup.add(base, pillar, cap);
+
+    if (typeof document !== 'undefined') {
+      const mc = document.createElement('canvas');
+      mc.width = 256;
+      mc.height = 192;
+      const mctx = mc.getContext('2d');
+      if (mctx) {
+        mctx.fillStyle = '#2c2824';
+        mctx.fillRect(0, 0, 256, 192);
+        mctx.strokeStyle = '#d4a244';
+        mctx.lineWidth = 6;
+        mctx.strokeRect(8, 8, 240, 176);
+        mctx.fillStyle = '#f5dfb0';
+        mctx.font = 'bold 22px Georgia, serif';
+        mctx.textAlign = 'center';
+        mp.lines.forEach((ln, idx) => mctx.fillText(ln, 128, 56 + idx * 44));
+      }
+      const mTex = new THREE.CanvasTexture(mc);
+      mTex.colorSpace = THREE.SRGBColorSpace;
+      const plaqueMat = new THREE.MeshStandardMaterial({ map: mTex, roughness: 0.65 });
+      const frontP = new THREE.Mesh(new THREE.PlaneGeometry(0.54, 0.72), plaqueMat);
+      frontP.position.set(0, 1.18, 0.17);
+      const backP = new THREE.Mesh(new THREE.PlaneGeometry(0.54, 0.72), plaqueMat);
+      backP.rotation.y = Math.PI;
+      backP.position.set(0, 1.18, -0.17);
+      mpGroup.add(frontP, backP);
+    }
+    group.add(mpGroup);
+  }
 
   return { group, lanternGroup, lanternLights };
 }

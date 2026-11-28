@@ -1645,6 +1645,65 @@ class SoundEngine {
     }
   }
 
+  public playPashupatiShankhaBlessing(): void {
+    this.ritualOfferingSoundCount += 1;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    // Resonant Shankha (conch) harmonic drone + gentle bronze handbell shimmer
+    const conchFreqs = [
+      { f: 146.83, g: 0.048, dur: 1.9 },
+      { f: 293.66, g: 0.028, dur: 1.75 },
+      { f: 440.0, g: 0.015, dur: 1.45 },
+      { f: 587.33, g: 0.009, dur: 1.2 },
+    ];
+    for (const c of conchFreqs) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(c.f * 0.96, t);
+      osc.frequency.linearRampToValueAtTime(c.f, t + 0.18);
+      gain.gain.setValueAtTime(0.0005, t);
+      gain.gain.linearRampToValueAtTime(c.g, t + 0.16);
+      gain.gain.exponentialRampToValueAtTime(0.0004, t + c.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + c.dur + 0.05);
+    }
+    this.playTone(880, 0.35, 'sine', 0.025);
+  }
+
+  public playBagmatiAaratiRitual(): void {
+    this.ritualOfferingSoundCount += 1;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    // Ceremonial twin Aarati handbells + deep temple gong + warm flame breath
+    const bellChords = [
+      { f: 130.81, g: 0.052, dur: 2.8, delay: 0.0 },
+      { f: 261.63, g: 0.032, dur: 2.4, delay: 0.04 },
+      { f: 523.25, g: 0.022, dur: 1.8, delay: 0.08 },
+      { f: 659.25, g: 0.018, dur: 1.5, delay: 0.16 },
+      { f: 783.99, g: 0.016, dur: 1.3, delay: 0.24 },
+      { f: 1046.5, g: 0.012, dur: 1.0, delay: 0.32 },
+    ];
+    for (const b of bellChords) {
+      const st = t + b.delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(b.f, st);
+      gain.gain.setValueAtTime(0.0005, st);
+      gain.gain.linearRampToValueAtTime(b.g, st + 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.0003, st + b.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + b.dur + 0.05);
+    }
+  }
+
   public playClick(): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
